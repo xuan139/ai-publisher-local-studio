@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate Console</title>
+    <link rel="stylesheet" href="mockups.css">
+  </head>
+  <body class="theme-generate">
+    <div class="stage">
+      <div class="artboard">
+        <div class="shell">
+          <aside class="sidebar" style="display: flex; flex-direction: column;">
+            <div class="brand-lockup">
+              <div class="brand-mark">GN</div>
+              <div class="eyebrow">Async Jobs</div>
+              <div class="brand-title">Generate<br>Console</div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-label">Runbook</div>
+              <div class="nav-item active"><strong>Queue Board</strong><span class="count">61</span></div>
+              <div class="nav-item"><strong>Jobs Table</strong><span class="count">126</span></div>
+              <div class="nav-item"><strong>Provider Logs</strong><span class="count">9</span></div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-label">Health</div>
+              <div class="nav-item"><strong>Retry Budget</strong><span class="count">18</span></div>
+              <div class="nav-item"><strong>Cost Guard</strong><span class="count">On</span></div>
+            </div>
+            <div class="sidebar-footer">
+              <div class="muted">REQ-016 to REQ-020 and NFR-004 reflected here.</div>
+            </div>
+          </aside>
+
+          <main class="workspace">
+            <div class="topbar">
+              <div>
+                <div class="eyebrow">Generate / Chapter Batch</div>
+                <h1>Async Production Queue</h1>
+                <div class="subline">所有重任务异步执行，失败段可局部重跑，不阻塞整章其他段。</div>
+              </div>
+              <div class="toolbar">
+                <div class="btn">Retry Failed</div>
+                <div class="btn">Cancel Selected</div>
+                <div class="btn primary">Generate Ready Segments</div>
+              </div>
+            </div>
+
+            <div class="page-grid generate-grid">
+              <section class="panel" style="grid-column: 1 / 2;">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Batch Summary</div>
+                    <div class="panel-meta">Chapter 12, 13, 14 selected for overnight run</div>
+                  </div>
+                  <div class="chip brand">stitch context on</div>
+                </div>
+                <div class="metrics">
+                  <div class="metric">
+                    <span>Ready Units</span>
+                    <strong>98</strong>
+                  </div>
+                  <div class="metric">
+                    <span>Running</span>
+                    <strong>21</strong>
+                  </div>
+                  <div class="metric">
+                    <span>Retry</span>
+                    <strong>6</strong>
+                  </div>
+                  <div class="metric">
+                    <span>Est. Credits</span>
+                    <strong>142k</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel" style="grid-column: 2 / 3;">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Provider Health</div>
+                    <div class="panel-meta">AI Gateway normalized view</div>
+                  </div>
+                </div>
+                <div class="rail">
+                  <div class="pill">
+                    <div class="label">Primary</div>
+                    <div class="value">ElevenLabs</div>
+                  </div>
+                  <div class="pill">
+                    <div class="label">Latency</div>
+                    <div class="value">1.8s</div>
+                  </div>
+                  <div class="pill">
+                    <div class="label">Fallback</div>
+                    <div class="value">OpenAI</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel" style="grid-column: 1 / 2;">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Queue Board</div>
+                    <div class="panel-meta">Status first, request details second</div>
+                  </div>
+                </div>
+                <div class="lane-stack">
+                  <div class="lane">
+                    <div class="lane-head">
+                      <div class="lane-title">Pending</div>
+                      <div class="chip">31</div>
+                    </div>
+                    <div class="cards">
+                      <div class="job-card">
+                        <div class="split">
+                          <strong>Chapter 14 · 014-002 to 014-012</strong>
+                          <span class="chip">queued</span>
+                        </div>
+                        <div class="muted">voice: Salt Wind · est. 16m output</div>
+                      </div>
+                      <div class="job-card">
+                        <div class="split">
+                          <strong>Segment 12-044</strong>
+                          <span class="chip warn">manual rerun</span>
+                        </div>
+                        <div class="muted">new text_hash detected after tts_text change</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane-head">
+                      <div class="lane-title">Running</div>
+                      <div class="chip brand">21</div>
+                    </div>
+                    <div class="cards">
+                      <div class="job-card">
+                        <div class="split">
+                          <strong>Chapter 12 Batch</strong>
+                          <span class="chip brand">48%</span>
+                        </div>
+                        <div class="muted">request ids chained within 2h window for continuity</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane-head">
+                      <div class="lane-title">Failed / Retry</div>
+                      <div class="chip danger">6</div>
+                    </div>
+                    <div class="cards">
+                      <div class="job-card">
+                        <div class="split">
+                          <strong>gen_9fa0</strong>
+                          <span class="chip danger">timeout</span>
+                        </div>
+                        <div class="muted">safe retry candidate, no downstream render blocked</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel" style="grid-column: 2 / 3; display: grid; grid-template-rows: 1fr auto; gap: 16px;">
+                <div class="panel" style="padding: 14px;">
+                  <div class="panel-header">
+                    <div>
+                      <div class="panel-title">Jobs Table</div>
+                      <div class="panel-meta">Compact, request-id visible</div>
+                    </div>
+                  </div>
+                  <div class="table job-table">
+                    <div class="table-head">
+                      <div>Job</div>
+                      <div>Target</div>
+                      <div>Provider</div>
+                      <div>Status</div>
+                      <div>Cost</div>
+                      <div>Req ID</div>
+                    </div>
+                    <div class="table-row emphasis">
+                      <div>gen_9fa4</div>
+                      <div>12-041</div>
+                      <div>ElevenLabs</div>
+                      <div><span class="chip brand">running</span></div>
+                      <div>$0.27</div>
+                      <div class="mono">req_a10</div>
+                    </div>
+                    <div class="table-row">
+                      <div>gen_9fa0</div>
+                      <div>12-044</div>
+                      <div>ElevenLabs</div>
+                      <div><span class="chip danger">failed</span></div>
+                      <div>$0.09</div>
+                      <div class="mono">req_9ff</div>
+                    </div>
+                    <div class="table-row">
+                      <div>qc_2201</div>
+                      <div>12-038</div>
+                      <div>Whisper</div>
+                      <div><span class="chip">done</span></div>
+                      <div>$0.03</div>
+                      <div class="mono">qc_812</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="log">
+[09:03:11] batch.create chapter=12 count=24 provider=elevenlabs
+[09:03:12] gen_9fa4 status=running unit=12-041 req=req_a10
+[09:03:14] gen_9fa5 status=running unit=12-042 req=req_a11
+[09:03:18] gen_9fa0 status=failed unit=12-044 error=provider_timeout
+[09:03:19] retry_hint unit=12-044 safe=true downstream_blocked=false
+[09:03:25] qc_2201 status=succeeded unit=12-038 asr_diff_score=0.96
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+.DS_Store
+.DS_Store
+.env.local
+.venv/
+__pycache__/
+*.pyc
+api/data/app.db
+api/generated/
+tmp/
+output/
+mockups/render_html
+tools/export_webkit_pdf
+tools/print_webkit_pdf
+tools/render_pdf_pages
+tools/slice_long_pdf_to_a4

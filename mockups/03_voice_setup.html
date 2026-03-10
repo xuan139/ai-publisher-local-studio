@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Setup</title>
+    <link rel="stylesheet" href="mockups.css">
+  </head>
+  <body class="theme-voice">
+    <div class="stage">
+      <div class="artboard">
+        <div class="shell">
+          <aside class="sidebar" style="display: flex; flex-direction: column;">
+            <div class="brand-lockup">
+              <div class="brand-mark">VS</div>
+              <div class="eyebrow">Voice Profile Layer</div>
+              <div class="brand-title">Narrator &<br>Pronunciation</div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-label">Voice Profiles</div>
+              <div class="nav-item active"><strong>Narrator A</strong><span class="count">Default</span></div>
+              <div class="nav-item"><strong>Narrator B</strong><span class="count">Alt</span></div>
+              <div class="nav-item"><strong>Fallback EN</strong><span class="count">OpenAI</span></div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-label">Coverage</div>
+              <div class="nav-item"><strong>Chapter Overrides</strong><span class="count">4</span></div>
+              <div class="nav-item"><strong>Pronunciation</strong><span class="count">12</span></div>
+            </div>
+            <div class="sidebar-footer">
+              <div class="muted">REQ-011 to REQ-015 focus on voice config and pronunciation rules.</div>
+            </div>
+          </aside>
+
+          <main class="workspace">
+            <div class="topbar">
+              <div>
+                <div class="eyebrow">Voice Setup / 山海夜航录</div>
+                <h1>Default Narrator Configuration</h1>
+                <div class="subline">默认 narrator 保持稳定，章节级与段级允许覆盖，但所有参数必须可追踪。</div>
+              </div>
+              <div class="toolbar">
+                <div class="btn">Play Sample</div>
+                <div class="btn">Save Template</div>
+                <div class="btn primary">Set as Default</div>
+              </div>
+            </div>
+
+            <div class="page-grid voice-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Voice Library</div>
+                    <div class="panel-meta">Provider adapter hidden behind AI Gateway</div>
+                  </div>
+                </div>
+                <div class="list">
+                  <div class="list-item active">
+                    <div class="split">
+                      <div class="title-row">Narrator A · Salt Wind</div>
+                      <span class="chip brand">ElevenLabs</span>
+                    </div>
+                    <div class="muted">Warm low-mid presence, better for long-form prose.</div>
+                  </div>
+                  <div class="list-item">
+                    <div class="split">
+                      <div class="title-row">Narrator B · Harbor</div>
+                      <span class="chip">ElevenLabs</span>
+                    </div>
+                    <div class="muted">Slightly brighter top end, better for youth tone.</div>
+                  </div>
+                  <div class="list-item">
+                    <div class="split">
+                      <div class="title-row">Fallback EN</div>
+                      <span class="chip">OpenAI</span>
+                    </div>
+                    <div class="muted">Used only when provider retry budget is exhausted.</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Profile Detail</div>
+                    <div class="panel-meta">Single narrator MVP with chapter override support</div>
+                  </div>
+                  <div class="chip brand">voice_id · JBFqnCB...</div>
+                </div>
+                <div class="voice-card">
+                  <div class="eyebrow" style="color: rgba(255, 255, 255, 0.72);">Primary Narrator</div>
+                  <h2>Salt Wind</h2>
+                  <div>Measured, literary, low-fatigue delivery for 8h+ listening sessions.</div>
+                  <div class="voice-tags">
+                    <div class="voice-tag">Model · eleven_multilingual_v2</div>
+                    <div class="voice-tag">Language · zh-CN</div>
+                    <div class="voice-tag">Request stitching enabled</div>
+                  </div>
+                </div>
+                <div class="param-grid" style="margin-top: 14px;">
+                  <div class="param">
+                    <div class="split">
+                      <strong>Speed</strong>
+                      <span class="mono">1.03</span>
+                    </div>
+                    <div class="bar-track"><div class="bar-fill" style="width: 58%;"></div></div>
+                  </div>
+                  <div class="param">
+                    <div class="split">
+                      <strong>Stability</strong>
+                      <span class="mono">0.72</span>
+                    </div>
+                    <div class="bar-track"><div class="bar-fill" style="width: 72%;"></div></div>
+                  </div>
+                  <div class="param">
+                    <div class="split">
+                      <strong>Clarity</strong>
+                      <span class="mono">0.68</span>
+                    </div>
+                    <div class="bar-track"><div class="bar-fill" style="width: 68%;"></div></div>
+                  </div>
+                  <div class="param">
+                    <div class="split">
+                      <strong>Style</strong>
+                      <span class="mono">narrative-soft</span>
+                    </div>
+                    <div class="bar-track"><div class="bar-fill" style="width: 64%;"></div></div>
+                  </div>
+                </div>
+                <div class="panel" style="margin-top: 14px; padding: 14px;">
+                  <div class="panel-title" style="font-size: 16px;">Instructions</div>
+                  <div class="panel-meta">Calm pacing. Keep sentence endings grounded. Do not over-act dialogue.</div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Overrides & Dictionary</div>
+                    <div class="panel-meta">Book and chapter scoped rules</div>
+                  </div>
+                </div>
+                <div class="list">
+                  <div class="suggestion">
+                    <strong>Chapter 12 Override</strong>
+                    <div class="muted">Reduce speed to 0.97 for names list sequence and increase pause markers.</div>
+                    <div class="chip-row">
+                      <div class="chip brand">chapter scoped</div>
+                    </div>
+                  </div>
+                  <div class="suggestion">
+                    <strong>Pronunciation Rule · 苏槐</strong>
+                    <div class="muted">replacement_text: “苏槐” · phonetic_hint: su-huai</div>
+                    <div class="chip-row">
+                      <div class="chip">book scoped</div>
+                    </div>
+                  </div>
+                  <div class="suggestion">
+                    <strong>Pronunciation Rule · 灯塔下的名单</strong>
+                    <div class="muted">Keep title gravity. Do not clip final nasal consonant.</div>
+                    <div class="chip-row">
+                      <div class="chip warn">manual listen required</div>
+                    </div>
+                  </div>
+                  <div class="suggestion">
+                    <strong>Chapter Coverage</strong>
+                    <div class="muted">38 / 42 chapters inherit default narrator. 4 chapters use scoped speed changes.</div>
+                    <div class="bar-track"><div class="bar-fill" style="width: 90%;"></div></div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

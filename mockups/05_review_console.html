@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Console</title>
+    <link rel="stylesheet" href="mockups.css">
+  </head>
+  <body class="theme-review">
+    <div class="stage">
+      <div class="artboard">
+        <div class="shell">
+          <aside class="sidebar" style="display: flex; flex-direction: column;">
+            <div class="brand-lockup">
+              <div class="brand-mark">RV</div>
+              <div class="eyebrow">Most Critical Screen</div>
+              <div class="brand-title">Review<br>Console</div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-label">Chapter 12 Queue</div>
+              <div class="nav-item active"><strong>Open Issues</strong><span class="count">27</span></div>
+              <div class="nav-item"><strong>Approved</strong><span class="count">18</span></div>
+              <div class="nav-item"><strong>Rejected</strong><span class="count">4</span></div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-label">Quick Keys</div>
+              <div class="nav-item"><strong>Space / Play</strong><span class="count">A</span></div>
+              <div class="nav-item"><strong>Approve / Reject</strong><span class="count">R</span></div>
+              <div class="nav-item"><strong>Regenerate / Next</strong><span class="count">GN</span></div>
+            </div>
+            <div class="sidebar-footer">
+              <div class="muted">REQ-026 to REQ-031 and NFR-010 are centered on this page.</div>
+            </div>
+          </aside>
+
+          <main class="workspace">
+            <div class="topbar">
+              <div>
+                <div class="eyebrow">Review / Chapter 12 / Segment 12-044</div>
+                <h1>Segment Triage</h1>
+                <div class="subline">选段后直接自动播放，ASR diff 与问题标签同时可见，减少切换成本。</div>
+              </div>
+              <div class="toolbar">
+                <div class="btn">A/B Compare</div>
+                <div class="btn">Trim</div>
+                <div class="btn primary">Approve & Next</div>
+              </div>
+            </div>
+
+            <div class="page-grid review-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Segment Queue</div>
+                    <div class="panel-meta">Problem-first ordering</div>
+                  </div>
+                </div>
+                <div class="list">
+                  <div class="list-item active">
+                    <div class="split">
+                      <div class="title-row">12-044</div>
+                      <span class="chip danger">high</span>
+                    </div>
+                    <div class="muted">missing_words · pacing · take v3</div>
+                  </div>
+                  <div class="list-item">
+                    <div class="split">
+                      <div class="title-row">12-045</div>
+                      <span class="chip warn">medium</span>
+                    </div>
+                    <div class="muted">noise tail · silence 420ms</div>
+                  </div>
+                  <div class="list-item">
+                    <div class="split">
+                      <div class="title-row">12-046</div>
+                      <span class="chip">manual</span>
+                    </div>
+                    <div class="muted">reviewer note on name reading</div>
+                  </div>
+                  <div class="list-item">
+                    <div class="split">
+                      <div class="title-row">12-047</div>
+                      <span class="chip success">clean</span>
+                    </div>
+                    <div class="muted">ready for one-click approve</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Player & Waveform</div>
+                    <div class="panel-meta">Take v3 · request_id req_9ff · 00:18.42</div>
+                  </div>
+                  <div class="chip brand">Auto Play On Select</div>
+                </div>
+                <div class="waveframe">
+                  <div class="waveform"></div>
+                  <div class="playback-row">
+                    <div class="chip-row">
+                      <div class="chip brand">Play</div>
+                      <div class="chip">Loop</div>
+                      <div class="chip">1.15x</div>
+                      <div class="chip">Trim head 120ms</div>
+                    </div>
+                    <div class="chip warn">QC score 71</div>
+                  </div>
+                </div>
+                <div class="panel" style="margin-top: 14px;">
+                  <div class="panel-header">
+                    <div>
+                      <div class="panel-title">Version Compare</div>
+                      <div class="panel-meta">Non-destructive take history</div>
+                    </div>
+                  </div>
+                  <div class="table history-table">
+                    <div class="table-head">
+                      <div>Take</div>
+                      <div>Source</div>
+                      <div>QC</div>
+                      <div>Status</div>
+                    </div>
+                    <div class="table-row emphasis">
+                      <div>v3 · current</div>
+                      <div>generated</div>
+                      <div>71</div>
+                      <div><span class="chip warn">review</span></div>
+                    </div>
+                    <div class="table-row">
+                      <div>v2</div>
+                      <div>generated</div>
+                      <div>82</div>
+                      <div><span class="chip">compare</span></div>
+                    </div>
+                    <div class="table-row">
+                      <div>v1</div>
+                      <div>uploaded</div>
+                      <div>64</div>
+                      <div><span class="chip">archived</span></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel" style="display: grid; grid-template-rows: auto auto 1fr auto; gap: 14px;">
+                <div>
+                  <div class="panel-title">Diff & Context</div>
+                  <div class="panel-meta">source_text / tts_text / ASR diff in one glance</div>
+                </div>
+                <div class="diff">
+                  <div class="diff-block">
+                    <div class="kicker">TTS Text</div>
+                    苏槐没有抬头，只在掌心里默默记下名字的顺序。她知道，这些顺序一旦念错，
+                    后面整条航路的生死都会跟着偏掉。
+                  </div>
+                  <div class="diff-block">
+                    <div class="kicker">ASR</div>
+                    苏槐没有抬头，只在掌心里默默记下名字的顺序。她知道，<span class="remove">这些</span>
+                    顺序一旦念错，后面整条航路的生死都会跟着<span class="add">一起</span>偏掉。
+                  </div>
+                </div>
+                <div class="list">
+                  <div class="flag">
+                    <div class="split">
+                      <strong>Auto Issue</strong>
+                      <span class="chip danger">missing_words</span>
+                    </div>
+                    <div class="muted">ASR skipped “这些”, confidence 0.94. Pause before phrase may be too short.</div>
+                  </div>
+                  <div class="flag">
+                    <div class="split">
+                      <strong>Reviewer Tag</strong>
+                      <span class="chip warn">pacing</span>
+                    </div>
+                    <div class="muted">Line ending rushes into “偏掉”, recommend text keep + regenerate.</div>
+                  </div>
+                </div>
+                <div class="chip-row">
+                  <div class="btn">Mark Resolved</div>
+                  <div class="btn">Regenerate</div>
+                  <div class="btn ghost">Reject</div>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projects Overview</title>
+    <link rel="stylesheet" href="mockups.css">
+  </head>
+  <body>
+    <div class="stage">
+      <div class="artboard">
+        <div class="shell">
+          <aside class="sidebar" style="display: flex; flex-direction: column;">
+            <div class="brand-lockup">
+              <div class="brand-mark">AP</div>
+              <div class="eyebrow">Studio Console</div>
+              <div class="brand-title">Audiobook<br>Publisher</div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-label">Primary</div>
+              <div class="nav-item active"><strong>Projects</strong><span class="count">18</span></div>
+              <div class="nav-item"><strong>Pipeline</strong><span class="count">42</span></div>
+              <div class="nav-item"><strong>Review</strong><span class="count">93</span></div>
+              <div class="nav-item"><strong>Voices</strong><span class="count">12</span></div>
+              <div class="nav-item"><strong>Exports</strong><span class="count">7</span></div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-label">Status Lens</div>
+              <div class="nav-item"><strong>Generating</strong><span class="count">126</span></div>
+              <div class="nav-item"><strong>Review Required</strong><span class="count">38</span></div>
+              <div class="nav-item"><strong>Failed Jobs</strong><span class="count">6</span></div>
+            </div>
+            <div class="sidebar-footer">
+              <div class="muted">Phase 1 aligned to REQ, NFR and ARC constraints</div>
+            </div>
+          </aside>
+
+          <main class="workspace">
+            <div class="topbar">
+              <div>
+                <div class="eyebrow">Projects / All Audiobook Editions</div>
+                <h1>Production Portfolio</h1>
+                <div class="subline">优先看问题段和失败任务，而不是先让操作者打开详情页。</div>
+              </div>
+              <div class="toolbar">
+                <div class="input-shell">Search title, author, request id, issue type</div>
+                <div class="btn">Filter</div>
+                <div class="btn primary">New Project</div>
+              </div>
+            </div>
+
+            <div class="page-grid overview-grid">
+              <section class="panel" style="grid-column: 1 / 2;">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Portfolio Snapshot</div>
+                    <div class="panel-meta">Across 18 active audiobook projects, synced every 5 seconds</div>
+                  </div>
+                  <div class="chip brand">Production Week 11</div>
+                </div>
+                <div class="metrics">
+                  <div class="metric">
+                    <span>Total Units</span>
+                    <strong>4,862</strong>
+                  </div>
+                  <div class="metric">
+                    <span>Approved</span>
+                    <strong>3,904</strong>
+                  </div>
+                  <div class="metric">
+                    <span>Review Debt</span>
+                    <strong>311</strong>
+                  </div>
+                  <div class="metric">
+                    <span>Est. Cost</span>
+                    <strong>$824</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel" style="grid-column: 2 / 3;">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Pipeline Radar</div>
+                    <div class="panel-meta">REQ-017 / NFR-004 visibility</div>
+                  </div>
+                </div>
+                <div class="rail">
+                  <div class="pill">
+                    <div class="label">Queued</div>
+                    <div class="value">148</div>
+                  </div>
+                  <div class="pill">
+                    <div class="label">Generating</div>
+                    <div class="value">61</div>
+                  </div>
+                  <div class="pill">
+                    <div class="label">Review</div>
+                    <div class="value">93</div>
+                  </div>
+                </div>
+                <div class="chip-row" style="margin-top: 12px;">
+                  <div class="chip success">Provider success 97.3%</div>
+                  <div class="chip warn">6 jobs need retry</div>
+                </div>
+              </section>
+
+              <section class="panel" style="grid-column: 1 / 2;">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Active Projects</div>
+                    <div class="panel-meta">High-density table, compact mode</div>
+                  </div>
+                  <div class="chip">Sorted by pending issues</div>
+                </div>
+                <div class="table project-table">
+                  <div class="table-head">
+                    <div>Project</div>
+                    <div>Stage</div>
+                    <div>Chapters</div>
+                    <div>Duration</div>
+                    <div>Issues</div>
+                    <div>Updated</div>
+                  </div>
+                  <div class="table-row emphasis">
+                    <div>
+                      <div class="title-row">山海夜航录</div>
+                      <div class="muted">zh-CN · ElevenLabs narrator template A</div>
+                    </div>
+                    <div><span class="chip brand">Review</span></div>
+                    <div>42</div>
+                    <div>11h 32m</div>
+                    <div><span class="chip danger">27 open</span></div>
+                    <div class="mono">09:12</div>
+                  </div>
+                  <div class="table-row">
+                    <div>
+                      <div class="title-row">海风信使</div>
+                      <div class="muted">en-US · OpenAI fallback enabled</div>
+                    </div>
+                    <div><span class="chip">Generate</span></div>
+                    <div>18</div>
+                    <div>4h 08m</div>
+                    <div><span class="chip warn">6 retry</span></div>
+                    <div class="mono">08:54</div>
+                  </div>
+                  <div class="table-row">
+                    <div>
+                      <div class="title-row">城南旧事广播版</div>
+                      <div class="muted">zh-CN · cost guard active</div>
+                    </div>
+                    <div><span class="chip success">Approved</span></div>
+                    <div>26</div>
+                    <div>7h 44m</div>
+                    <div><span class="chip success">0 open</span></div>
+                    <div class="mono">Yesterday</div>
+                  </div>
+                  <div class="table-row">
+                    <div>
+                      <div class="title-row">Paper Rooms</div>
+                      <div class="muted">en-UK · chapter 12 rework</div>
+                    </div>
+                    <div><span class="chip warn">Assemble</span></div>
+                    <div>31</div>
+                    <div>9h 05m</div>
+                    <div><span class="chip">3 notes</span></div>
+                    <div class="mono">Yesterday</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel" style="grid-column: 2 / 3;">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Immediate Attention</div>
+                    <div class="panel-meta">Review queue and failed jobs surfaced first</div>
+                  </div>
+                </div>
+                <div class="list">
+                  <div class="list-item active">
+                    <div class="split">
+                      <div class="title-row">Segment 12-044 · 山海夜航录</div>
+                      <span class="chip danger">missing_words</span>
+                    </div>
+                    <div class="muted">ASR diff hit at 94% confidence. Reviewer tagged pacing + omitted phrase.</div>
+                  </div>
+                  <div class="list-item">
+                    <div class="split">
+                      <div class="title-row">Job gen_9fa0 · 海风信使</div>
+                      <span class="chip warn">failed</span>
+                    </div>
+                    <div class="muted">Provider timeout after 2 retries. Safe to rerun only failed unit.</div>
+                  </div>
+                  <div class="list-item">
+                    <div class="split">
+                      <div class="title-row">Export_104 · Paper Rooms</div>
+                      <span class="chip">render pending</span>
+                    </div>
+                    <div class="muted">Chapter 31 needs fresh render because take v4 became primary.</div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

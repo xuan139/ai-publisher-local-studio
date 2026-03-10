@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Prep</title>
+    <link rel="stylesheet" href="mockups.css">
+  </head>
+  <body class="theme-text">
+    <div class="stage">
+      <div class="artboard">
+        <div class="shell">
+          <aside class="sidebar" style="display: flex; flex-direction: column;">
+            <div class="brand-lockup">
+              <div class="brand-mark">TT</div>
+              <div class="eyebrow">Book Internal Flow</div>
+              <div class="brand-title">Text Prep<br>Workbench</div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-label">Book Sections</div>
+              <div class="nav-item"><strong>Overview</strong><span class="count">01</span></div>
+              <div class="nav-item active"><strong>Text Prep</strong><span class="count">42</span></div>
+              <div class="nav-item"><strong>Voice Setup</strong><span class="count">07</span></div>
+              <div class="nav-item"><strong>Generate</strong><span class="count">126</span></div>
+              <div class="nav-item"><strong>Review</strong><span class="count">27</span></div>
+            </div>
+            <div class="sidebar-footer">
+              <div class="muted">REQ-005 to REQ-010 focus on import, segmentation and tts_text cleaning.</div>
+            </div>
+          </aside>
+
+          <main class="workspace">
+            <div class="topbar">
+              <div>
+                <div class="eyebrow">山海夜航录 / Chapter 12</div>
+                <h1>Source to Speakable Script</h1>
+                <div class="subline">双栏编辑保证原文和朗读稿始终对齐，右侧给出拆段与清洗建议。</div>
+              </div>
+              <div class="toolbar">
+                <div class="btn">Auto Segment</div>
+                <div class="btn">Merge Next</div>
+                <div class="btn primary">Apply Suggestions</div>
+              </div>
+            </div>
+
+            <div class="page-grid prep-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Chapter Tree</div>
+                    <div class="panel-meta">Hot chapters rise first</div>
+                  </div>
+                </div>
+                <div class="tree">
+                  <div class="tree-node">
+                    <div class="chapter">Chapter 11 · 返航前夜</div>
+                    <div class="stats">
+                      <span class="chip">18 segments</span>
+                      <span class="chip success">clean</span>
+                    </div>
+                  </div>
+                  <div class="tree-node active">
+                    <div class="chapter">Chapter 12 · 灯塔下的名单</div>
+                    <div class="stats">
+                      <span class="chip brand">24 segments</span>
+                      <span class="chip warn">6 suggestions</span>
+                    </div>
+                  </div>
+                  <div class="tree-node">
+                    <div class="chapter">Chapter 13 · 雾中的号码</div>
+                    <div class="stats">
+                      <span class="chip">16 segments</span>
+                      <span class="chip">draft</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Dual Editor</div>
+                    <div class="panel-meta">Left = source_text, Right = tts_text</div>
+                  </div>
+                  <div class="chip brand">Segment 12-044</div>
+                </div>
+                <div class="editor-columns">
+                  <div class="editor-panel">
+                    <div class="chip-row">
+                      <div class="chip">Source Text</div>
+                      <div class="chip">2,418 chars</div>
+                    </div>
+                    <div class="editor-surface">
+                      灯塔下压着的那张名单，被海风吹得发脆。<br><br>
+                      管理员念到第三行时忽然停住，像是有人在黑暗里掐断了他的气。
+                      原文里夹杂了两段编者注，以及一串不适合直接朗读的登记编号：
+                      7F-19 / 7F-20 / 7F-21。<br><br>
+                      苏槐没有抬头，只在掌心里默默记下名字的顺序。她知道，
+                      这些顺序一旦念错，后面整条航路的生死都会跟着偏掉。
+                    </div>
+                    <div class="chip-row">
+                      <div class="chip">Contains editor note</div>
+                      <div class="chip warn">Readability low</div>
+                    </div>
+                  </div>
+                  <div class="editor-panel">
+                    <div class="chip-row">
+                      <div class="chip brand">TTS Script</div>
+                      <div class="chip success">Ready after clean-up</div>
+                    </div>
+                    <div class="editor-surface highlight">
+                      灯塔下压着一张名单，被海风吹得发脆。<br><br>
+                      管理员念到第三行时忽然停住，像是有人在黑暗里掐断了他的气。<br><br>
+                      苏槐没有抬头，只在掌心里默默记下名字的顺序。她知道，
+                      这些顺序一旦念错，后面整条航路的生死都会跟着偏掉。<br><br>
+                      名单上的登记编号不朗读，仅保留名字顺序与停顿。
+                    </div>
+                    <div class="chip-row">
+                      <div class="chip brand">Breathe marker suggested</div>
+                      <div class="chip">Pause after line 2</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Prep Notes</div>
+                    <div class="panel-meta">Automated suggestions then manual confirmation</div>
+                  </div>
+                </div>
+                <div class="list">
+                  <div class="suggestion">
+                    <strong>删除不可朗读编号</strong>
+                    <div class="muted">7F-19 / 7F-20 / 7F-21 建议移出朗读稿，仅保留上下文含义。</div>
+                    <div class="chip-row">
+                      <div class="chip brand">accepted</div>
+                    </div>
+                  </div>
+                  <div class="suggestion">
+                    <strong>长句断点建议</strong>
+                    <div class="muted">“她知道，这些顺序一旦念错”前增加微停顿，减少呼吸压缩。</div>
+                    <div class="chip-row">
+                      <div class="chip">pause +120ms</div>
+                    </div>
+                  </div>
+                  <div class="suggestion">
+                    <strong>Segment Queue</strong>
+                    <div class="muted">24 segments · 6 modified · 2 merged · 1 split from sentence boundary</div>
+                    <div class="chip-row">
+                      <div class="chip warn">manual review needed</div>
+                    </div>
+                  </div>
+                  <div class="suggestion">
+                    <strong>Readiness</strong>
+                    <div class="muted">Chapter 12 is 86% ready for batch generation after saving current edits.</div>
+                    <div class="bar-track"><div class="bar-fill" style="width: 86%;"></div></div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

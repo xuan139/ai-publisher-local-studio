@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assemble and Export</title>
+    <link rel="stylesheet" href="mockups.css">
+  </head>
+  <body class="theme-export">
+    <div class="stage">
+      <div class="artboard">
+        <div class="shell">
+          <aside class="sidebar" style="display: flex; flex-direction: column;">
+            <div class="brand-lockup">
+              <div class="brand-mark">AX</div>
+              <div class="eyebrow">Render + Delivery</div>
+              <div class="brand-title">Assemble<br>& Export</div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-label">Chapter Assets</div>
+              <div class="nav-item active"><strong>Render Queue</strong><span class="count">4</span></div>
+              <div class="nav-item"><strong>Export Tasks</strong><span class="count">7</span></div>
+              <div class="nav-item"><strong>Reports</strong><span class="count">3</span></div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-label">Output Types</div>
+              <div class="nav-item"><strong>Chapter MP3</strong><span class="count">on</span></div>
+              <div class="nav-item"><strong>Book ZIP</strong><span class="count">on</span></div>
+              <div class="nav-item"><strong>M4B</strong><span class="count">later</span></div>
+            </div>
+            <div class="sidebar-footer">
+              <div class="muted">REQ-032 to REQ-037 and export history visibility.</div>
+            </div>
+          </aside>
+
+          <main class="workspace">
+            <div class="topbar">
+              <div>
+                <div class="eyebrow">Assemble / Chapter 12</div>
+                <h1>Render from Approved Takes</h1>
+                <div class="subline">不做 DAW 级编辑，只做顺序、gap、标题插入、整章试听和导出。</div>
+              </div>
+              <div class="toolbar">
+                <div class="btn">Preview Chapter</div>
+                <div class="btn">Save Render v4</div>
+                <div class="btn primary">Export Book ZIP</div>
+              </div>
+            </div>
+
+            <div class="page-grid export-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Segment Order</div>
+                    <div class="panel-meta">Only approved units are eligible</div>
+                  </div>
+                </div>
+                <div class="list">
+                  <div class="list-item active">
+                    <div class="split">
+                      <div class="title-row">Intro Title Card</div>
+                      <span class="chip brand">inserted</span>
+                    </div>
+                    <div class="muted">Pre-roll chapter title audio, 0.8s fade in</div>
+                  </div>
+                  <div class="list-item">
+                    <div class="split">
+                      <div class="title-row">12-041</div>
+                      <span class="chip success">approved</span>
+                    </div>
+                    <div class="muted">gap 320ms</div>
+                  </div>
+                  <div class="list-item">
+                    <div class="split">
+                      <div class="title-row">12-042</div>
+                      <span class="chip success">approved</span>
+                    </div>
+                    <div class="muted">gap 180ms</div>
+                  </div>
+                  <div class="list-item">
+                    <div class="split">
+                      <div class="title-row">12-044</div>
+                      <span class="chip warn">updated v4</span>
+                    </div>
+                    <div class="muted">new take replaces prior chapter render source</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Chapter Timeline</div>
+                    <div class="panel-meta">Light assembly, no destructive edit</div>
+                  </div>
+                  <div class="chip brand">Render v4 draft</div>
+                </div>
+                <div class="timeline"></div>
+                <div class="metrics" style="margin-top: 14px;">
+                  <div class="metric">
+                    <span>Duration</span>
+                    <strong>14m 22s</strong>
+                  </div>
+                  <div class="metric">
+                    <span>Gaps</span>
+                    <strong>18</strong>
+                  </div>
+                  <div class="metric">
+                    <span>Peak</span>
+                    <strong>-1.3dB</strong>
+                  </div>
+                  <div class="metric">
+                    <span>Loudness</span>
+                    <strong>-17 LUFS</strong>
+                  </div>
+                </div>
+                <div class="panel" style="margin-top: 14px;">
+                  <div class="panel-title" style="font-size: 16px;">Render Notes</div>
+                  <div class="panel-meta">Title cue inserted. Segment 12-044 updated to take v4. Safe for chapter preview.</div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Export Control</div>
+                    <div class="panel-meta">Delivery-oriented presets</div>
+                  </div>
+                </div>
+                <div class="list">
+                  <div class="suggestion">
+                    <strong>Preset · Chapter MP3 Pack</strong>
+                    <div class="muted">128 kbps MP3, chapter naming normalized, include manifest.json</div>
+                    <div class="chip-row">
+                      <div class="chip brand">default</div>
+                    </div>
+                  </div>
+                  <div class="suggestion">
+                    <strong>Preset · Full Book ZIP</strong>
+                    <div class="muted">All chapter renders + metadata + review report</div>
+                    <div class="chip-row">
+                      <div class="chip">ready</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="panel" style="margin-top: 14px;">
+                  <div class="panel-header">
+                    <div>
+                      <div class="panel-title">Export History</div>
+                      <div class="panel-meta">Audit trail preserved</div>
+                    </div>
+                  </div>
+                  <div class="table history-table">
+                    <div class="table-head">
+                      <div>Task</div>
+                      <div>Type</div>
+                      <div>Status</div>
+                      <div>Time</div>
+                    </div>
+                    <div class="table-row emphasis">
+                      <div>exp_104</div>
+                      <div>book_zip</div>
+                      <div><span class="chip brand">running</span></div>
+                      <div class="mono">09:21</div>
+                    </div>
+                    <div class="table-row">
+                      <div>exp_099</div>
+                      <div>chapter_mp3</div>
+                      <div><span class="chip success">done</span></div>
+                      <div class="mono">Yesterday</div>
+                    </div>
+                    <div class="table-row">
+                      <div>exp_094</div>
+                      <div>report</div>
+                      <div><span class="chip">done</span></div>
+                      <div class="mono">Mar 08</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
