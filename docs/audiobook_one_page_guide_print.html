@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Publisher 有聲書一頁操作說明</title>
+    <style>
+      :root {
+        --bg: #ede6d8;
+        --paper: #fffdf8;
+        --ink: #1e293b;
+        --muted: #5f6b7a;
+        --line: rgba(30, 41, 59, 0.14);
+        --brand: #0f766e;
+        --accent: #9a5a13;
+        --soft: #f7f1e5;
+        --sans: "Avenir Next", "PingFang TC", "Helvetica Neue", sans-serif;
+        --serif: "Iowan Old Style", "Palatino Linotype", "Songti TC", serif;
+      }
+
+      @page {
+        size: A4 portrait;
+        margin: 0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: var(--sans);
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 24%),
+          linear-gradient(180deg, #f4efe5 0%, #e9e0d0 100%);
+      }
+
+      .sheet {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto;
+        padding: 14mm 14mm 12mm;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 252, 246, 0.9)),
+          var(--paper);
+      }
+
+      .frame {
+        min-height: calc(297mm - 26mm);
+        padding: 10mm 10mm 8mm;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(251, 246, 236, 0.88)),
+          var(--paper);
+        box-shadow: 0 18px 50px rgba(30, 41, 59, 0.08);
+      }
+
+      .header,
+      .footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        font-family: var(--serif);
+      }
+
+      h1 {
+        font-size: 30px;
+        line-height: 1.05;
+      }
+
+      h2 {
+        font-size: 17px;
+        margin-bottom: 8px;
+      }
+
+      h3 {
+        font-size: 14px;
+        margin-bottom: 6px;
+      }
+
+      p,
+      li {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      ul,
+      ol {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.25fr 0.85fr;
+        gap: 12px;
+        margin-top: 10px;
+      }
+
+      .hero-copy {
+        padding: 12px;
+        border-radius: 18px;
+        background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(255, 255, 255, 0.88));
+        border: 1px solid rgba(15, 118, 110, 0.16);
+      }
+
+      .eyebrow {
+        margin-bottom: 6px;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--brand);
+      }
+
+      .hero-copy p {
+        margin-top: 8px;
+        color: var(--muted);
+      }
+
+      .pipeline,
+      .card,
+      .steps,
+      .notes,
+      .image-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.82);
+      }
+
+      .pipeline {
+        padding: 12px;
+      }
+
+      .pipeline strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      .pipeline code {
+        display: block;
+        font-size: 13px;
+        line-height: 1.5;
+        white-space: normal;
+      }
+
+      .main {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      .steps {
+        padding: 12px 14px;
+      }
+
+      .steps ol {
+        display: grid;
+        gap: 7px;
+      }
+
+      .steps li strong {
+        color: var(--brand);
+      }
+
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .card,
+      .notes,
+      .image-card {
+        padding: 12px;
+      }
+
+      .checklist {
+        display: grid;
+        gap: 6px;
+      }
+
+      .check {
+        padding: 8px 10px;
+        border-radius: 12px;
+        background: var(--soft);
+        border: 1px solid rgba(154, 90, 19, 0.12);
+      }
+
+      .image-card img {
+        width: 100%;
+        display: block;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+      }
+
+      .image-card p {
+        margin-top: 8px;
+        color: var(--muted);
+      }
+
+      .footer {
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid var(--line);
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+
+        .sheet {
+          margin: 0;
+          width: auto;
+          min-height: auto;
+          padding: 0;
+        }
+
+        .frame {
+          min-height: auto;
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="sheet">
+      <section class="frame">
+        <div class="header">
+          <span>AI Publisher Local Studio</span>
+          <span>One Page Operator Guide</span>
+        </div>
+
+        <div class="hero">
+          <div class="hero-copy">
+            <div class="eyebrow">Audiobook Quick Run</div>
+            <h1>有聲書一頁操作說明</h1>
+            <p>適用於非技術同事。只需要照著主流程操作，就能把文字稿轉成可審核、可匯出的 audiobook。</p>
+          </div>
+
+          <div class="pipeline">
+            <strong>主流程</strong>
+            <code>登入 -> 新建專案 -> 匯入文本 -> 檢查 tts_text -> 選聲音 -> 生成 -> 審核 -> 匯出</code>
+          </div>
+        </div>
+
+        <div class="main">
+          <div class="steps">
+            <h2>操作步驟</h2>
+            <ol>
+              <li><strong>登入系統</strong>：打開 `http://127.0.0.1:8000`，使用 `admin@example.com / admin123` 登入。</li>
+              <li><strong>新建專案</strong>：填寫書名、作者、語言與簡短說明，建立後進入專案。</li>
+              <li><strong>匯入文本</strong>：上傳 `txt`、`md` 或 `docx`，系統會自動拆章拆段。</li>
+              <li><strong>整理朗讀稿</strong>：在 `Text Prep` 檢查每段 `tts_text`，把不適合朗讀的文字改成自然口語。</li>
+              <li><strong>選擇聲音</strong>：在 `Voice Setup` 指定本機語音或已配置的 AI provider。</li>
+              <li><strong>生成音訊</strong>：到 `Generate` 執行段落或章節生成，等待每段出現可播放音訊。</li>
+              <li><strong>審核通過</strong>：到 `Review` 播放段落，沒問題就通過，有問題就退回重生。</li>
+              <li><strong>匯出成品</strong>：到 `Assemble / Export` 渲染章節並匯出單章音訊或全書 `zip`。</li>
+            </ol>
+          </div>
+
+          <div class="stack">
+            <div class="card">
+              <h3>開始前請確認</h3>
+              <div class="checklist">
+                <div class="check">準備好一本文字稿</div>
+                <div class="check">先用預設聲線跑通流程</div>
+                <div class="check">以 `tts_text` 作為朗讀依據</div>
+                <div class="check">只要有問題，優先重生單段</div>
+              </div>
+            </div>
+
+            <div class="image-card">
+              <h3>畫面位置</h3>
+              <img src="assets/manual/02_text_prep.png" alt="Text Prep">
+              <p>`Text Prep` 是最重要的一步。先把每段文字整理成適合朗讀的版本，再進入生成。</p>
+            </div>
+
+            <div class="notes">
+              <h3>常見提醒</h3>
+              <ul>
+                <li>章節切分不對，先回 `Text Prep` 修正。</li>
+                <li>朗讀不自然，先改 `tts_text`，不要只反覆重跑。</li>
+                <li>演示時可直接用本機聲音，不一定要先接真實 AI。</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <span>Version: Local MVP</span>
+          <span>Page 1 / 1</span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

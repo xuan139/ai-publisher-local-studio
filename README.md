@@ -119,6 +119,10 @@ cp .env.local.example .env.local
 
 ## 文檔
 
+- [一頁操作說明](docs/audiobook_one_page_guide.md)
+- [一頁操作說明 Printable HTML](docs/audiobook_one_page_guide_print.html)
+- [審核員一頁說明](docs/reviewer_one_page_guide.md)
+- [審核員一頁說明 Printable HTML](docs/reviewer_one_page_guide_print.html)
 - [本機安裝手冊](docs/local_install_manual.md)
 - [需求文檔 REQ](docs/audiobook_platform_req.md)
 - [功能手冊 HTML](docs/audiobook_platform_function_manual.html)
@@ -130,7 +134,7 @@ cp .env.local.example .env.local
 
 - Milestones
 - 初始 Issues
-- GitHub Project Board
+- GitHub Issue Templates
 
 用於跟蹤：
 
