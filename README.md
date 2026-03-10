@@ -1,6 +1,6 @@
 # AI Publisher Local Studio
 
-本專案是一個面向 `audiobook` 生產流程的本機版 Web Studio，目標是在一台 Mac 上先跑通完整內容生產閉環。
+本專案是一個面向 `audiobook` 生產流程的本機版 Web Studio，目標是在一台 Mac 上先跑通完整內容生產閉環，並為後續 `comic / video` 擴展預留專案級模型設定。
 
 它目前聚焦於單機 MVP：
 
@@ -25,6 +25,7 @@
 - 本機生成音訊
 - Review Queue 與問題標記
 - 章節渲染與 ZIP 匯出
+- 系統設定中的 `漫畫設定 / Video 設定`
 - 本機 smoke test
 - 可選接入 `OpenAI TTS / ASR`
 - 可選接入 `ElevenLabs TTS / ASR`
@@ -95,6 +96,18 @@ chmod +x run_local.sh
 
 - `macOS say`
 - 規則化 mock QC
+
+## 漫畫與 Video 設定
+
+目前已在 `系統設定` 頁加入兩組專案級配置：
+
+- `漫畫設定`：劇本模型、分鏡模型、圖像模型、風格、色彩、比例、角色一致性
+- `Video 設定`：腳本模型、鏡頭模型、圖像模型、影片模型、字幕模型、時長、動態風格
+
+說明：
+
+- 這一版會將上述設定保存到 SQLite 的 `projects` 資料中
+- 目前只做配置保存與回顯，尚未直接觸發漫畫或影片生成任務
 
 ### 配置方式
 

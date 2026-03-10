@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS projects (
   author TEXT NOT NULL DEFAULT '',
   language TEXT NOT NULL DEFAULT 'zh-CN',
   description TEXT NOT NULL DEFAULT '',
+  comic_settings TEXT NOT NULL DEFAULT '{}',
+  video_settings TEXT NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'draft',
   default_voice_profile_id INTEGER REFERENCES voice_profiles(id) ON DELETE SET NULL,
   created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
@@ -194,8 +196,17 @@ def init_db() -> None:
     ensure_directories()
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        ensure_project_setting_columns(conn)
         seed_default_user(conn)
         seed_default_voice_profiles(conn)
+
+
+def ensure_project_setting_columns(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(projects)").fetchall()}
+    if "comic_settings" not in columns:
+        conn.execute("ALTER TABLE projects ADD COLUMN comic_settings TEXT NOT NULL DEFAULT '{}'")
+    if "video_settings" not in columns:
+        conn.execute("ALTER TABLE projects ADD COLUMN video_settings TEXT NOT NULL DEFAULT '{}'")
 
 
 def seed_default_user(conn: sqlite3.Connection) -> None:
@@ -231,4 +242,3 @@ def seed_default_voice_profiles(conn: sqlite3.Connection) -> None:
         """,
         [(name, provider, model, voice_name, speed, style, instructions, is_default, now) for name, provider, model, voice_name, speed, style, instructions, is_default in voices],
     )
-

@@ -266,7 +266,7 @@
             <h2>操作步驟</h2>
             <ol>
               <li><strong>登入系統</strong>：打開 `http://127.0.0.1:8000`，使用 `admin@example.com / admin123` 登入。</li>
-              <li><strong>新建專案</strong>：填寫書名、作者、語言與簡短說明，建立後進入專案。</li>
+              <li><strong>新建專案</strong>：填寫書名、作者、語言與簡短說明，建立後進入專案；若後續要擴展漫畫或 Video，可在 `系統設定` 先保存模型模板。</li>
               <li><strong>匯入文本</strong>：上傳 `txt`、`md` 或 `docx`，系統會自動拆章拆段。</li>
               <li><strong>整理朗讀稿</strong>：在 `Text Prep` 檢查每段 `tts_text`，把不適合朗讀的文字改成自然口語。</li>
               <li><strong>選擇聲音</strong>：在 `Voice Setup` 指定本機語音或已配置的 AI provider。</li>
@@ -299,6 +299,7 @@
                 <li>章節切分不對，先回 `Text Prep` 修正。</li>
                 <li>朗讀不自然，先改 `tts_text`，不要只反覆重跑。</li>
                 <li>演示時可直接用本機聲音，不一定要先接真實 AI。</li>
+                <li>`漫畫設定 / Video 設定` 目前只保存配置，不會直接生成漫畫或影片。</li>
               </ul>
             </div>
           </div>

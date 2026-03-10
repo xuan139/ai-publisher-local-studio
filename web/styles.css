@@ -223,7 +223,9 @@ button {
 
 .button,
 .button-secondary,
-.button-danger {
+.button-danger,
+.button-flat,
+.button-flat-danger {
   border-radius: 14px;
   padding: 10px 14px;
   border: 1px solid var(--line);
@@ -243,6 +245,33 @@ button {
   border-color: rgba(185, 28, 28, 0.18);
 }
 
+.button-flat,
+.button-flat-danger {
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.button-flat {
+  color: var(--brand);
+}
+
+.button-flat:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+.button-flat-danger {
+  color: var(--danger);
+}
+
+.button-flat-danger:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
 .page-content {
   min-height: 0;
 }
@@ -256,12 +285,20 @@ button {
   grid-template-columns: 1.3fr 0.7fr;
 }
 
+.grid.projects-hub {
+  grid-template-columns: 0.95fr 1.05fr;
+}
+
 .grid.three {
   grid-template-columns: 260px 1.1fr 0.9fr;
 }
 
 .grid.two {
   grid-template-columns: 1.2fr 0.8fr;
+}
+
+.grid.text-prep {
+  grid-template-columns: 260px 1fr;
 }
 
 .panel {
@@ -345,6 +382,20 @@ button {
   color: var(--muted);
 }
 
+.text-action {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
+  text-align: left;
+}
+
+.text-action:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -371,6 +422,17 @@ button {
   gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 14px;
+}
+
+.pager-row {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.pager-select {
+  width: 120px;
+  min-width: 120px;
 }
 
 .form-grid {
@@ -434,6 +496,29 @@ button {
   background: rgba(251, 247, 239, 0.78);
 }
 
+.tips-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(251, 247, 239, 0.74);
+}
+
+.tips-card summary {
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+}
+
+.tips-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.tips-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .review-audio {
   width: 100%;
   margin-top: 12px;
@@ -455,6 +540,37 @@ button {
 .flash.error {
   border-color: rgba(185, 28, 28, 0.18);
   background: var(--danger-soft);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(17, 24, 39, 0.42);
+  backdrop-filter: blur(6px);
+  z-index: 40;
+}
+
+.modal-card {
+  width: min(520px, 100%);
+  padding: 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 253, 248, 0.9)),
+    var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.modal-card-form {
+  width: min(640px, 100%);
+}
+
+.modal-actions {
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 
 .login-wrap {
@@ -533,8 +649,10 @@ button {
   .app-shell,
   .login-card,
   .grid.projects,
+  .grid.projects-hub,
   .grid.three,
   .grid.two,
+  .grid.text-prep,
   .split-layout {
     grid-template-columns: 1fr;
   }

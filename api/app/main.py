@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+import shutil
 import sqlite3
 from difflib import SequenceMatcher
 from datetime import datetime, timezone
@@ -32,6 +33,48 @@ from .text_utils import extract_text_from_upload, split_into_chapters, split_int
 
 WEB_DIR = BASE_DIR.parent / "web"
 APP_TITLE = "AI Publisher Local Studio"
+COMIC_SETTINGS_DEFAULT = {
+    "enabled": False,
+    "script_model": "openai:gpt-4.1",
+    "storyboard_model": "google:gemini-2.0-flash",
+    "image_model": "openai:gpt-image-1",
+    "style_preset": "cinematic-ink",
+    "color_mode": "full-color",
+    "aspect_ratio": "4:5",
+    "character_consistency": "medium",
+    "negative_prompt": "",
+}
+VIDEO_SETTINGS_DEFAULT = {
+    "enabled": False,
+    "script_model": "openai:gpt-4.1",
+    "shot_model": "google:gemini-2.0-flash",
+    "image_model": "openai:gpt-image-1",
+    "video_model": "runway:gen-3",
+    "subtitle_model": "openai:gpt-4.1-mini",
+    "aspect_ratio": "16:9",
+    "duration_seconds": 30,
+    "motion_style": "cinematic",
+    "negative_prompt": "",
+}
+COMIC_MODEL_CATALOG = {
+    "script_models": ["openai:gpt-4.1", "openai:gpt-4o", "google:gemini-2.0-flash", "google:gemini-2.5-pro"],
+    "storyboard_models": ["openai:gpt-4.1", "google:gemini-2.0-flash", "google:gemini-2.5-pro"],
+    "image_models": ["openai:gpt-image-1", "bfl:flux-pro", "stability:sdxl"],
+    "style_presets": ["cinematic-ink", "anime-color", "watercolor", "noir"],
+    "color_modes": ["full-color", "black-white", "duotone"],
+    "aspect_ratios": ["1:1", "4:5", "3:4", "16:9"],
+    "character_consistency_levels": ["low", "medium", "high"],
+}
+VIDEO_MODEL_CATALOG = {
+    "script_models": ["openai:gpt-4.1", "openai:gpt-4o", "google:gemini-2.0-flash", "google:gemini-2.5-pro"],
+    "shot_models": ["openai:gpt-4.1", "google:gemini-2.0-flash", "google:gemini-2.5-pro"],
+    "image_models": ["openai:gpt-image-1", "bfl:flux-pro", "stability:sdxl"],
+    "video_models": ["runway:gen-3", "kling:v1.6", "pika:2.2"],
+    "subtitle_models": ["openai:gpt-4.1-mini", "openai:gpt-4o-mini", "google:gemini-2.0-flash"],
+    "aspect_ratios": ["16:9", "9:16", "1:1", "4:5"],
+    "motion_styles": ["cinematic", "anime", "documentary", "social-short"],
+    "duration_options": [15, 30, 45, 60],
+}
 
 app = FastAPI(title=APP_TITLE)
 app.add_middleware(
@@ -53,6 +96,31 @@ def startup() -> None:
 
 def db_row_to_dict(row: sqlite3.Row | None) -> dict | None:
     return dict(row) if row else None
+
+
+def merge_settings(raw_value: str | dict | None, defaults: dict) -> dict:
+    if isinstance(raw_value, dict):
+        parsed = raw_value
+    elif isinstance(raw_value, str) and raw_value.strip():
+        try:
+            parsed = json.loads(raw_value)
+        except json.JSONDecodeError:
+            parsed = {}
+    else:
+        parsed = {}
+    if not isinstance(parsed, dict):
+        parsed = {}
+    merged = defaults.copy()
+    merged.update({key: value for key, value in parsed.items() if value is not None})
+    return merged
+
+
+def project_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+    project = dict(row)
+    project["comic_settings"] = merge_settings(project.get("comic_settings"), COMIC_SETTINGS_DEFAULT)
+    project["video_settings"] = merge_settings(project.get("video_settings"), VIDEO_SETTINGS_DEFAULT)
+    project["metrics"] = project_metrics(conn, row["id"])
+    return project
 
 
 def fetch_user_by_token(token: str) -> dict:
@@ -295,6 +363,100 @@ def log_activity(conn: sqlite3.Connection, actor_id: int | None, entity_type: st
     )
 
 
+def resolve_generated_artifact(value: str | Path | None) -> Path | None:
+    if not value:
+        return None
+    try:
+        resolved = Path(value).expanduser().resolve()
+    except OSError:
+        return None
+    generated_root = GENERATED_DIR.resolve()
+    if resolved == generated_root or not resolved.is_relative_to(generated_root):
+        return None
+    return resolved
+
+
+def prune_empty_generated_parents(path: Path) -> None:
+    generated_root = GENERATED_DIR.resolve()
+    current = path.resolve()
+    while current != generated_root and current.is_relative_to(generated_root):
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
+
+
+def remove_generated_file(value: str | Path | None) -> None:
+    path = resolve_generated_artifact(value)
+    if not path:
+        return
+    path.unlink(missing_ok=True)
+    prune_empty_generated_parents(path.parent)
+
+
+def remove_generated_tree(path: Path) -> None:
+    resolved = resolve_generated_artifact(path)
+    if not resolved:
+        return
+    if resolved.is_file() or resolved.is_symlink():
+        resolved.unlink(missing_ok=True)
+    else:
+        shutil.rmtree(resolved, ignore_errors=True)
+    prune_empty_generated_parents(resolved.parent)
+
+
+def artifact_paths_from_query(conn: sqlite3.Connection, query: str, params: tuple) -> set[Path]:
+    rows = conn.execute(query, params).fetchall()
+    paths: set[Path] = set()
+    for row in rows:
+        candidate = resolve_generated_artifact(row[0])
+        if candidate:
+            paths.add(candidate)
+    return paths
+
+
+def collect_segment_artifacts(conn: sqlite3.Connection, segment_id: int) -> set[Path]:
+    return artifact_paths_from_query(
+        conn,
+        """
+        SELECT file_path FROM audio_takes WHERE segment_id = ? AND file_path <> ''
+        UNION
+        SELECT output_path FROM generation_jobs WHERE segment_id = ? AND output_path <> ''
+        """,
+        (segment_id, segment_id),
+    )
+
+
+def collect_chapter_artifacts(conn: sqlite3.Connection, chapter_id: int) -> set[Path]:
+    return artifact_paths_from_query(
+        conn,
+        """
+        SELECT audio_takes.file_path
+        FROM audio_takes
+        JOIN segments ON segments.id = audio_takes.segment_id
+        WHERE segments.chapter_id = ? AND audio_takes.file_path <> ''
+        UNION
+        SELECT output_path FROM generation_jobs WHERE chapter_id = ? AND output_path <> ''
+        UNION
+        SELECT file_path FROM chapter_renders WHERE chapter_id = ? AND file_path <> ''
+        """,
+        (chapter_id, chapter_id, chapter_id),
+    )
+
+
+def reindex_chapters(conn: sqlite3.Connection, project_id: int) -> None:
+    rows = conn.execute("SELECT id FROM chapters WHERE project_id = ? ORDER BY order_index, id", (project_id,)).fetchall()
+    for index, row in enumerate(rows, start=1):
+        conn.execute("UPDATE chapters SET order_index = ?, updated_at = ? WHERE id = ?", (index, utc_now(), row["id"]))
+
+
+def reindex_segments(conn: sqlite3.Connection, chapter_id: int) -> None:
+    rows = conn.execute("SELECT id FROM segments WHERE chapter_id = ? ORDER BY order_index, id", (chapter_id,)).fetchall()
+    for index, row in enumerate(rows, start=1):
+        conn.execute("UPDATE segments SET order_index = ?, updated_at = ? WHERE id = ?", (index, utc_now(), row["id"]))
+
+
 def run_segment_generation(job_id: int) -> None:
     with get_conn() as conn:
         job = conn.execute("SELECT * FROM generation_jobs WHERE id = ?", (job_id,)).fetchone()
@@ -499,9 +661,7 @@ def list_projects(user: dict = Depends(get_current_user)) -> dict:
         ).fetchall()
         payload = []
         for row in rows:
-            item = dict(row)
-            item["metrics"] = project_metrics(conn, row["id"])
-            payload.append(item)
+            payload.append(project_payload(conn, row))
     return {"items": payload}
 
 
@@ -510,23 +670,37 @@ def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user
     now = utc_now()
     with get_conn() as conn:
         default_voice = conn.execute("SELECT id FROM voice_profiles WHERE is_default = 1 ORDER BY id LIMIT 1").fetchone()
+        comic_settings = json.dumps(merge_settings(payload.comic_settings, COMIC_SETTINGS_DEFAULT), ensure_ascii=False)
+        video_settings = json.dumps(merge_settings(payload.video_settings, VIDEO_SETTINGS_DEFAULT), ensure_ascii=False)
         project_id = conn.execute(
             """
-            INSERT INTO projects (title, author, language, description, status, default_voice_profile_id, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?)
+            INSERT INTO projects (title, author, language, description, comic_settings, video_settings, status, default_voice_profile_id, created_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)
             """,
-            (payload.title, payload.author, payload.language, payload.description, default_voice["id"] if default_voice else None, user["id"], now, now),
+            (
+                payload.title,
+                payload.author,
+                payload.language,
+                payload.description,
+                comic_settings,
+                video_settings,
+                default_voice["id"] if default_voice else None,
+                user["id"],
+                now,
+                now,
+            ),
         ).lastrowid
         log_activity(conn, user["id"], "project", project_id, "create", payload.title)
         project = get_project(conn, project_id)
-    return {"project": dict(project)}
+    with get_conn() as conn:
+        project = get_project(conn, project_id)
+        return {"project": project_payload(conn, project)}
 
 
 @app.get("/api/projects/{project_id}")
 def get_project_detail(project_id: int, user: dict = Depends(get_current_user)) -> dict:
     with get_conn() as conn:
-        project = dict(get_project(conn, project_id))
-        project["metrics"] = project_metrics(conn, project_id)
+        project = project_payload(conn, get_project(conn, project_id))
         chapters = conn.execute("SELECT * FROM chapters WHERE project_id = ? ORDER BY order_index", (project_id,)).fetchall()
         project["chapters"] = [chapter_payload(conn, row) for row in chapters]
     return {"project": project}
@@ -537,15 +711,35 @@ def update_project(project_id: int, payload: ProjectUpdate, user: dict = Depends
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
+    if "comic_settings" in updates:
+        updates["comic_settings"] = json.dumps(merge_settings(updates["comic_settings"], COMIC_SETTINGS_DEFAULT), ensure_ascii=False)
+    if "video_settings" in updates:
+        updates["video_settings"] = json.dumps(merge_settings(updates["video_settings"], VIDEO_SETTINGS_DEFAULT), ensure_ascii=False)
     updates["updated_at"] = utc_now()
     set_clause = ", ".join(f"{key} = ?" for key in updates)
     params = list(updates.values()) + [project_id]
     with get_conn() as conn:
         get_project(conn, project_id)
         conn.execute(f"UPDATE projects SET {set_clause} WHERE id = ?", params)
-        project = dict(get_project(conn, project_id))
-        project["metrics"] = project_metrics(conn, project_id)
+        project = project_payload(conn, get_project(conn, project_id))
     return {"project": project}
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_project(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    project_dirs = [
+        GENERATED_DIR / "imports" / f"project_{project_id}",
+        GENERATED_DIR / "audio" / f"project_{project_id}",
+        GENERATED_DIR / "renders" / f"project_{project_id}",
+        GENERATED_DIR / "exports" / f"project_{project_id}",
+    ]
+    with get_conn() as conn:
+        project = dict(get_project(conn, project_id))
+        log_activity(conn, user["id"], "project", project_id, "delete", project["title"])
+        conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    for path in project_dirs:
+        remove_generated_tree(path)
+    return {"success": True, "deleted_project_id": project_id}
 
 
 @app.post("/api/projects/{project_id}/import")
@@ -562,7 +756,12 @@ async def import_project_text(
 
     with get_conn() as conn:
         project = get_project(conn, project_id)
+        remove_generated_tree(GENERATED_DIR / "audio" / f"project_{project_id}")
+        remove_generated_tree(GENERATED_DIR / "renders" / f"project_{project_id}")
+        remove_generated_tree(GENERATED_DIR / "exports" / f"project_{project_id}")
+        remove_generated_tree(GENERATED_DIR / "imports" / f"project_{project_id}")
         conn.execute("DELETE FROM chapters WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM export_tasks WHERE project_id = ?", (project_id,))
         now = utc_now()
         import_dir = GENERATED_DIR / "imports" / f"project_{project_id}"
         import_dir.mkdir(parents=True, exist_ok=True)
@@ -607,6 +806,41 @@ def list_segments(chapter_id: int, user: dict = Depends(get_current_user)) -> di
         return {"items": [segment_payload(conn, row) for row in rows]}
 
 
+@app.delete("/api/chapters/{chapter_id}")
+def delete_chapter(chapter_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        chapter = dict(get_chapter(conn, chapter_id))
+        artifact_paths = collect_chapter_artifacts(conn, chapter_id)
+        log_activity(conn, user["id"], "chapter", chapter_id, "delete", chapter["title"])
+        conn.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
+        reindex_chapters(conn, chapter["project_id"])
+        conn.execute(
+            """
+            UPDATE projects
+            SET status = CASE
+                WHEN EXISTS(SELECT 1 FROM chapters WHERE project_id = ?) THEN status
+                ELSE 'draft'
+            END,
+            updated_at = ?
+            WHERE id = ?
+            """,
+            (chapter["project_id"], utc_now(), chapter["project_id"]),
+        )
+        next_row = conn.execute(
+            "SELECT id FROM chapters WHERE project_id = ? ORDER BY order_index, id LIMIT 1",
+            (chapter["project_id"],),
+        ).fetchone()
+    for path in artifact_paths:
+        remove_generated_file(path)
+    remove_generated_tree(GENERATED_DIR / "audio" / f"project_{chapter['project_id']}" / f"chapter_{chapter_id}")
+    return {
+        "success": True,
+        "deleted_chapter_id": chapter_id,
+        "project_id": chapter["project_id"],
+        "next_chapter_id": next_row["id"] if next_row else None,
+    }
+
+
 @app.patch("/api/segments/{segment_id}")
 def update_segment(segment_id: int, payload: SegmentUpdate, user: dict = Depends(get_current_user)) -> dict:
     with get_conn() as conn:
@@ -625,6 +859,31 @@ def update_segment(segment_id: int, payload: SegmentUpdate, user: dict = Depends
         updated = get_segment(conn, segment_id)
         log_activity(conn, user["id"], "segment", segment_id, "update", "tts_text")
         return {"segment": segment_payload(conn, updated)}
+
+
+@app.delete("/api/segments/{segment_id}")
+def delete_segment(segment_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        segment = dict(get_segment(conn, segment_id))
+        artifact_paths = collect_segment_artifacts(conn, segment_id)
+        log_activity(conn, user["id"], "segment", segment_id, "delete", f"chapter:{segment['chapter_id']}")
+        conn.execute("DELETE FROM segments WHERE id = ?", (segment_id,))
+        reindex_segments(conn, segment["chapter_id"])
+        conn.execute("UPDATE chapters SET updated_at = ? WHERE id = ?", (utc_now(), segment["chapter_id"]))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), segment["project_id"]))
+        next_row = conn.execute(
+            "SELECT id FROM segments WHERE chapter_id = ? ORDER BY order_index, id LIMIT 1",
+            (segment["chapter_id"],),
+        ).fetchone()
+    for path in artifact_paths:
+        remove_generated_file(path)
+    return {
+        "success": True,
+        "deleted_segment_id": segment_id,
+        "chapter_id": segment["chapter_id"],
+        "project_id": segment["project_id"],
+        "next_segment_id": next_row["id"] if next_row else None,
+    }
 
 
 @app.get("/api/projects/{project_id}/voice-profiles")
@@ -672,6 +931,8 @@ def system_providers(user: dict = Depends(get_current_user)) -> dict:
             "openai_tts_voices": OPENAI_TTS_VOICES,
             "elevenlabs_tts_models": ELEVENLABS_TTS_MODELS,
             "elevenlabs_asr_models": ELEVENLABS_ASR_MODELS,
+            "comic": COMIC_MODEL_CATALOG,
+            "video": VIDEO_MODEL_CATALOG,
         },
         "defaults": {
             "asr_provider": settings.default_asr_provider,

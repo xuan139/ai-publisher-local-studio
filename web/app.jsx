@@ -2,10 +2,11 @@ const { useEffect, useMemo, useState } = React;
 
 const STORAGE_KEY = "ai-publisher-token";
 const NAV_ITEMS = [
-  { key: "projects", label: "專案列表" },
-  { key: "overview", label: "專案總覽" },
+  { key: "projects", label: "專案" },
   { key: "text", label: "文本準備" },
   { key: "voices", label: "聲線設定" },
+  { key: "comic", label: "漫畫設定" },
+  { key: "video", label: "Video 設定" },
   { key: "generate", label: "生成工作台" },
   { key: "review", label: "審核校對" },
   { key: "export", label: "匯出交付" },
@@ -46,6 +47,30 @@ const SOURCE_KIND_LABELS = {
 const OPENAI_VOICE_FALLBACKS = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"];
 const OPENAI_MODEL_FALLBACKS = ["gpt-4o-mini-tts", "tts-1", "tts-1-hd"];
 const ELEVENLABS_MODEL_FALLBACKS = ["eleven_multilingual_v2", "eleven_v3", "eleven_flash_v2_5", "eleven_turbo_v2_5"];
+const SEGMENT_PAGE_SIZES = [10, 20, 50];
+const COMIC_SETTINGS_DEFAULT = {
+  enabled: false,
+  script_model: "openai:gpt-4.1",
+  storyboard_model: "google:gemini-2.0-flash",
+  image_model: "openai:gpt-image-1",
+  style_preset: "cinematic-ink",
+  color_mode: "full-color",
+  aspect_ratio: "4:5",
+  character_consistency: "medium",
+  negative_prompt: "",
+};
+const VIDEO_SETTINGS_DEFAULT = {
+  enabled: false,
+  script_model: "openai:gpt-4.1",
+  shot_model: "google:gemini-2.0-flash",
+  image_model: "openai:gpt-image-1",
+  video_model: "runway:gen-3",
+  subtitle_model: "openai:gpt-4.1-mini",
+  aspect_ratio: "16:9",
+  duration_seconds: 30,
+  motion_style: "cinematic",
+  negative_prompt: "",
+};
 
 function providerDefaults(provider, catalog = {}) {
   if (provider === "openai") {
@@ -64,6 +89,10 @@ function providerDefaults(provider, catalog = {}) {
     model: "say",
     voice_name: "Tingting",
   };
+}
+
+function mergeModelSettings(defaults, value) {
+  return { ...defaults, ...(value || {}) };
 }
 
 async function apiFetch(path, { method = "GET", token, body, formData } = {}) {
@@ -135,6 +164,7 @@ function App() {
   const [exportsList, setExportsList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [flash, setFlash] = useState(null);
+  const [confirmState, setConfirmState] = useState(null);
 
   const selectedProject = projectDetail?.project || null;
   const selectedChapter = useMemo(
@@ -147,12 +177,38 @@ function App() {
     showFlash.timeoutId = window.setTimeout(() => setFlash(null), 3200);
   }
 
-  async function refreshProjects(preferredProjectId) {
+  function resetProjectContext() {
+    setProjectDetail(null);
+    setSelectedProjectId(null);
+    setSelectedChapterId(null);
+    setSegments([]);
+    setVoices([]);
+    setJobs([]);
+    setReviewQueue([]);
+    setRenders([]);
+    setExportsList([]);
+  }
+
+  function requestConfirm(config) {
+    setConfirmState({
+      ...config,
+      id: `${Date.now()}-${Math.random()}`,
+    });
+  }
+
+  async function refreshProjects(preferredProjectId = undefined) {
     if (!token) return;
     const payload = await apiFetch("/api/projects", { token });
-    setProjects(payload.items || []);
-    if (!selectedProjectId && payload.items?.[0]?.id) {
-      setSelectedProjectId(preferredProjectId || payload.items[0].id);
+    const items = payload.items || [];
+    setProjects(items);
+    if (!items.length) {
+      resetProjectContext();
+      return;
+    }
+    const requestedId = preferredProjectId === undefined ? selectedProjectId : preferredProjectId;
+    const resolvedId = requestedId && items.some((item) => item.id === requestedId) ? requestedId : items[0].id;
+    if (resolvedId !== selectedProjectId) {
+      setSelectedProjectId(resolvedId);
     }
   }
 
@@ -188,6 +244,51 @@ function App() {
     }
   }
 
+  async function refreshProject({ projectId = selectedProjectId, chapterId = selectedChapterId } = {}) {
+    if (projectId) {
+      await loadProject(projectId, chapterId);
+    } else {
+      resetProjectContext();
+    }
+    await refreshProjects(projectId ?? null);
+  }
+
+  async function handleDeleteProject(project) {
+    const wasSelected = project.id === selectedProjectId;
+    const fallbackProjectId = wasSelected
+      ? projects.find((item) => item.id !== project.id)?.id || null
+      : selectedProjectId;
+
+    await apiFetch(`/api/projects/${project.id}`, { method: "DELETE", token });
+
+    if (fallbackProjectId) {
+      await refreshProjects(fallbackProjectId);
+      if (wasSelected) {
+        await loadProject(fallbackProjectId);
+        setRoute("projects");
+      }
+    } else {
+      await refreshProjects(null);
+      setRoute("projects");
+    }
+
+    showFlash("success", `專案「${project.title}」已刪除。`);
+  }
+
+  async function handleOpenChapterText(chapterId) {
+    if (!chapterId) return;
+    setSelectedChapterId(chapterId);
+    await loadChapter(chapterId);
+    setRoute("text");
+  }
+
+  async function handleOpenProjectText(projectId) {
+    if (!projectId) return;
+    setSelectedProjectId(projectId);
+    await loadProject(projectId);
+    setRoute("text");
+  }
+
   async function loadChapter(chapterId) {
     if (!chapterId || !token) return;
     const [segmentsPayload, rendersPayload] = await Promise.all([
@@ -213,6 +314,7 @@ function App() {
       } catch {
         localStorage.removeItem(STORAGE_KEY);
         setToken("");
+        resetProjectContext();
       }
     })();
   }, [token]);
@@ -322,23 +424,22 @@ function App() {
             reviewQueue={reviewQueue}
             renders={renders}
             exportsList={exportsList}
-            refreshProject={async () => {
-              if (selectedProjectId) await loadProject(selectedProjectId, selectedChapterId);
-              await refreshProjects(selectedProjectId);
-            }}
+            refreshProject={refreshProject}
+            deleteProject={handleDeleteProject}
+            onOpenChapter={handleOpenChapterText}
+            onOpenProjectText={handleOpenProjectText}
             onSelectProject={setSelectedProjectId}
+            requestConfirm={requestConfirm}
             showFlash={showFlash}
           />
         </div>
       </main>
+      <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   );
 }
 
 function routeActions({ route, selectedProject, selectedChapter, onCreated, onImportDone, onGenerateDone, onRenderDone, onExportDone, token, showFlash }) {
-  if (route === "projects") {
-    return <ProjectCreateInline token={token} onCreated={onCreated} showFlash={showFlash} />;
-  }
   if (route === "text" && selectedProject) {
     return <ImportInline token={token} project={selectedProject} onDone={onImportDone} showFlash={showFlash} />;
   }
@@ -476,7 +577,7 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
               className={`project-button ${project.id === selectedProjectId ? "active" : ""}`}
               onClick={() => {
                 onSelectProject(project.id);
-                onRouteChange("overview");
+                onRouteChange("projects");
               }}
             >
               <div className="title-row">
@@ -531,23 +632,31 @@ function PageContent(props) {
     renders,
     exportsList,
     refreshProject,
+    deleteProject,
+    onOpenChapter,
+    onOpenProjectText,
+    onSelectProject,
     showFlash,
+    requestConfirm,
   } = props;
 
   if (route === "projects") {
-    return <ProjectsPage projects={projects} token={token} refreshProject={refreshProject} showFlash={showFlash} />;
+    return <ProjectsPage projects={projects} selectedProject={project} token={token} refreshProject={refreshProject} deleteProject={deleteProject} onSelectProject={onSelectProject} onOpenChapter={onOpenChapter} onOpenProjectText={onOpenProjectText} requestConfirm={requestConfirm} showFlash={showFlash} />;
   }
   if (!project) {
     return <div className="empty-state">請先在專案列表頁建立專案。</div>;
   }
-  if (route === "overview") {
-    return <OverviewPage project={project} setSelectedChapterId={setSelectedChapterId} />;
-  }
   if (route === "text") {
-    return <TextPrepPage token={token} project={project} selectedChapter={selectedChapter} selectedChapterId={selectedChapterId} setSelectedChapterId={setSelectedChapterId} segments={segments} voices={voices} refreshProject={refreshProject} showFlash={showFlash} />;
+    return <TextPrepPage token={token} project={project} selectedChapter={selectedChapter} selectedChapterId={selectedChapterId} setSelectedChapterId={setSelectedChapterId} segments={segments} voices={voices} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
   }
   if (route === "voices") {
     return <VoiceSetupPage token={token} project={project} voices={voices} refreshProject={refreshProject} showFlash={showFlash} />;
+  }
+  if (route === "comic") {
+    return <ComicSettingsPage token={token} project={project} refreshProject={refreshProject} showFlash={showFlash} />;
+  }
+  if (route === "video") {
+    return <VideoSettingsPage token={token} project={project} refreshProject={refreshProject} showFlash={showFlash} />;
   }
   if (route === "generate") {
     return <GeneratePage token={token} project={project} selectedChapter={selectedChapter} segments={segments} jobs={jobs} refreshProject={refreshProject} showFlash={showFlash} />;
@@ -559,158 +668,172 @@ function PageContent(props) {
     return <ExportPage token={token} project={project} selectedChapter={selectedChapter} renders={renders} exportsList={exportsList} refreshProject={refreshProject} showFlash={showFlash} />;
   }
   if (route === "settings") {
-    return <SettingsPage />;
+    return <SettingsPage token={token} project={project} refreshProject={refreshProject} showFlash={showFlash} />;
   }
   return null;
 }
 
-function ProjectsPage({ projects = [], token, refreshProject, showFlash }) {
-  const [form, setForm] = useState({ title: "", author: "", language: "zh-CN", description: "" });
-
-  async function createProject(event) {
-    event.preventDefault();
-    if (!form.title.trim()) return;
-    await apiFetch("/api/projects", { method: "POST", token, body: form });
-    setForm({ title: "", author: "", language: "zh-CN", description: "" });
-    await refreshProject();
-    showFlash("success", "新專案已建立。");
-  }
+function ProjectsPage({ projects = [], selectedProject, token, refreshProject, deleteProject, onSelectProject, onOpenChapter, onOpenProjectText, requestConfirm, showFlash }) {
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   return (
-    <div className="grid projects">
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>專案總覽</h2>
-            <div className="subtext">先讓本機版流程跑通，再逐步擴充 provider 與模組。</div>
-          </div>
-          <span className="tag brand">{projects.length} 個專案</span>
-        </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>專案</th>
-              <th>語言</th>
-              <th>章節數</th>
-              <th>待審核</th>
-              <th>失敗任務</th>
-            </tr>
-          </thead>
-          <tbody>
-            {projects.map((project) => (
-              <tr key={project.id}>
-                <td>
-                  <strong>{project.title}</strong>
-                  <div className="subtext">{project.author || "未填作者"}</div>
-                </td>
-                <td>{project.language}</td>
-                <td>{project.metrics?.chapter_count || 0}</td>
-                <td>{project.metrics?.review_required_count || 0}</td>
-                <td>{project.metrics?.failed_jobs || 0}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>建立專案</h2>
-            <div className="subtext">只填最少欄位即可開始。</div>
-          </div>
-        </div>
-        <form className="form-grid" onSubmit={createProject}>
-          <div className="field">
-            <label>標題</label>
-            <input className="input" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
-          </div>
-          <div className="field">
-            <label>作者</label>
-            <input className="input" value={form.author} onChange={(event) => setForm({ ...form, author: event.target.value })} />
-          </div>
-          <div className="field">
-            <label>語言</label>
-            <select className="select" value={form.language} onChange={(event) => setForm({ ...form, language: event.target.value })}>
-              <option value="zh-CN">zh-CN</option>
-              <option value="en-US">en-US</option>
-              <option value="en-GB">en-GB</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>描述</label>
-            <textarea className="textarea small" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
-          </div>
-          <button className="button">建立</button>
-        </form>
-      </section>
-    </div>
-  );
-}
-
-function OverviewPage({ project, setSelectedChapterId }) {
-  return (
-    <div className="grid">
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>{project.title}</h2>
-            <div className="subtext">{project.author || "未填作者"} · {project.language}</div>
-          </div>
-          <span className="tag brand">{statusLabel(project.status)}</span>
-        </div>
-        <div className="metrics">
-          <div className="metric">
-            <div className="eyebrow">章節</div>
-            <strong>{project.metrics?.chapter_count || 0}</strong>
-          </div>
-          <div className="metric">
-            <div className="eyebrow">段落</div>
-            <strong>{project.metrics?.segment_count || 0}</strong>
-          </div>
-          <div className="metric">
-            <div className="eyebrow">已通過</div>
-            <strong>{project.metrics?.approved_count || 0}</strong>
-          </div>
-          <div className="metric">
-            <div className="eyebrow">待審核</div>
-            <strong>{project.metrics?.review_required_count || 0}</strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>章節地圖</h2>
-            <div className="subtext">點選章節可進入文本準備或生成工作台。</div>
-          </div>
-        </div>
-        <div className="list">
-          {(project.chapters || []).map((chapter) => (
-            <div key={chapter.id} className="list-item">
-              <div className="title-row">
-                <strong>{chapter.order_index}. {chapter.title}</strong>
-                <button className="button-secondary" onClick={() => setSelectedChapterId(chapter.id)}>選取</button>
-              </div>
-              <div className="pill-row" style={{ marginTop: 10 }}>
-                <span className="tag">{chapter.segment_count} 段</span>
-                <span className="tag success">{chapter.approved_count} 已通過</span>
-                <span className="tag warn">{chapter.review_count} 待審核</span>
-              </div>
+    <>
+      <div className="grid projects-hub">
+        <div className="grid">
+          <div className="panel-head">
+            <div>
+              <h2>專案列表</h2>
+              <div className="subtext">在同一頁面完成專案切換、摘要查看與章節入口。</div>
             </div>
-          ))}
+            <div className="toolbar" style={{ marginBottom: 0 }}>
+              <button className="button" onClick={() => setShowCreateModal(true)}>建立專案</button>
+              <span className="tag brand">{projects.length} 個專案</span>
+            </div>
+          </div>
+          <section className="panel">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>專案</th>
+                  <th>語言</th>
+                  <th>章節數</th>
+                  <th>待審核</th>
+                  <th>失敗任務</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projects.map((project) => (
+                  <tr key={project.id}>
+                    <td>
+                      <button className="text-action" onClick={() => onSelectProject(project.id)}>
+                        {project.title}
+                      </button>
+                      <div className="subtext">{project.author || "未填作者"}</div>
+                    </td>
+                    <td>{project.language}</td>
+                    <td>{project.metrics?.chapter_count || 0}</td>
+                    <td>{project.metrics?.review_required_count || 0}</td>
+                    <td>{project.metrics?.failed_jobs || 0}</td>
+                    <td>
+                      <div className="toolbar" style={{ marginBottom: 0 }}>
+                        <button
+                          className="button-secondary"
+                          onClick={async () => {
+                            await onOpenProjectText(project.id);
+                          }}
+                        >
+                          文本準備
+                        </button>
+                        <button
+                          className="button-danger"
+                          onClick={() => requestConfirm({
+                            title: "刪除專案",
+                            message: `將永久刪除「${project.title}」以及底下所有章節、段落、音訊、渲染與匯出檔。此動作無法復原。`,
+                            confirmLabel: "刪除專案",
+                            onConfirm: async () => {
+                              await deleteProject(project);
+                            },
+                          })}
+                        >
+                          刪除
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
         </div>
-      </section>
-    </div>
+
+        <div className="grid">
+          {selectedProject ? (
+            <div className="grid">
+              <section className="panel">
+                <div className="panel-head">
+                  <div>
+                    <h2>{selectedProject.title}</h2>
+                    <div className="subtext">{selectedProject.author || "未填作者"} · {selectedProject.language}</div>
+                  </div>
+                  <span className="tag brand">{statusLabel(selectedProject.status)}</span>
+                </div>
+                <div className="metrics">
+                  <div className="metric">
+                    <div className="eyebrow">章節</div>
+                    <strong>{selectedProject.metrics?.chapter_count || 0}</strong>
+                  </div>
+                  <div className="metric">
+                    <div className="eyebrow">段落</div>
+                    <strong>{selectedProject.metrics?.segment_count || 0}</strong>
+                  </div>
+                  <div className="metric">
+                    <div className="eyebrow">已通過</div>
+                    <strong>{selectedProject.metrics?.approved_count || 0}</strong>
+                  </div>
+                  <div className="metric">
+                    <div className="eyebrow">待審核</div>
+                    <strong>{selectedProject.metrics?.review_required_count || 0}</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panel-head">
+                  <div>
+                    <h2>章節地圖</h2>
+                    <div className="subtext">直接進入文本準備，不再切換到另一個總覽頁。</div>
+                  </div>
+                </div>
+                <div className="list">
+                  {(selectedProject.chapters || []).map((chapter) => (
+                    <div key={chapter.id} className="list-item">
+                      <div className="title-row">
+                        <strong>{chapter.order_index}. {chapter.title}</strong>
+                        <button className="button-secondary" onClick={() => onOpenChapter(chapter.id)}>文本準備</button>
+                      </div>
+                      <div className="pill-row" style={{ marginTop: 10 }}>
+                        <span className="tag">{chapter.segment_count} 段</span>
+                        <span className="tag success">{chapter.approved_count} 已通過</span>
+                        <span className="tag warn">{chapter.review_count} 待審核</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : (
+            <div className="empty-state">先建立或選取一個專案，右側就會顯示專案摘要與章節地圖。</div>
+          )}
+        </div>
+      </div>
+      <ProjectCreateModal
+        open={showCreateModal}
+        token={token}
+        onClose={() => setShowCreateModal(false)}
+        onCreated={async (createdProject) => {
+          await refreshProject({ projectId: createdProject.id });
+          setShowCreateModal(false);
+        }}
+        showFlash={showFlash}
+      />
+    </>
   );
 }
 
-function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setSelectedChapterId, segments, voices, refreshProject, showFlash }) {
+function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setSelectedChapterId, segments, voices, refreshProject, requestConfirm, showFlash }) {
   const [activeSegmentId, setActiveSegmentId] = useState(null);
   const activeSegment = segments.find((segment) => segment.id === activeSegmentId) || segments[0] || null;
   const [draftText, setDraftText] = useState("");
   const [voiceId, setVoiceId] = useState("");
+  const [segmentPage, setSegmentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const totalSegmentPages = Math.max(1, Math.ceil(segments.length / pageSize));
+  const pagedSegments = useMemo(() => {
+    const start = (segmentPage - 1) * pageSize;
+    return segments.slice(start, start + pageSize);
+  }, [segments, segmentPage, pageSize]);
 
   useEffect(() => {
     if (activeSegment) {
@@ -727,6 +850,26 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
     }
   }, [activeSegment]);
 
+  useEffect(() => {
+    setSegmentPage(1);
+  }, [selectedChapterId]);
+
+  useEffect(() => {
+    if (segmentPage > totalSegmentPages) {
+      setSegmentPage(totalSegmentPages);
+    }
+  }, [segmentPage, totalSegmentPages]);
+
+  useEffect(() => {
+    if (!activeSegment) return;
+    const index = segments.findIndex((segment) => segment.id === activeSegment.id);
+    if (index < 0) return;
+    const nextPage = Math.floor(index / pageSize) + 1;
+    if (nextPage !== segmentPage) {
+      setSegmentPage(nextPage);
+    }
+  }, [activeSegment?.id, pageSize, segmentPage, segments]);
+
   async function saveSegment() {
     if (!activeSegment) return;
     await apiFetch(`/api/segments/${activeSegment.id}`, {
@@ -742,8 +885,27 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
     showFlash("success", "段落已儲存。");
   }
 
+  function requestDeleteSegment(segment) {
+    const nextSegmentId = segments.find((item) => item.id !== segment.id)?.id || null;
+    requestConfirm({
+      title: "刪除段落",
+      message: `將刪除段落 ${segment.order_index} 的文字、音訊 take 與相關問題記錄。此動作無法復原。`,
+      confirmLabel: "刪除段落",
+      onConfirm: async () => {
+        await apiFetch(`/api/segments/${segment.id}`, { method: "DELETE", token });
+        setActiveSegmentId(nextSegmentId);
+        if (!nextSegmentId) {
+          setDraftText("");
+          setVoiceId("");
+        }
+        await refreshProject({ chapterId: selectedChapterId });
+        showFlash("success", `段落 ${segment.order_index} 已刪除。`);
+      },
+    });
+  }
+
   return (
-    <div className="grid three">
+    <div className="grid text-prep">
       <section className="panel">
         <div className="panel-head">
           <div>
@@ -773,7 +935,25 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
         ) : (
           <div className="split-layout">
             <div className="list">
-              {segments.map((segment) => (
+              <div className="pager-row">
+                <div className="subtext">
+                  共 {segments.length} 段，第 {segmentPage} / {totalSegmentPages} 頁
+                </div>
+                <div className="toolbar" style={{ marginBottom: 0 }}>
+                  <select className="select pager-select" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+                    {SEGMENT_PAGE_SIZES.map((size) => (
+                      <option key={size} value={size}>每頁 {size} 段</option>
+                    ))}
+                  </select>
+                  <button className="button-secondary" disabled={segmentPage <= 1} onClick={() => setSegmentPage((value) => Math.max(1, value - 1))}>
+                    上一頁
+                  </button>
+                  <button className="button-secondary" disabled={segmentPage >= totalSegmentPages} onClick={() => setSegmentPage((value) => Math.min(totalSegmentPages, value + 1))}>
+                    下一頁
+                  </button>
+                </div>
+              </div>
+              {pagedSegments.map((segment) => (
                 <button key={segment.id} className={`project-button ${activeSegment?.id === segment.id ? "active" : ""}`} onClick={() => setActiveSegmentId(segment.id)}>
                   <div className="title-row">
                     <strong>段落 {segment.order_index}</strong>
@@ -782,11 +962,16 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
                   <div className="subtext">{segment.source_text.slice(0, 56)}...</div>
                 </button>
               ))}
+              {!pagedSegments.length ? <div className="empty-state">目前章節沒有段落。</div> : null}
             </div>
 
             <div className="form-grid">
               {activeSegment ? (
                 <>
+                  <div className="title-row">
+                    <strong>目前段落 {activeSegment.order_index}</strong>
+                    <span className="tag">{statusLabel(activeSegment.status)}</span>
+                  </div>
                   <div className="editor-card">
                     <div className="eyebrow">原文</div>
                     <div>{activeSegment.source_text}</div>
@@ -805,15 +990,39 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
                     </select>
                   </div>
                   <div className="toolbar">
-                    <button className="button" onClick={saveSegment}>儲存段落</button>
-                    <button className="button-secondary" onClick={async () => {
+                    <button className="button-flat" onClick={saveSegment}>儲存</button>
+                    <button className="button-flat" onClick={async () => {
                       await apiFetch(`/api/segments/${activeSegment.id}/generate`, { method: "POST", token });
                       await refreshProject();
                       showFlash("success", "已為目前段落建立生成任務。");
                     }}>
-                      生成目前段落
+                      生成
+                    </button>
+                    <button className="button-flat-danger" onClick={() => requestDeleteSegment(activeSegment)}>
+                      刪除
                     </button>
                   </div>
+                  <details className="tips-card">
+                    <summary>準備提示</summary>
+                    <div className="tips-list">
+                      <div className="list-item">
+                        <strong>這一區是做什麼的</strong>
+                        <div className="subtext">只是整理文字前的操作提醒，幫你快速判斷哪些段落要先改 `tts_text` 再生成。</div>
+                      </div>
+                      <div className="list-item">
+                        <strong>建議保持段落長度適中</strong>
+                        <div className="subtext">過長段落更容易在審核階段被標記節奏問題。</div>
+                      </div>
+                      <div className="list-item">
+                        <strong>含數字與英文縮寫時請手動複核</strong>
+                        <div className="subtext">本機版 QC 會對數字內容自動加註提示。</div>
+                      </div>
+                      <div className="list-item">
+                        <strong>本機 TTS 使用 macOS say</strong>
+                        <div className="subtext">先跑通流程，後續再接 ElevenLabs / OpenAI。</div>
+                      </div>
+                    </div>
+                  </details>
                 </>
               ) : (
                 <div className="empty-state">目前章節沒有段落。</div>
@@ -821,29 +1030,6 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
             </div>
           </div>
         )}
-      </section>
-
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h3>準備提示</h3>
-            <div className="subtext">第一版採用規則化建議，不做複雜自動編輯。</div>
-          </div>
-        </div>
-        <div className="list">
-          <div className="list-item">
-            <strong>建議保持段落長度適中</strong>
-            <div className="subtext">過長段落更容易在審核階段被標記節奏問題。</div>
-          </div>
-          <div className="list-item">
-            <strong>含數字與英文縮寫時請手動複核</strong>
-            <div className="subtext">本機版 QC 會對數字內容自動加註提示。</div>
-          </div>
-          <div className="list-item">
-            <strong>本機 TTS 使用 macOS say</strong>
-            <div className="subtext">先跑通流程，後續再接 ElevenLabs / OpenAI。</div>
-          </div>
-        </div>
       </section>
     </div>
   );
@@ -897,135 +1083,398 @@ function VoiceSetupPage({ token, project, voices, refreshProject, showFlash }) {
   }
 
   return (
-    <div className="grid two">
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>聲線設定</h2>
-            <div className="subtext">第一期先只支援 narrator 單聲線。</div>
-          </div>
-        </div>
-        {providerInfo ? (
-          <div className="pill-row" style={{ marginBottom: 16 }}>
-            <span className={`tag ${providerInfo.providers?.macos?.configured ? "success" : "warn"}`}>macOS say</span>
-            <span className={`tag ${providerInfo.providers?.openai?.configured ? "success" : "warn"}`}>OpenAI</span>
-            <span className={`tag ${providerInfo.providers?.elevenlabs?.configured ? "success" : "warn"}`}>ElevenLabs</span>
-          </div>
-        ) : null}
-        <div className="list">
-          {voices.map((voice) => (
-            <div key={voice.id} className="list-item">
-              <div className="title-row">
-                <strong>{voice.name}</strong>
-                {project.default_voice_profile_id === voice.id ? <span className="tag brand">專案預設</span> : null}
-              </div>
-              <div className="subtext">{voice.provider} / {voice.model} / {voice.voice_name}</div>
-              <div className="pill-row" style={{ marginTop: 10 }}>
-                <span className="tag">速度 {voice.speed}</span>
-                <span className="tag">{voice.style || "未設定風格"}</span>
-              </div>
-              <div className="toolbar" style={{ marginTop: 12 }}>
-                <button className="button-secondary" onClick={async () => {
-                  await apiFetch(`/api/projects/${project.id}`, {
-                    method: "PATCH",
-                    token,
-                    body: { default_voice_profile_id: voice.id },
-                  });
-                  await refreshProject();
-                  showFlash("success", `${voice.name} 已設為專案預設聲線。`);
-                }}>
-                  設為預設
-                </button>
-              </div>
+    <div className="grid">
+      <div className="grid two">
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>聲線設定</h2>
+              <div className="subtext">第一期先只支援 narrator 單聲線。</div>
             </div>
-          ))}
-        </div>
-      </section>
+          </div>
+          {providerInfo ? (
+            <div className="pill-row" style={{ marginBottom: 16 }}>
+              <span className={`tag ${providerInfo.providers?.macos?.configured ? "success" : "warn"}`}>macOS say</span>
+              <span className={`tag ${providerInfo.providers?.openai?.configured ? "success" : "warn"}`}>OpenAI</span>
+              <span className={`tag ${providerInfo.providers?.elevenlabs?.configured ? "success" : "warn"}`}>ElevenLabs</span>
+            </div>
+          ) : null}
+          <div className="list">
+            {voices.map((voice) => (
+              <div key={voice.id} className="list-item">
+                <div className="title-row">
+                  <strong>{voice.name}</strong>
+                  {project.default_voice_profile_id === voice.id ? <span className="tag brand">專案預設</span> : null}
+                </div>
+                <div className="subtext">{voice.provider} / {voice.model} / {voice.voice_name}</div>
+                <div className="pill-row" style={{ marginTop: 10 }}>
+                  <span className="tag">速度 {voice.speed}</span>
+                  <span className="tag">{voice.style || "未設定風格"}</span>
+                </div>
+                <div className="toolbar" style={{ marginTop: 12 }}>
+                  <button className="button-secondary" onClick={async () => {
+                    await apiFetch(`/api/projects/${project.id}`, {
+                      method: "PATCH",
+                      token,
+                      body: { default_voice_profile_id: voice.id },
+                    });
+                    await refreshProject();
+                    showFlash("success", `${voice.name} 已設為專案預設聲線。`);
+                  }}>
+                    設為預設
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>建立本地聲線設定</h2>
+              <div className="subtext">可建立 macOS、OpenAI 或 ElevenLabs 的聲線設定。</div>
+            </div>
+          </div>
+          <form className="form-grid" onSubmit={createVoice}>
+            <div className="field">
+              <label>名稱</label>
+              <input className="input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>Provider</label>
+              <select className="select" value={form.provider} onChange={(event) => updateProvider(event.target.value)}>
+                <option value="macos">macOS say</option>
+                <option value="openai">OpenAI</option>
+                <option value="elevenlabs">ElevenLabs</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>模型</label>
+              {form.provider === "macos" ? (
+                <input className="input" value="say" disabled />
+              ) : form.provider === "openai" ? (
+                <select className="select" value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })}>
+                  {(providerInfo?.catalog?.openai_tts_models || OPENAI_MODEL_FALLBACKS).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              ) : (
+                <select className="select" value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })}>
+                  {(providerInfo?.catalog?.elevenlabs_tts_models || ELEVENLABS_MODEL_FALLBACKS).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div className="field">
+              <label>{form.provider === "elevenlabs" ? "Voice ID" : "聲線名稱"}</label>
+              {form.provider === "macos" ? (
+                <select className="select" value={form.voice_name} onChange={(event) => setForm({ ...form, voice_name: event.target.value })}>
+                  <option value="Tingting">Tingting</option>
+                  <option value="Eddy (Chinese (China mainland))">Eddy CN</option>
+                  <option value="Samantha">Samantha</option>
+                  <option value="Daniel">Daniel</option>
+                </select>
+              ) : form.provider === "openai" ? (
+                <select className="select" value={form.voice_name} onChange={(event) => setForm({ ...form, voice_name: event.target.value })}>
+                  {(providerInfo?.catalog?.openai_tts_voices || OPENAI_VOICE_FALLBACKS).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="input"
+                  placeholder="貼上 ElevenLabs voice_id"
+                  value={form.voice_name}
+                  onChange={(event) => setForm({ ...form, voice_name: event.target.value })}
+                />
+              )}
+            </div>
+            <div className="field">
+              <label>速度</label>
+              <input className="input" type="number" min="0.7" max="1.4" step="0.05" value={form.speed} onChange={(event) => setForm({ ...form, speed: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>風格</label>
+              <input className="input" value={form.style} onChange={(event) => setForm({ ...form, style: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>說明</label>
+              <textarea className="textarea small" value={form.instructions} onChange={(event) => setForm({ ...form, instructions: event.target.value })} />
+            </div>
+            {form.provider === "elevenlabs" ? (
+              <div className="editor-card">
+                <div className="eyebrow">提示</div>
+                <div>ElevenLabs 目前需要你自行填入 voice_id。建立後，系統會直接呼叫 ElevenLabs TTS API。</div>
+              </div>
+            ) : null}
+            <button className="button">建立聲線設定</button>
+          </form>
+        </section>
+      </div>
+
+    </div>
+  );
+}
+
+function ProjectModelSettingsPage({ token, project, refreshProject, showFlash, mode }) {
+  const [providerInfo, setProviderInfo] = useState(null);
+  const [form, setForm] = useState(mode === "comic" ? COMIC_SETTINGS_DEFAULT : VIDEO_SETTINGS_DEFAULT);
+  const [savingKey, setSavingKey] = useState("");
+
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      try {
+        const payload = await apiFetch("/api/system/providers", { token });
+        setProviderInfo(payload);
+      } catch (error) {
+        showFlash("error", error.message);
+      }
+    })();
+  }, [token]);
+
+  useEffect(() => {
+    if (mode === "comic") {
+      setForm(mergeModelSettings(COMIC_SETTINGS_DEFAULT, project?.comic_settings));
+    } else {
+      setForm(mergeModelSettings(VIDEO_SETTINGS_DEFAULT, project?.video_settings));
+    }
+  }, [mode, project?.id, project?.comic_settings, project?.video_settings]);
+
+  const comicCatalog = providerInfo?.catalog?.comic || {};
+  const videoCatalog = providerInfo?.catalog?.video || {};
+
+  async function saveProjectSettings(value) {
+    if (!project) return;
+    const key = mode === "comic" ? "comic_settings" : "video_settings";
+    setSavingKey(key);
+    try {
+      await apiFetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        token,
+        body: { [key]: value },
+      });
+      await refreshProject({ projectId: project.id });
+      showFlash("success", key === "comic_settings" ? "漫畫設定已儲存。" : "Video 設定已儲存。");
+    } catch (error) {
+      showFlash("error", error.message || "設定儲存失敗。");
+    } finally {
+      setSavingKey("");
+    }
+  }
+
+  if (mode === "comic") {
+    return (
       <section className="panel">
         <div className="panel-head">
           <div>
-            <h2>建立本地聲線設定</h2>
-            <div className="subtext">可建立 macOS、OpenAI 或 ElevenLabs 的聲線設定。</div>
+            <h2>漫畫設定</h2>
+            <div className="subtext">{project ? `目前專案：${project.title}` : "請先選取專案"}</div>
           </div>
+          <span className={`tag ${form.enabled ? "brand" : ""}`}>{form.enabled ? "已啟用" : "未啟用"}</span>
         </div>
-        <form className="form-grid" onSubmit={createVoice}>
+        {!project ? (
+          <div className="empty-state">請先回到專案頁選取一個專案，再設定漫畫模型。</div>
+        ) : (
+          <form className="form-grid" onSubmit={async (event) => {
+            event.preventDefault();
+            await saveProjectSettings(form);
+          }}>
+            <div className="field">
+              <label>啟用</label>
+              <select className="select" value={form.enabled ? "true" : "false"} onChange={(event) => setForm({ ...form, enabled: event.target.value === "true" })}>
+                <option value="false">未啟用</option>
+                <option value="true">啟用</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>劇本模型</label>
+              <select className="select" value={form.script_model} onChange={(event) => setForm({ ...form, script_model: event.target.value })}>
+                {(comicCatalog.script_models || [COMIC_SETTINGS_DEFAULT.script_model]).map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>分鏡模型</label>
+              <select className="select" value={form.storyboard_model} onChange={(event) => setForm({ ...form, storyboard_model: event.target.value })}>
+                {(comicCatalog.storyboard_models || [COMIC_SETTINGS_DEFAULT.storyboard_model]).map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>圖像模型</label>
+              <select className="select" value={form.image_model} onChange={(event) => setForm({ ...form, image_model: event.target.value })}>
+                {(comicCatalog.image_models || [COMIC_SETTINGS_DEFAULT.image_model]).map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>風格預設</label>
+              <select className="select" value={form.style_preset} onChange={(event) => setForm({ ...form, style_preset: event.target.value })}>
+                {(comicCatalog.style_presets || [COMIC_SETTINGS_DEFAULT.style_preset]).map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>色彩模式</label>
+              <select className="select" value={form.color_mode} onChange={(event) => setForm({ ...form, color_mode: event.target.value })}>
+                {(comicCatalog.color_modes || [COMIC_SETTINGS_DEFAULT.color_mode]).map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>畫幅比例</label>
+              <select className="select" value={form.aspect_ratio} onChange={(event) => setForm({ ...form, aspect_ratio: event.target.value })}>
+                {(comicCatalog.aspect_ratios || [COMIC_SETTINGS_DEFAULT.aspect_ratio]).map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>角色一致性</label>
+              <select className="select" value={form.character_consistency} onChange={(event) => setForm({ ...form, character_consistency: event.target.value })}>
+                {(comicCatalog.character_consistency_levels || [COMIC_SETTINGS_DEFAULT.character_consistency]).map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>負面提示</label>
+              <textarea className="textarea small" value={form.negative_prompt} onChange={(event) => setForm({ ...form, negative_prompt: event.target.value })} />
+            </div>
+            <button className="button" disabled={savingKey === "comic_settings"}>{savingKey === "comic_settings" ? "儲存中..." : "儲存漫畫設定"}</button>
+          </form>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>Video 設定</h2>
+          <div className="subtext">{project ? `目前專案：${project.title}` : "請先選取專案"}</div>
+        </div>
+        <span className={`tag ${form.enabled ? "brand" : ""}`}>{form.enabled ? "已啟用" : "未啟用"}</span>
+      </div>
+      {!project ? (
+        <div className="empty-state">請先回到專案頁選取一個專案，再設定影片模型。</div>
+      ) : (
+        <form className="form-grid" onSubmit={async (event) => {
+          event.preventDefault();
+          await saveProjectSettings(form);
+        }}>
           <div className="field">
-            <label>名稱</label>
-            <input className="input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-          </div>
-          <div className="field">
-            <label>Provider</label>
-            <select className="select" value={form.provider} onChange={(event) => updateProvider(event.target.value)}>
-              <option value="macos">macOS say</option>
-              <option value="openai">OpenAI</option>
-              <option value="elevenlabs">ElevenLabs</option>
+            <label>啟用</label>
+            <select className="select" value={form.enabled ? "true" : "false"} onChange={(event) => setForm({ ...form, enabled: event.target.value === "true" })}>
+              <option value="false">未啟用</option>
+              <option value="true">啟用</option>
             </select>
           </div>
           <div className="field">
-            <label>模型</label>
-            {form.provider === "macos" ? (
-              <input className="input" value="say" disabled />
-            ) : form.provider === "openai" ? (
-              <select className="select" value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })}>
-                {(providerInfo?.catalog?.openai_tts_models || OPENAI_MODEL_FALLBACKS).map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-            ) : (
-              <select className="select" value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })}>
-                {(providerInfo?.catalog?.elevenlabs_tts_models || ELEVENLABS_MODEL_FALLBACKS).map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-            )}
+            <label>腳本模型</label>
+            <select className="select" value={form.script_model} onChange={(event) => setForm({ ...form, script_model: event.target.value })}>
+              {(videoCatalog.script_models || [VIDEO_SETTINGS_DEFAULT.script_model]).map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
           </div>
           <div className="field">
-            <label>{form.provider === "elevenlabs" ? "Voice ID" : "聲線名稱"}</label>
-            {form.provider === "macos" ? (
-              <select className="select" value={form.voice_name} onChange={(event) => setForm({ ...form, voice_name: event.target.value })}>
-                <option value="Tingting">Tingting</option>
-                <option value="Eddy (Chinese (China mainland))">Eddy CN</option>
-                <option value="Samantha">Samantha</option>
-                <option value="Daniel">Daniel</option>
-              </select>
-            ) : form.provider === "openai" ? (
-              <select className="select" value={form.voice_name} onChange={(event) => setForm({ ...form, voice_name: event.target.value })}>
-                {(providerInfo?.catalog?.openai_tts_voices || OPENAI_VOICE_FALLBACKS).map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                className="input"
-                placeholder="貼上 ElevenLabs voice_id"
-                value={form.voice_name}
-                onChange={(event) => setForm({ ...form, voice_name: event.target.value })}
-              />
-            )}
+            <label>鏡頭模型</label>
+            <select className="select" value={form.shot_model} onChange={(event) => setForm({ ...form, shot_model: event.target.value })}>
+              {(videoCatalog.shot_models || [VIDEO_SETTINGS_DEFAULT.shot_model]).map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
           </div>
           <div className="field">
-            <label>速度</label>
-            <input className="input" type="number" min="0.7" max="1.4" step="0.05" value={form.speed} onChange={(event) => setForm({ ...form, speed: event.target.value })} />
+            <label>圖像模型</label>
+            <select className="select" value={form.image_model} onChange={(event) => setForm({ ...form, image_model: event.target.value })}>
+              {(videoCatalog.image_models || [VIDEO_SETTINGS_DEFAULT.image_model]).map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
           </div>
           <div className="field">
-            <label>風格</label>
-            <input className="input" value={form.style} onChange={(event) => setForm({ ...form, style: event.target.value })} />
+            <label>影片模型</label>
+            <select className="select" value={form.video_model} onChange={(event) => setForm({ ...form, video_model: event.target.value })}>
+              {(videoCatalog.video_models || [VIDEO_SETTINGS_DEFAULT.video_model]).map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
           </div>
           <div className="field">
-            <label>說明</label>
-            <textarea className="textarea small" value={form.instructions} onChange={(event) => setForm({ ...form, instructions: event.target.value })} />
+            <label>字幕模型</label>
+            <select className="select" value={form.subtitle_model} onChange={(event) => setForm({ ...form, subtitle_model: event.target.value })}>
+              {(videoCatalog.subtitle_models || [VIDEO_SETTINGS_DEFAULT.subtitle_model]).map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
           </div>
-          {form.provider === "elevenlabs" ? (
-            <div className="editor-card">
-              <div className="eyebrow">提示</div>
-              <div>ElevenLabs 目前需要你自行填入 voice_id。建立後，系統會直接呼叫 ElevenLabs TTS API。</div>
-            </div>
-          ) : null}
-          <button className="button">建立聲線設定</button>
+          <div className="field">
+            <label>畫幅比例</label>
+            <select className="select" value={form.aspect_ratio} onChange={(event) => setForm({ ...form, aspect_ratio: event.target.value })}>
+              {(videoCatalog.aspect_ratios || [VIDEO_SETTINGS_DEFAULT.aspect_ratio]).map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>時長</label>
+            <select className="select" value={String(form.duration_seconds)} onChange={(event) => setForm({ ...form, duration_seconds: Number(event.target.value) })}>
+              {(videoCatalog.duration_options || [VIDEO_SETTINGS_DEFAULT.duration_seconds]).map((item) => (
+                <option key={item} value={String(item)}>{item} 秒</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>動態風格</label>
+            <select className="select" value={form.motion_style} onChange={(event) => setForm({ ...form, motion_style: event.target.value })}>
+              {(videoCatalog.motion_styles || [VIDEO_SETTINGS_DEFAULT.motion_style]).map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>負面提示</label>
+            <textarea className="textarea small" value={form.negative_prompt} onChange={(event) => setForm({ ...form, negative_prompt: event.target.value })} />
+          </div>
+          <button className="button" disabled={savingKey === "video_settings"}>{savingKey === "video_settings" ? "儲存中..." : "儲存 Video 設定"}</button>
         </form>
-      </section>
-    </div>
+      )}
+    </section>
+  );
+}
+
+function ComicSettingsPage({ token, project, refreshProject, showFlash }) {
+  return (
+    <ProjectModelSettingsPage
+      mode="comic"
+      token={token}
+      project={project}
+      refreshProject={refreshProject}
+      showFlash={showFlash}
+    />
+  );
+}
+
+function VideoSettingsPage({ token, project, refreshProject, showFlash }) {
+  return (
+    <ProjectModelSettingsPage
+      mode="video"
+      token={token}
+      project={project}
+      refreshProject={refreshProject}
+      showFlash={showFlash}
+    />
   );
 }
 
@@ -1352,11 +1801,10 @@ function ExportPage({ token, project, selectedChapter, renders, exportsList, ref
   );
 }
 
-function SettingsPage() {
+function SettingsPage({ token, project }) {
   const [providerInfo, setProviderInfo] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem(STORAGE_KEY) || "";
     if (!token) return;
     (async () => {
       try {
@@ -1364,7 +1812,7 @@ function SettingsPage() {
         setProviderInfo(payload);
       } catch {}
     })();
-  }, []);
+  }, [token]);
 
   return (
     <div className="grid two">
@@ -1402,25 +1850,26 @@ function SettingsPage() {
           ) : null}
         </div>
       </section>
+
       <section className="panel">
         <div className="panel-head">
           <div>
-            <h2>下一步</h2>
-            <div className="subtext">等本機閉環跑通後再升級</div>
+            <h2>多模態規劃</h2>
+            <div className="subtext">漫畫與 Video 模型設定已移到「聲線設定」頁底部。</div>
           </div>
         </div>
         <div className="list">
           <div className="list-item">
-            <strong>替換本地 TTS</strong>
-            <div className="subtext">現在已可建立 OpenAI 或 ElevenLabs 聲線設定，填入 API key 後即可使用。</div>
+            <strong>漫畫設定</strong>
+            <div className="subtext">請到「聲線設定」頁，在聲線區塊下方設定劇本、分鏡與圖像模型。</div>
           </div>
           <div className="list-item">
-            <strong>替換模擬 QC</strong>
-            <div className="subtext">若已設定 OpenAI 或 ElevenLabs API key，系統會優先使用真實 ASR 進行轉寫。</div>
+            <strong>Video 設定</strong>
+            <div className="subtext">請到「聲線設定」頁，在漫畫設定下方設定腳本、鏡頭、圖像、影片與字幕模型。</div>
           </div>
           <div className="list-item">
-            <strong>升級前端</strong>
-            <div className="subtext">切到正式 React build pipeline。</div>
+            <strong>目前選中專案</strong>
+            <div className="subtext">{project ? `${project.title} 可直接在聲線設定頁編輯這兩組配置。` : "請先選取專案後，再到聲線設定頁編輯。"}</div>
           </div>
           <div className="list-item">
             <strong>環境變數</strong>
@@ -1432,32 +1881,124 @@ function SettingsPage() {
   );
 }
 
-function ProjectCreateInline({ token, onCreated, showFlash }) {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
+function ConfirmModal({ state, onClose }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  if (!open) {
-    return <button className="button" onClick={() => setOpen(true)}>新增專案</button>;
+  useEffect(() => {
+    setBusy(false);
+    setError("");
+  }, [state?.id]);
+
+  if (!state) return null;
+
+  return (
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
+      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+        <div className="panel-head">
+          <div>
+            <h2>{state.title || "請確認"}</h2>
+            <div className="subtext">{state.message || "此動作可能影響現有資料。"}</div>
+          </div>
+          <span className="tag danger">不可復原</span>
+        </div>
+        {error ? <div className="flash error">{error}</div> : null}
+        <div className="toolbar" style={{ marginBottom: 0 }}>
+          <button className="button-secondary" disabled={busy} onClick={onClose}>取消</button>
+          <button
+            className="button-danger"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError("");
+              try {
+                await state.onConfirm?.();
+                onClose();
+              } catch (err) {
+                setError(err.message || "操作失敗");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "處理中..." : state.confirmLabel || "確認"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjectCreateModal({ open, token, onClose, onCreated, showFlash }) {
+  const [form, setForm] = useState({ title: "", author: "", language: "zh-CN", description: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({ title: "", author: "", language: "zh-CN", description: "" });
+    setBusy(false);
+    setError("");
+  }, [open]);
+
+  if (!open) return null;
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!form.title.trim()) {
+      setError("請先輸入專案標題。");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const payload = await apiFetch("/api/projects", { method: "POST", token, body: form });
+      await onCreated?.(payload.project);
+      showFlash("success", "新專案已建立。");
+    } catch (err) {
+      setError(err.message || "建立專案失敗");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <div className="toolbar">
-      <input className="input" style={{ width: 260 }} placeholder="專案標題" value={title} onChange={(event) => setTitle(event.target.value)} />
-      <button className="button" onClick={async () => {
-        if (!title.trim()) return;
-        await apiFetch("/api/projects", {
-          method: "POST",
-          token,
-          body: { title, author: "", language: "zh-CN", description: "" },
-        });
-        setTitle("");
-        setOpen(false);
-        onCreated();
-        showFlash("success", "專案已建立。");
-      }}>
-        儲存
-      </button>
-      <button className="button-secondary" onClick={() => setOpen(false)}>取消</button>
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
+      <div className="modal-card modal-card-form" onClick={(event) => event.stopPropagation()}>
+        <div className="panel-head">
+          <div>
+            <h2>建立專案</h2>
+            <div className="subtext">只填最少欄位即可開始。</div>
+          </div>
+        </div>
+        {error ? <div className="flash error">{error}</div> : null}
+        <form className="form-grid" onSubmit={submit}>
+          <div className="field">
+            <label>標題</label>
+            <input className="input" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
+          </div>
+          <div className="field">
+            <label>作者</label>
+            <input className="input" value={form.author} onChange={(event) => setForm({ ...form, author: event.target.value })} />
+          </div>
+          <div className="field">
+            <label>語言</label>
+            <select className="select" value={form.language} onChange={(event) => setForm({ ...form, language: event.target.value })}>
+              <option value="zh-CN">zh-CN</option>
+              <option value="en-US">en-US</option>
+              <option value="en-GB">en-GB</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>描述</label>
+            <textarea className="textarea small" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+          </div>
+          <div className="toolbar modal-actions">
+            <button type="button" className="button-secondary" disabled={busy} onClick={onClose}>取消</button>
+            <button className="button" disabled={busy}>{busy ? "建立中..." : "建立"}</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

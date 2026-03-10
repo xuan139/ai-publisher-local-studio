@@ -13,6 +13,8 @@ class ProjectCreate(BaseModel):
     author: str = ""
     language: str = "zh-CN"
     description: str = ""
+    comic_settings: dict = Field(default_factory=dict)
+    video_settings: dict = Field(default_factory=dict)
 
 
 class ProjectUpdate(BaseModel):
@@ -20,6 +22,8 @@ class ProjectUpdate(BaseModel):
     author: str | None = None
     language: str | None = None
     description: str | None = None
+    comic_settings: dict | None = None
+    video_settings: dict | None = None
     status: str | None = None
     default_voice_profile_id: int | None = None
 
