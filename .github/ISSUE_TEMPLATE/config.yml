@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Installation Manual
+    url: https://github.com/xuan139/ai-publisher-local-studio/blob/main/docs/local_install_manual.md
+    about: 先查看本機安裝手冊再回報問題
