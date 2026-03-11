@@ -32,6 +32,7 @@ class SegmentUpdate(BaseModel):
     tts_text: str
     status: str | None = None
     voice_profile_id: int | None = None
+    character_profile_id: int | None = None
 
 
 class VoiceProfileCreate(BaseModel):
@@ -52,6 +53,69 @@ class VoiceProfileUpdate(BaseModel):
     style: str | None = None
     instructions: str | None = None
     is_default: bool | None = None
+
+
+class CharacterProfileCreate(BaseModel):
+    name: str = Field(min_length=1)
+    voice_profile_id: int
+    display_title: str = ""
+    archetype: str = ""
+    summary: str = ""
+    personality: str = ""
+    backstory: str = ""
+    catchphrase: str = ""
+    default_mood: str = ""
+    preset_key: str = ""
+    speed_override: float | None = None
+    style_override: str = ""
+    instructions: str = ""
+    warmth: int = 50
+    intensity: int = 50
+    humor: int = 50
+    mystery: int = 50
+    bravery: int = 50
+    discipline: int = 50
+
+
+class CharacterProfileUpdate(BaseModel):
+    name: str | None = None
+    voice_profile_id: int | None = None
+    display_title: str | None = None
+    archetype: str | None = None
+    summary: str | None = None
+    personality: str | None = None
+    backstory: str | None = None
+    catchphrase: str | None = None
+    default_mood: str | None = None
+    preset_key: str | None = None
+    speed_override: float | None = None
+    style_override: str | None = None
+    instructions: str | None = None
+    warmth: int | None = None
+    intensity: int | None = None
+    humor: int | None = None
+    mystery: int | None = None
+    bravery: int | None = None
+    discipline: int | None = None
+
+
+class BatchCharacterAssignRequest(BaseModel):
+    character_profile_id: int | None = None
+    segment_ids: list[int] = Field(default_factory=list)
+
+
+class CharacterLookUpdate(BaseModel):
+    label: str = ""
+
+
+class CharacterLookImportRequest(BaseModel):
+    url: str = Field(min_length=1)
+    label: str = ""
+
+
+class ModelProfileCreate(BaseModel):
+    name: str = Field(min_length=1)
+    settings: dict = Field(default_factory=dict)
 
 
 class IssueCreate(BaseModel):

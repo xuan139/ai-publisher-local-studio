@@ -20,7 +20,7 @@ def utc_now() -> str:
 def ensure_directories() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-    for folder in ("imports", "audio", "renders", "exports"):
+    for folder in ("imports", "audio", "renders", "exports", "characters"):
         (GENERATED_DIR / folder).mkdir(parents=True, exist_ok=True)
 
 
@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS segments (
   source_text TEXT NOT NULL DEFAULT '',
   tts_text TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'ready',
+  character_profile_id INTEGER REFERENCES character_profiles(id) ON DELETE SET NULL,
   voice_profile_id INTEGER REFERENCES voice_profiles(id) ON DELETE SET NULL,
   latest_audio_take_id INTEGER REFERENCES audio_takes(id) ON DELETE SET NULL,
   asr_text TEXT NOT NULL DEFAULT '',
@@ -113,6 +114,61 @@ CREATE TABLE IF NOT EXISTS voice_profiles (
   style TEXT NOT NULL DEFAULT '',
   instructions TEXT NOT NULL DEFAULT '',
   is_default INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS character_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  voice_profile_id INTEGER NOT NULL REFERENCES voice_profiles(id) ON DELETE RESTRICT,
+  display_title TEXT NOT NULL DEFAULT '',
+  archetype TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  personality TEXT NOT NULL DEFAULT '',
+  backstory TEXT NOT NULL DEFAULT '',
+  catchphrase TEXT NOT NULL DEFAULT '',
+  default_mood TEXT NOT NULL DEFAULT '',
+  preset_key TEXT NOT NULL DEFAULT '',
+  speed_override REAL,
+  style_override TEXT NOT NULL DEFAULT '',
+  instructions TEXT NOT NULL DEFAULT '',
+  warmth INTEGER NOT NULL DEFAULT 50,
+  intensity INTEGER NOT NULL DEFAULT 50,
+  humor INTEGER NOT NULL DEFAULT 50,
+  mystery INTEGER NOT NULL DEFAULT 50,
+  bravery INTEGER NOT NULL DEFAULT 50,
+  discipline INTEGER NOT NULL DEFAULT 50,
+  avatar_path TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS character_looks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  character_profile_id INTEGER NOT NULL REFERENCES character_profiles(id) ON DELETE CASCADE,
+  slot_index INTEGER NOT NULL,
+  label TEXT NOT NULL DEFAULT '',
+  image_path TEXT NOT NULL DEFAULT '',
+  source_type TEXT NOT NULL DEFAULT 'local',
+  source_ref TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(character_profile_id, slot_index)
+);
+
+CREATE TABLE IF NOT EXISTS comic_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  settings TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS video_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  settings TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
 );
 
@@ -189,6 +245,7 @@ CREATE INDEX IF NOT EXISTS idx_chapters_project_order ON chapters(project_id, or
 CREATE INDEX IF NOT EXISTS idx_segments_chapter_order ON segments(chapter_id, order_index);
 CREATE INDEX IF NOT EXISTS idx_jobs_project_status ON generation_jobs(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_issues_segment_status ON review_issues(segment_id, status);
+CREATE INDEX IF NOT EXISTS idx_character_looks_slot ON character_looks(character_profile_id, slot_index);
 """
 
 
@@ -197,8 +254,11 @@ def init_db() -> None:
     with get_conn() as conn:
         conn.executescript(SCHEMA)
         ensure_project_setting_columns(conn)
+        ensure_segment_character_column(conn)
+        ensure_character_profile_columns(conn)
         seed_default_user(conn)
         seed_default_voice_profiles(conn)
+        seed_default_model_profiles(conn)
 
 
 def ensure_project_setting_columns(conn: sqlite3.Connection) -> None:
@@ -207,6 +267,36 @@ def ensure_project_setting_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE projects ADD COLUMN comic_settings TEXT NOT NULL DEFAULT '{}'")
     if "video_settings" not in columns:
         conn.execute("ALTER TABLE projects ADD COLUMN video_settings TEXT NOT NULL DEFAULT '{}'")
+
+
+def ensure_segment_character_column(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(segments)").fetchall()}
+    if "character_profile_id" not in columns:
+        conn.execute("ALTER TABLE segments ADD COLUMN character_profile_id INTEGER REFERENCES character_profiles(id) ON DELETE SET NULL")
+
+
+def ensure_character_profile_columns(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(character_profiles)").fetchall()}
+    additions = {
+        "display_title": "TEXT NOT NULL DEFAULT ''",
+        "archetype": "TEXT NOT NULL DEFAULT ''",
+        "summary": "TEXT NOT NULL DEFAULT ''",
+        "personality": "TEXT NOT NULL DEFAULT ''",
+        "backstory": "TEXT NOT NULL DEFAULT ''",
+        "catchphrase": "TEXT NOT NULL DEFAULT ''",
+        "default_mood": "TEXT NOT NULL DEFAULT ''",
+        "preset_key": "TEXT NOT NULL DEFAULT ''",
+        "warmth": "INTEGER NOT NULL DEFAULT 50",
+        "intensity": "INTEGER NOT NULL DEFAULT 50",
+        "humor": "INTEGER NOT NULL DEFAULT 50",
+        "mystery": "INTEGER NOT NULL DEFAULT 50",
+        "bravery": "INTEGER NOT NULL DEFAULT 50",
+        "discipline": "INTEGER NOT NULL DEFAULT 50",
+        "avatar_path": "TEXT NOT NULL DEFAULT ''",
+    }
+    for name, definition in additions.items():
+        if name not in columns:
+            conn.execute(f"ALTER TABLE character_profiles ADD COLUMN {name} {definition}")
 
 
 def seed_default_user(conn: sqlite3.Connection) -> None:
@@ -242,3 +332,35 @@ def seed_default_voice_profiles(conn: sqlite3.Connection) -> None:
         """,
         [(name, provider, model, voice_name, speed, style, instructions, is_default, now) for name, provider, model, voice_name, speed, style, instructions, is_default in voices],
     )
+
+
+def seed_default_model_profiles(conn: sqlite3.Connection) -> None:
+    now = utc_now()
+
+    comic_existing = conn.execute("SELECT COUNT(*) AS count FROM comic_profiles WHERE project_id IS NULL").fetchone()
+    if not comic_existing or comic_existing["count"] == 0:
+        comic_profiles = [
+            ("漫畫基準", '{"enabled": true, "script_model": "openai:gpt-4.1", "storyboard_model": "google:gemini-2.0-flash", "image_model": "openai:gpt-image-1", "style_preset": "cinematic-ink", "color_mode": "full-color", "aspect_ratio": "4:5", "character_consistency": "medium", "negative_prompt": ""}'),
+            ("黑白條漫", '{"enabled": true, "script_model": "openai:gpt-4.1", "storyboard_model": "google:gemini-2.0-flash", "image_model": "bfl:flux-pro", "style_preset": "noir", "color_mode": "black-white", "aspect_ratio": "3:4", "character_consistency": "high", "negative_prompt": ""}'),
+        ]
+        conn.executemany(
+            """
+            INSERT INTO comic_profiles (project_id, name, settings, created_at)
+            VALUES (NULL, ?, ?, ?)
+            """,
+            [(name, settings, now) for name, settings in comic_profiles],
+        )
+
+    video_existing = conn.execute("SELECT COUNT(*) AS count FROM video_profiles WHERE project_id IS NULL").fetchone()
+    if not video_existing or video_existing["count"] == 0:
+        video_profiles = [
+            ("短影音基準", '{"enabled": true, "script_model": "openai:gpt-4.1", "shot_model": "google:gemini-2.0-flash", "image_model": "openai:gpt-image-1", "video_model": "runway:gen-3", "subtitle_model": "openai:gpt-4.1-mini", "aspect_ratio": "9:16", "duration_seconds": 30, "motion_style": "social-short", "negative_prompt": ""}'),
+            ("電影感預告", '{"enabled": true, "script_model": "openai:gpt-4o", "shot_model": "google:gemini-2.5-pro", "image_model": "bfl:flux-pro", "video_model": "kling:v1.6", "subtitle_model": "openai:gpt-4o-mini", "aspect_ratio": "16:9", "duration_seconds": 45, "motion_style": "cinematic", "negative_prompt": ""}'),
+        ]
+        conn.executemany(
+            """
+            INSERT INTO video_profiles (project_id, name, settings, created_at)
+            VALUES (NULL, ?, ?, ?)
+            """,
+            [(name, settings, now) for name, settings in video_profiles],
+        )

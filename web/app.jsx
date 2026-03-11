@@ -5,12 +5,28 @@ const NAV_ITEMS = [
   { key: "projects", label: "專案" },
   { key: "text", label: "文本準備" },
   { key: "voices", label: "聲線設定" },
+  { key: "characters", label: "角色設定" },
   { key: "comic", label: "漫畫設定" },
   { key: "video", label: "Video 設定" },
   { key: "generate", label: "生成工作台" },
   { key: "review", label: "審核校對" },
   { key: "export", label: "匯出交付" },
   { key: "settings", label: "系統設定" },
+];
+const EXTERNAL_LLM_LINKS = [
+  { key: "codex", label: "Codex", meta: "OpenAI", url: "https://openai.com/codex/" },
+  { key: "gemini-cli", label: "Gemini CLI", meta: "Google", url: "https://google-gemini.github.io/gemini-cli/" },
+  { key: "claude-code", label: "Claude Code", meta: "Anthropic", url: "https://docs.anthropic.com/en/docs/claude-code/quickstart" },
+  { key: "chatgpt", label: "ChatGPT", meta: "OpenAI", url: "https://chatgpt.com/" },
+  { key: "gemini", label: "Gemini", meta: "Google", url: "https://gemini.google.com/" },
+  { key: "claude", label: "Claude", meta: "Anthropic", url: "https://claude.ai/" },
+  { key: "jimeng", label: "即夢 AI", meta: "字節", url: "https://jimeng.jianying.com/" },
+  { key: "midjourney", label: "Midjourney", meta: "Image", url: "https://www.midjourney.com/" },
+  { key: "runway", label: "Runway", meta: "Video", url: "https://runwayml.com/" },
+  { key: "pika", label: "Pika", meta: "Video", url: "https://pika.art/" },
+  { key: "deepseek", label: "DeepSeek", meta: "LLM", url: "https://www.deepseek.com/en/" },
+  { key: "grok", label: "Grok", meta: "xAI", url: "https://x.ai/grok/" },
+  { key: "perplexity", label: "Perplexity", meta: "Search", url: "https://www.perplexity.ai/" },
 ];
 const STATUS_LABELS = {
   draft: "草稿",
@@ -71,8 +87,80 @@ const VIDEO_SETTINGS_DEFAULT = {
   motion_style: "cinematic",
   negative_prompt: "",
 };
+const CHARACTER_PRESETS = {
+  narrator: {
+    label: "旁白",
+    display_title: "敘事者",
+    archetype: "Narrator",
+    summary: "穩定、清晰、可信任的敘述聲線。",
+    personality: "沉著、客觀、節奏穩定，擅長交代場景與情緒轉場。",
+    backstory: "作為整部作品的導引者，負責銜接章節與情緒。",
+    catchphrase: "讓我帶你進入故事。",
+    default_mood: "冷靜",
+    warmth: 60,
+    intensity: 35,
+    humor: 25,
+    mystery: 45,
+    bravery: 55,
+    discipline: 90,
+  },
+  hero: {
+    label: "主角",
+    display_title: "冒險主角",
+    archetype: "Hero",
+    summary: "有目標感、推動情節向前的核心人物。",
+    personality: "直接、熱血、有責任感，情緒起伏明顯。",
+    backstory: "承擔故事主要衝突與抉擇，是讀者情感投射中心。",
+    catchphrase: "我來處理。",
+    default_mood: "堅定",
+    warmth: 65,
+    intensity: 80,
+    humor: 40,
+    mystery: 30,
+    bravery: 90,
+    discipline: 70,
+  },
+  trickster: {
+    label: "機靈派",
+    display_title: "機智角色",
+    archetype: "Trickster",
+    summary: "反應快、節奏活、帶有玩笑與靈氣。",
+    personality: "聰明、調皮、善變，常打破僵局。",
+    backstory: "用幽默與機智為故事帶來彈性與驚喜。",
+    catchphrase: "這還不簡單？",
+    default_mood: "興奮",
+    warmth: 55,
+    intensity: 75,
+    humor: 90,
+    mystery: 55,
+    bravery: 70,
+    discipline: 35,
+  },
+  mentor: {
+    label: "導師",
+    display_title: "沉穩導師",
+    archetype: "Mentor",
+    summary: "穩重、有份量、帶有指引感的角色。",
+    personality: "冷靜、克制、智慧，善於給方向與評估局勢。",
+    backstory: "在關鍵時刻給主角提示與精神支撐。",
+    catchphrase: "先看清局勢，再出手。",
+    default_mood: "平靜",
+    warmth: 70,
+    intensity: 40,
+    humor: 20,
+    mystery: 65,
+    bravery: 75,
+    discipline: 95,
+  },
+};
 
 function providerDefaults(provider, catalog = {}) {
+  if (provider === "macos") {
+    return {
+      model: catalog.macos_tts_models?.[0] || "say",
+      voice_name: catalog.macos_tts_voices?.[0] || "Tingting",
+    };
+  }
   if (provider === "openai") {
     return {
       model: catalog.openai_tts_models?.[0] || OPENAI_MODEL_FALLBACKS[0],
@@ -93,6 +181,12 @@ function providerDefaults(provider, catalog = {}) {
 
 function mergeModelSettings(defaults, value) {
   return { ...defaults, ...(value || {}) };
+}
+
+function modelSettingsDefaults(mode, providerInfo) {
+  const fallback = mode === "comic" ? COMIC_SETTINGS_DEFAULT : VIDEO_SETTINGS_DEFAULT;
+  const dynamicDefaults = mode === "comic" ? providerInfo?.defaults?.comic_settings : providerInfo?.defaults?.video_settings;
+  return mergeModelSettings(fallback, dynamicDefaults);
 }
 
 async function apiFetch(path, { method = "GET", token, body, formData } = {}) {
@@ -158,6 +252,9 @@ function App() {
   const [selectedChapterId, setSelectedChapterId] = useState(null);
   const [segments, setSegments] = useState([]);
   const [voices, setVoices] = useState([]);
+  const [characters, setCharacters] = useState([]);
+  const [comicProfiles, setComicProfiles] = useState([]);
+  const [videoProfiles, setVideoProfiles] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [reviewQueue, setReviewQueue] = useState([]);
   const [renders, setRenders] = useState([]);
@@ -183,6 +280,9 @@ function App() {
     setSelectedChapterId(null);
     setSegments([]);
     setVoices([]);
+    setCharacters([]);
+    setComicProfiles([]);
+    setVideoProfiles([]);
     setJobs([]);
     setReviewQueue([]);
     setRenders([]);
@@ -216,9 +316,12 @@ function App() {
     if (!projectId || !token) return;
     setLoading(true);
     try {
-      const [projectPayload, voicePayload, jobsPayload, reviewPayload, exportPayload] = await Promise.all([
+      const [projectPayload, voicePayload, characterPayload, comicPayload, videoPayload, jobsPayload, reviewPayload, exportPayload] = await Promise.all([
         apiFetch(`/api/projects/${projectId}`, { token }),
         apiFetch(`/api/projects/${projectId}/voice-profiles`, { token }),
+        apiFetch(`/api/projects/${projectId}/character-profiles`, { token }),
+        apiFetch(`/api/projects/${projectId}/comic-profiles`, { token }),
+        apiFetch(`/api/projects/${projectId}/video-profiles`, { token }),
         apiFetch(`/api/projects/${projectId}/jobs`, { token }),
         apiFetch(`/api/projects/${projectId}/review-queue`, { token }),
         apiFetch(`/api/projects/${projectId}/exports`, { token }),
@@ -226,6 +329,9 @@ function App() {
       const project = projectPayload.project;
       setProjectDetail(projectPayload);
       setVoices(voicePayload.items || []);
+      setCharacters(characterPayload.items || []);
+      setComicProfiles(comicPayload.items || []);
+      setVideoProfiles(videoPayload.items || []);
       setJobs(jobsPayload.items || []);
       setReviewQueue(reviewPayload.items || []);
       setExportsList(exportPayload.items || []);
@@ -354,6 +460,27 @@ function App() {
     setToken("");
   }
 
+  async function handleRouteChange(nextRoute) {
+    if (nextRoute === "projects") {
+      setRoute("projects");
+      return;
+    }
+    const fallbackProjectId = selectedProjectId || projects[0]?.id || null;
+    try {
+      if (fallbackProjectId) {
+        if (!selectedProject || selectedProject.id !== fallbackProjectId) {
+          await loadProject(fallbackProjectId, selectedChapterId);
+        }
+        if (fallbackProjectId !== selectedProjectId) {
+          setSelectedProjectId(fallbackProjectId);
+        }
+      }
+    } catch (error) {
+      showFlash("error", error.message || "頁面切換時載入專案失敗。");
+    }
+    setRoute(nextRoute);
+  }
+
   if (!token || !user) {
     return <LoginPage onLogin={handleLogin} flash={flash} />;
   }
@@ -362,7 +489,7 @@ function App() {
     <div className="app-shell">
       <Sidebar
         route={route}
-        onRouteChange={setRoute}
+        onRouteChange={handleRouteChange}
         projects={projects}
         selectedProjectId={selectedProjectId}
         onSelectProject={(id) => setSelectedProjectId(id)}
@@ -420,6 +547,9 @@ function App() {
             }}
             segments={segments}
             voices={voices}
+            characters={characters}
+            comicProfiles={comicProfiles}
+            videoProfiles={videoProfiles}
             jobs={jobs}
             reviewQueue={reviewQueue}
             renders={renders}
@@ -550,6 +680,19 @@ function LoginPage({ onLogin, flash }) {
 }
 
 function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectProject, user, onLogout }) {
+  const [openSections, setOpenSections] = useState({
+    project: true,
+    nav: false,
+    llm: false,
+  });
+
+  const projectItem = NAV_ITEMS.find((item) => item.key === "projects");
+  const secondaryNavItems = NAV_ITEMS.filter((item) => item.key !== "projects");
+
+  function toggleSection(sectionKey) {
+    setOpenSections((current) => ({ ...current, [sectionKey]: !current[sectionKey] }));
+  }
+
   return (
     <aside className="sidebar">
       <div className="brand-box">
@@ -558,36 +701,96 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
         <div className="brand-title">AI Publisher</div>
       </div>
 
-      <div className="sidebar-section">
-        <div className="sidebar-label">導覽</div>
-        {NAV_ITEMS.map((item) => (
-          <button key={item.key} className={`nav-button ${route === item.key ? "active" : ""}`} onClick={() => onRouteChange(item.key)}>
-            <span>{item.label}</span>
-          </button>
-        ))}
+      <div className={`sidebar-section ${openSections.project ? "open" : ""}`}>
+        <button className="sidebar-toggle" onClick={() => toggleSection("project")}>
+          <span className="sidebar-toggle-main">
+            <span className="sidebar-label">專案工作台</span>
+            <span className="sidebar-hint">{selectedProjectId ? "已選專案" : "未選專案"}</span>
+          </span>
+          <span className="sidebar-toggle-meta">
+            <span className="sidebar-meta-text">{projects.length} 項</span>
+            <span className={`sidebar-chevron ${openSections.project ? "open" : ""}`}>▾</span>
+          </span>
+        </button>
+        {openSections.project ? (
+          <div className="sidebar-section-body">
+            {projectItem ? (
+              <button className={`nav-button ${route === projectItem.key ? "active" : ""}`} onClick={() => onRouteChange(projectItem.key)}>
+                <span>{projectItem.label}</span>
+              </button>
+            ) : null}
+            <div className="project-pick">
+              {projects.length === 0 ? <div className="muted">目前還沒有專案</div> : null}
+              {projects.slice(0, 6).map((project) => (
+                <button
+                  key={project.id}
+                  className={`project-button ${project.id === selectedProjectId ? "active" : ""}`}
+                  onClick={() => {
+                    onSelectProject(project.id);
+                    onRouteChange("projects");
+                  }}
+                >
+                  <div className="title-row">
+                    <strong>{project.title}</strong>
+                    <span className="count-pill">{project.metrics?.review_required_count || 0}</span>
+                  </div>
+                  <div className="subtext">{project.author || "未填作者"} · {project.language}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
-      <div className="sidebar-section">
-        <div className="sidebar-label">專案</div>
-        <div className="project-pick">
-          {projects.length === 0 ? <div className="muted">目前還沒有專案</div> : null}
-          {projects.slice(0, 6).map((project) => (
-            <button
-              key={project.id}
-              className={`project-button ${project.id === selectedProjectId ? "active" : ""}`}
-              onClick={() => {
-                onSelectProject(project.id);
-                onRouteChange("projects");
-              }}
-            >
-              <div className="title-row">
-                <strong>{project.title}</strong>
-                <span className="count-pill">{project.metrics?.review_required_count || 0}</span>
-              </div>
-              <div className="subtext">{project.author || "未填作者"} · {project.language}</div>
-            </button>
-          ))}
-        </div>
+      <div className={`sidebar-section ${openSections.nav ? "open" : ""}`}>
+        <button className="sidebar-toggle" onClick={() => toggleSection("nav")}>
+          <span className="sidebar-toggle-main">
+            <span className="sidebar-label">導覽</span>
+            <span className="sidebar-hint">系統頁面</span>
+          </span>
+          <span className="sidebar-toggle-meta">
+            <span className="sidebar-meta-text">{secondaryNavItems.length} 項</span>
+            <span className={`sidebar-chevron ${openSections.nav ? "open" : ""}`}>▾</span>
+          </span>
+        </button>
+        {openSections.nav ? (
+          <div className="sidebar-section-body">
+            {secondaryNavItems.map((item) => (
+              <button key={item.key} className={`nav-button ${route === item.key ? "active" : ""}`} onClick={() => onRouteChange(item.key)}>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className={`sidebar-section ${openSections.llm ? "open" : ""}`}>
+        <button className="sidebar-toggle" onClick={() => toggleSection("llm")}>
+          <span className="sidebar-toggle-main">
+            <span className="sidebar-label">外部 LLM</span>
+            <span className="sidebar-hint">官方入口</span>
+          </span>
+          <span className="sidebar-toggle-meta">
+            <span className="sidebar-meta-text">{EXTERNAL_LLM_LINKS.length} 項</span>
+            <span className={`sidebar-chevron ${openSections.llm ? "open" : ""}`}>▾</span>
+          </span>
+        </button>
+        {openSections.llm ? (
+          <div className="sidebar-section-body">
+            {EXTERNAL_LLM_LINKS.map((item) => (
+              <a
+                key={item.key}
+                className="nav-button nav-link"
+                href={item.url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span>{item.label}</span>
+                <span className="count-pill">{item.meta}</span>
+              </a>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="sidebar-foot">
@@ -627,6 +830,9 @@ function PageContent(props) {
     setSelectedChapterId,
     segments,
     voices,
+    characters,
+    comicProfiles,
+    videoProfiles,
     jobs,
     reviewQueue,
     renders,
@@ -643,20 +849,20 @@ function PageContent(props) {
   if (route === "projects") {
     return <ProjectsPage projects={projects} selectedProject={project} token={token} refreshProject={refreshProject} deleteProject={deleteProject} onSelectProject={onSelectProject} onOpenChapter={onOpenChapter} onOpenProjectText={onOpenProjectText} requestConfirm={requestConfirm} showFlash={showFlash} />;
   }
-  if (!project) {
-    return <div className="empty-state">請先在專案列表頁建立專案。</div>;
-  }
   if (route === "text") {
-    return <TextPrepPage token={token} project={project} selectedChapter={selectedChapter} selectedChapterId={selectedChapterId} setSelectedChapterId={setSelectedChapterId} segments={segments} voices={voices} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
+    return <TextPrepPage token={token} project={project} selectedChapter={selectedChapter} selectedChapterId={selectedChapterId} setSelectedChapterId={setSelectedChapterId} segments={segments} voices={voices} characters={characters} jobs={jobs} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
   }
   if (route === "voices") {
     return <VoiceSetupPage token={token} project={project} voices={voices} refreshProject={refreshProject} showFlash={showFlash} />;
   }
+  if (route === "characters") {
+    return <CharacterSetupPage token={token} project={project} voices={voices} characters={characters} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
+  }
   if (route === "comic") {
-    return <ComicSettingsPage token={token} project={project} refreshProject={refreshProject} showFlash={showFlash} />;
+    return <ComicSettingsPage token={token} project={project} comicProfiles={comicProfiles} refreshProject={refreshProject} showFlash={showFlash} />;
   }
   if (route === "video") {
-    return <VideoSettingsPage token={token} project={project} refreshProject={refreshProject} showFlash={showFlash} />;
+    return <VideoSettingsPage token={token} project={project} videoProfiles={videoProfiles} refreshProject={refreshProject} showFlash={showFlash} />;
   }
   if (route === "generate") {
     return <GeneratePage token={token} project={project} selectedChapter={selectedChapter} segments={segments} jobs={jobs} refreshProject={refreshProject} showFlash={showFlash} />;
@@ -821,15 +1027,20 @@ function ProjectsPage({ projects = [], selectedProject, token, refreshProject, d
   );
 }
 
-function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setSelectedChapterId, segments, voices, refreshProject, requestConfirm, showFlash }) {
+function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setSelectedChapterId, segments, voices, characters, jobs, refreshProject, requestConfirm, showFlash }) {
   const [activeSegmentId, setActiveSegmentId] = useState(null);
+  const [segmentBusyAction, setSegmentBusyAction] = useState("");
   const activeSegment = segments.find((segment) => segment.id === activeSegmentId) || segments[0] || null;
   const [draftText, setDraftText] = useState("");
   const [voiceId, setVoiceId] = useState("");
+  const [characterId, setCharacterId] = useState("");
+  const [selectedSegmentIds, setSelectedSegmentIds] = useState([]);
+  const [batchCharacterId, setBatchCharacterId] = useState("");
   const [segmentPage, setSegmentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   const totalSegmentPages = Math.max(1, Math.ceil(segments.length / pageSize));
+  const currentSegmentJob = activeSegment ? jobs.find((job) => job.segment_id === activeSegment.id) || null : null;
   const pagedSegments = useMemo(() => {
     const start = (segmentPage - 1) * pageSize;
     return segments.slice(start, start + pageSize);
@@ -840,6 +1051,7 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
       setActiveSegmentId(activeSegment.id);
       setDraftText(activeSegment.tts_text || "");
       setVoiceId(activeSegment.voice_profile_id || "");
+      setCharacterId(activeSegment.character_profile_id || "");
     }
   }, [selectedChapterId, segments.length]);
 
@@ -847,11 +1059,14 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
     if (activeSegment) {
       setDraftText(activeSegment.tts_text || "");
       setVoiceId(activeSegment.voice_profile_id || "");
+      setCharacterId(activeSegment.character_profile_id || "");
     }
   }, [activeSegment]);
 
   useEffect(() => {
     setSegmentPage(1);
+    setSelectedSegmentIds([]);
+    setBatchCharacterId("");
   }, [selectedChapterId]);
 
   useEffect(() => {
@@ -870,19 +1085,105 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
     }
   }, [activeSegment?.id, pageSize, segmentPage, segments]);
 
-  async function saveSegment() {
+  function goToSegmentPage(nextPage) {
+    const targetPage = Math.max(1, Math.min(totalSegmentPages, nextPage));
+    const start = (targetPage - 1) * pageSize;
+    const nextSegment = segments[start] || null;
+    setSegmentPage(targetPage);
+    if (nextSegment) {
+      setActiveSegmentId(nextSegment.id);
+    }
+  }
+
+  function toggleSegmentSelection(segmentId) {
+    setSelectedSegmentIds((current) => (
+      current.includes(segmentId)
+        ? current.filter((item) => item !== segmentId)
+        : [...current, segmentId]
+    ));
+  }
+
+  function toggleCurrentPageSelection() {
+    const pageIds = pagedSegments.map((segment) => segment.id);
+    const allSelected = pageIds.every((id) => selectedSegmentIds.includes(id));
+    if (allSelected) {
+      setSelectedSegmentIds((current) => current.filter((id) => !pageIds.includes(id)));
+    } else {
+      setSelectedSegmentIds((current) => Array.from(new Set([...current, ...pageIds])));
+    }
+  }
+
+  async function applyBatchToSelection() {
+    if (!selectedSegmentIds.length) {
+      showFlash("error", "請先勾選要批量指派的段落。");
+      return;
+    }
+    await apiFetch("/api/segments/batch-assign-character", {
+      method: "POST",
+      token,
+      body: {
+        segment_ids: selectedSegmentIds,
+        character_profile_id: batchCharacterId || null,
+      },
+    });
+    await refreshProject({ chapterId: selectedChapterId });
+    showFlash("success", "已更新所選段落的角色指派。");
+  }
+
+  async function applyBatchToChapter() {
+    if (!selectedChapterId) return;
+    await apiFetch(`/api/chapters/${selectedChapterId}/assign-character`, {
+      method: "POST",
+      token,
+      body: {
+        character_profile_id: batchCharacterId || null,
+      },
+    });
+    await refreshProject({ chapterId: selectedChapterId });
+    showFlash("success", "已更新整章段落的角色指派。");
+  }
+
+  async function persistActiveSegment() {
     if (!activeSegment) return;
-    await apiFetch(`/api/segments/${activeSegment.id}`, {
+    return apiFetch(`/api/segments/${activeSegment.id}`, {
       method: "PATCH",
       token,
       body: {
         tts_text: draftText,
         voice_profile_id: voiceId || null,
+        character_profile_id: characterId || null,
         status: "ready",
       },
     });
-    await refreshProject();
-    showFlash("success", "段落已儲存。");
+  }
+
+  async function saveSegment() {
+    if (!activeSegment) return;
+    setSegmentBusyAction("save");
+    try {
+      await persistActiveSegment();
+      await refreshProject({ chapterId: selectedChapterId });
+      showFlash("success", "段落已儲存。");
+    } catch (error) {
+      showFlash("error", error.message || "段落儲存失敗。");
+    } finally {
+      setSegmentBusyAction("");
+    }
+  }
+
+  async function generateCurrentSegment() {
+    if (!activeSegment) return;
+    setSegmentBusyAction("generate");
+    try {
+      await persistActiveSegment();
+      await apiFetch(`/api/segments/${activeSegment.id}/generate`, { method: "POST", token });
+      await refreshProject({ chapterId: selectedChapterId });
+      showFlash("success", "已為目前段落建立生成任務。");
+    } catch (error) {
+      showFlash("error", error.message || "段落生成失敗。");
+    } finally {
+      setSegmentBusyAction("");
+    }
   }
 
   function requestDeleteSegment(segment) {
@@ -902,6 +1203,10 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
         showFlash("success", `段落 ${segment.order_index} 已刪除。`);
       },
     });
+  }
+
+  if (!project) {
+    return <div className="empty-state">請先在專案頁選取一個專案，再進入文本準備。</div>;
   }
 
   return (
@@ -945,22 +1250,43 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
                       <option key={size} value={size}>每頁 {size} 段</option>
                     ))}
                   </select>
-                  <button className="button-secondary" disabled={segmentPage <= 1} onClick={() => setSegmentPage((value) => Math.max(1, value - 1))}>
+                  <button className="button-secondary" disabled={segmentPage <= 1} onClick={() => goToSegmentPage(segmentPage - 1)}>
                     上一頁
                   </button>
-                  <button className="button-secondary" disabled={segmentPage >= totalSegmentPages} onClick={() => setSegmentPage((value) => Math.min(totalSegmentPages, value + 1))}>
+                  <button className="button-secondary" disabled={segmentPage >= totalSegmentPages} onClick={() => goToSegmentPage(segmentPage + 1)}>
                     下一頁
                   </button>
                 </div>
               </div>
-              {pagedSegments.map((segment) => (
-                <button key={segment.id} className={`project-button ${activeSegment?.id === segment.id ? "active" : ""}`} onClick={() => setActiveSegmentId(segment.id)}>
-                  <div className="title-row">
-                    <strong>段落 {segment.order_index}</strong>
-                    <span className="tag">{statusLabel(segment.status)}</span>
-                  </div>
-                  <div className="subtext">{segment.source_text.slice(0, 56)}...</div>
+              <div className="toolbar">
+                <select className="select" value={batchCharacterId} onChange={(event) => setBatchCharacterId(event.target.value)}>
+                  <option value="">清空角色 / 使用預設</option>
+                  {characters.map((character) => (
+                    <option key={character.id} value={character.id}>{character.name}</option>
+                  ))}
+                </select>
+                <button className="button-secondary" onClick={toggleCurrentPageSelection}>
+                  {pagedSegments.every((segment) => selectedSegmentIds.includes(segment.id)) ? "取消本頁全選" : "全選本頁"}
                 </button>
+                <button className="button-secondary" onClick={applyBatchToSelection}>套用到勾選段落</button>
+                <button className="button-secondary" onClick={applyBatchToChapter}>套用到整章</button>
+              </div>
+              {pagedSegments.map((segment) => (
+                <div key={segment.id} className={`list-item ${activeSegment?.id === segment.id ? "active" : ""}`}>
+                  <div className="title-row">
+                    <label className="subtext" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                      <input type="checkbox" checked={selectedSegmentIds.includes(segment.id)} onChange={() => toggleSegmentSelection(segment.id)} />
+                      <strong>段落 {segment.order_index}</strong>
+                    </label>
+                    <div className="pill-row">
+                      {segment.character_profile?.name ? <span className="tag brand">{segment.character_profile.name}</span> : null}
+                      <span className="tag">{statusLabel(segment.status)}</span>
+                    </div>
+                  </div>
+                  <button className={`project-button ${activeSegment?.id === segment.id ? "active" : ""}`} onClick={() => setActiveSegmentId(segment.id)}>
+                    <div className="subtext">{segment.source_text.slice(0, 56)}...</div>
+                  </button>
+                </div>
               ))}
               {!pagedSegments.length ? <div className="empty-state">目前章節沒有段落。</div> : null}
             </div>
@@ -981,26 +1307,70 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
                     <textarea className="textarea" value={draftText} onChange={(event) => setDraftText(event.target.value)} />
                   </div>
                   <div className="field">
+                    <label>說話角色</label>
+                    <select className="select" value={characterId} onChange={(event) => setCharacterId(event.target.value)}>
+                      <option value="">不指定角色</option>
+                      {characters.map((character) => (
+                        <option key={character.id} value={character.id}>{character.name} · {character.voice_profile_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
                     <label>覆寫聲線</label>
                     <select className="select" value={voiceId} onChange={(event) => setVoiceId(event.target.value)}>
-                      <option value="">使用專案預設</option>
+                      <option value="">依角色 / 專案預設</option>
                       {voices.map((voice) => (
                         <option key={voice.id} value={voice.id}>{voice.name} · {voice.voice_name}</option>
                       ))}
                     </select>
                   </div>
                   <div className="toolbar">
-                    <button className="button-flat" onClick={saveSegment}>儲存</button>
-                    <button className="button-flat" onClick={async () => {
-                      await apiFetch(`/api/segments/${activeSegment.id}/generate`, { method: "POST", token });
-                      await refreshProject();
-                      showFlash("success", "已為目前段落建立生成任務。");
-                    }}>
-                      生成
+                    <button className="button-flat" disabled={segmentBusyAction !== ""} onClick={saveSegment}>
+                      {segmentBusyAction === "save" ? "儲存中..." : "儲存"}
                     </button>
-                    <button className="button-flat-danger" onClick={() => requestDeleteSegment(activeSegment)}>
+                    <button className="button-flat" disabled={segmentBusyAction !== ""} onClick={generateCurrentSegment}>
+                      {segmentBusyAction === "generate" ? "生成中..." : "生成"}
+                    </button>
+                    <button className="button-flat-danger" disabled={segmentBusyAction !== ""} onClick={() => requestDeleteSegment(activeSegment)}>
                       刪除
                     </button>
+                  </div>
+                  <div className="editor-card">
+                    <div className="title-row">
+                      <strong>目前生成狀態</strong>
+                      <span className={`tag ${currentSegmentJob?.status === "failed" ? "danger" : currentSegmentJob?.status === "succeeded" ? "success" : currentSegmentJob?.status === "running" ? "brand" : ""}`}>
+                        {statusLabel(currentSegmentJob?.status || activeSegment.status)}
+                      </span>
+                    </div>
+                    <div className="subtext" style={{ marginTop: 8 }}>
+                      {currentSegmentJob
+                        ? `最近任務更新：${relativeTime(currentSegmentJob.updated_at)}`
+                        : "這裡會顯示目前段落最新一次生成任務。"}
+                    </div>
+                    {currentSegmentJob?.request_id ? (
+                      <div className="code" style={{ marginTop: 8 }}>
+                        Request ID: {currentSegmentJob.request_id}
+                      </div>
+                    ) : null}
+                    {currentSegmentJob?.error_message ? (
+                      <div className="subtext" style={{ marginTop: 8, color: "var(--danger)" }}>
+                        {currentSegmentJob.error_message}
+                      </div>
+                    ) : null}
+                    {activeSegment.latest_take?.file_url ? (
+                      <>
+                        <div className="subtext" style={{ marginTop: 10 }}>
+                          已生成音訊版本 v{activeSegment.latest_take.version_no}
+                        </div>
+                        <audio className="review-audio" controls src={activeSegment.latest_take.file_url}></audio>
+                      </>
+                    ) : (
+                      <div className="subtext" style={{ marginTop: 10 }}>
+                        {currentSegmentJob
+                          ? "任務已建立，音訊生成後會直接出現在這裡。"
+                          : "尚未生成音訊。點「生成」後，這裡會出現任務狀態與播放器。"}
+                      </div>
+                    )}
                   </div>
                   <details className="tips-card">
                     <summary>準備提示</summary>
@@ -1171,10 +1541,9 @@ function VoiceSetupPage({ token, project, voices, refreshProject, showFlash }) {
               <label>{form.provider === "elevenlabs" ? "Voice ID" : "聲線名稱"}</label>
               {form.provider === "macos" ? (
                 <select className="select" value={form.voice_name} onChange={(event) => setForm({ ...form, voice_name: event.target.value })}>
-                  <option value="Tingting">Tingting</option>
-                  <option value="Eddy (Chinese (China mainland))">Eddy CN</option>
-                  <option value="Samantha">Samantha</option>
-                  <option value="Daniel">Daniel</option>
+                  {(providerInfo?.catalog?.macos_tts_voices || ["Tingting", "Eddy (Chinese (China mainland))", "Samantha", "Daniel"]).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
                 </select>
               ) : form.provider === "openai" ? (
                 <select className="select" value={form.voice_name} onChange={(event) => setForm({ ...form, voice_name: event.target.value })}>
@@ -1218,10 +1587,644 @@ function VoiceSetupPage({ token, project, voices, refreshProject, showFlash }) {
   );
 }
 
-function ProjectModelSettingsPage({ token, project, refreshProject, showFlash, mode }) {
+function CharacterSetupPage({ token, project, voices, characters, refreshProject, requestConfirm, showFlash }) {
+  const [form, setForm] = useState({
+    name: "",
+    voice_profile_id: "",
+    display_title: "",
+    archetype: "",
+    summary: "",
+    personality: "",
+    backstory: "",
+    catchphrase: "",
+    default_mood: "",
+    preset_key: "",
+    speed_override: "",
+    style_override: "",
+    instructions: "",
+    warmth: 50,
+    intensity: 50,
+    humor: 50,
+    mystery: 50,
+    bravery: 50,
+    discipline: 50,
+  });
+  const [editingId, setEditingId] = useState(null);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formSuccess, setFormSuccess] = useState("");
+  const [lookDrafts, setLookDrafts] = useState({});
+  const [lookBusyKey, setLookBusyKey] = useState("");
+  const [batchFiles, setBatchFiles] = useState([]);
+  const [batchDriveUrls, setBatchDriveUrls] = useState("");
+  const [batchInputVersion, setBatchInputVersion] = useState(0);
+
+  const currentCharacter = characters.find((character) => character.id === editingId) || null;
+  const lookSlots = currentCharacter?.looks || Array.from({ length: 9 }, (_, index) => ({
+    id: null,
+    slot_index: index + 1,
+    label: `圖片 ${index + 1}`,
+    image_url: "",
+    source_type: "",
+    source_ref: "",
+  }));
+
+  useEffect(() => {
+    if (!form.voice_profile_id && voices.length) {
+      setForm((current) => ({ ...current, voice_profile_id: String(voices[0].id) }));
+    }
+  }, [voices, form.voice_profile_id]);
+
+  useEffect(() => {
+    const nextDrafts = {};
+    for (const look of lookSlots) {
+      nextDrafts[look.slot_index] = {
+        label: look.label || `圖片 ${look.slot_index}`,
+        driveUrl: "",
+        file: null,
+      };
+    }
+    setLookDrafts(nextDrafts);
+  }, [editingId, characters]);
+
+  function applyPreset(key) {
+    const preset = CHARACTER_PRESETS[key];
+    if (!preset) return;
+    setForm((current) => ({
+      ...current,
+      preset_key: key,
+      display_title: preset.display_title,
+      archetype: preset.archetype,
+      summary: preset.summary,
+      personality: preset.personality,
+      backstory: preset.backstory,
+      catchphrase: preset.catchphrase,
+      default_mood: preset.default_mood,
+      warmth: preset.warmth,
+      intensity: preset.intensity,
+      humor: preset.humor,
+      mystery: preset.mystery,
+      bravery: preset.bravery,
+      discipline: preset.discipline,
+    }));
+  }
+
+  function loadCharacter(character) {
+    setFormError("");
+    setFormSuccess("");
+    setEditingId(character.id);
+    setForm({
+      name: character.name,
+      voice_profile_id: String(character.voice_profile_id),
+      display_title: character.display_title || "",
+      archetype: character.archetype || "",
+      summary: character.summary || "",
+      personality: character.personality || "",
+      backstory: character.backstory || "",
+      catchphrase: character.catchphrase || "",
+      default_mood: character.default_mood || "",
+      preset_key: character.preset_key || "",
+      speed_override: character.speed_override ?? "",
+      style_override: character.style_override || "",
+      instructions: character.instructions || "",
+      warmth: character.warmth ?? 50,
+      intensity: character.intensity ?? 50,
+      humor: character.humor ?? 50,
+      mystery: character.mystery ?? 50,
+      bravery: character.bravery ?? 50,
+      discipline: character.discipline ?? 50,
+    });
+    setAvatarFile(null);
+  }
+
+  function resetForm() {
+    setFormError("");
+    setFormSuccess("");
+    setEditingId(null);
+    setForm({
+      name: "",
+      voice_profile_id: voices[0] ? String(voices[0].id) : "",
+      display_title: "",
+      archetype: "",
+      summary: "",
+      personality: "",
+      backstory: "",
+      catchphrase: "",
+      default_mood: "",
+      preset_key: "",
+      speed_override: "",
+      style_override: "",
+      instructions: "",
+      warmth: 50,
+      intensity: 50,
+      humor: 50,
+      mystery: 50,
+      bravery: 50,
+      discipline: 50,
+    });
+    setAvatarFile(null);
+  }
+
+  async function submitCharacter(event) {
+    event.preventDefault();
+    setFormError("");
+    setFormSuccess("");
+    if (!form.name.trim()) {
+      setFormError("請先輸入角色名稱。");
+      return;
+    }
+    if (!form.voice_profile_id) {
+      setFormError("請先選擇聲線。");
+      return;
+    }
+    const body = {
+      name: form.name.trim(),
+      voice_profile_id: Number(form.voice_profile_id),
+      display_title: form.display_title,
+      archetype: form.archetype,
+      summary: form.summary,
+      personality: form.personality,
+      backstory: form.backstory,
+      catchphrase: form.catchphrase,
+      default_mood: form.default_mood,
+      preset_key: form.preset_key,
+      speed_override: form.speed_override === "" ? null : Number(form.speed_override),
+      style_override: form.style_override,
+      instructions: form.instructions,
+      warmth: Number(form.warmth),
+      intensity: Number(form.intensity),
+      humor: Number(form.humor),
+      mystery: Number(form.mystery),
+      bravery: Number(form.bravery),
+      discipline: Number(form.discipline),
+    };
+    setSaving(true);
+    try {
+      let characterProfile = null;
+      if (editingId) {
+        characterProfile = (await apiFetch(`/api/character-profiles/${editingId}`, {
+          method: "PATCH",
+          token,
+          body,
+        })).character_profile;
+        showFlash("success", "角色設定已更新。");
+      } else {
+        characterProfile = (await apiFetch(`/api/projects/${project.id}/character-profiles`, {
+          method: "POST",
+          token,
+          body,
+        })).character_profile;
+        showFlash("success", "角色設定已建立。");
+      }
+      if (avatarFile && characterProfile?.id) {
+        const formData = new FormData();
+        formData.append("file", avatarFile);
+        await apiFetch(`/api/character-profiles/${characterProfile.id}/avatar`, {
+          method: "POST",
+          token,
+          formData,
+        });
+      }
+      resetForm();
+      setFormSuccess(editingId ? "角色設定已更新。" : "角色設定已建立。");
+      await refreshProject();
+    } catch (error) {
+      setFormError(error.message || "角色儲存失敗。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function requestDeleteCharacter(character) {
+    requestConfirm({
+      title: "刪除角色",
+      message: `將刪除角色「${character.name}」，並清空已指派到該角色的段落。此動作無法復原。`,
+      confirmLabel: "刪除角色",
+      onConfirm: async () => {
+        await apiFetch(`/api/character-profiles/${character.id}`, { method: "DELETE", token });
+        if (editingId === character.id) {
+          resetForm();
+        }
+        await refreshProject();
+        showFlash("success", `角色「${character.name}」已刪除。`);
+      },
+    });
+  }
+
+  function updateLookDraft(slotIndex, patch) {
+    setLookDrafts((current) => ({
+      ...current,
+      [slotIndex]: {
+        ...(current[slotIndex] || { label: `圖片 ${slotIndex}`, driveUrl: "", file: null }),
+        ...patch,
+      },
+    }));
+  }
+
+  function fileStem(name) {
+    return String(name || "").replace(/\.[^/.]+$/, "") || "";
+  }
+
+  async function saveLookLabel(slotIndex) {
+    if (!editingId) return;
+    const draft = lookDrafts[slotIndex] || { label: `圖片 ${slotIndex}` };
+    setLookBusyKey(`label:${slotIndex}`);
+    try {
+      await apiFetch(`/api/character-profiles/${editingId}/looks/${slotIndex}`, {
+        method: "PATCH",
+        token,
+        body: { label: draft.label },
+      });
+      await refreshProject();
+      showFlash("success", `圖片 ${slotIndex} 名稱已更新。`);
+    } catch (error) {
+      showFlash("error", error.message || "圖片名稱更新失敗。");
+    } finally {
+      setLookBusyKey("");
+    }
+  }
+
+  async function uploadLookFile(slotIndex) {
+    if (!editingId) return;
+    const draft = lookDrafts[slotIndex];
+    if (!draft?.file) {
+      showFlash("error", `請先為圖片 ${slotIndex} 選擇本地檔案。`);
+      return;
+    }
+    setLookBusyKey(`upload:${slotIndex}`);
+    try {
+      const formData = new FormData();
+      formData.append("file", draft.file);
+      formData.append("label", draft.label || `圖片 ${slotIndex}`);
+      await apiFetch(`/api/character-profiles/${editingId}/looks/${slotIndex}/upload`, {
+        method: "POST",
+        token,
+        formData,
+      });
+      updateLookDraft(slotIndex, { file: null });
+      await refreshProject();
+      showFlash("success", `圖片 ${slotIndex} 已從本地上傳。`);
+    } catch (error) {
+      showFlash("error", error.message || "本地圖片上傳失敗。");
+    } finally {
+      setLookBusyKey("");
+    }
+  }
+
+  async function importLookFromDrive(slotIndex) {
+    if (!editingId) return;
+    const draft = lookDrafts[slotIndex];
+    if (!draft?.driveUrl?.trim()) {
+      showFlash("error", `請先貼上圖片 ${slotIndex} 的 Drive 分享連結。`);
+      return;
+    }
+    setLookBusyKey(`drive:${slotIndex}`);
+    try {
+      await apiFetch(`/api/character-profiles/${editingId}/looks/${slotIndex}/drive-import`, {
+        method: "POST",
+        token,
+        body: {
+          url: draft.driveUrl.trim(),
+          label: draft.label || `圖片 ${slotIndex}`,
+        },
+      });
+      updateLookDraft(slotIndex, { driveUrl: "" });
+      await refreshProject();
+      showFlash("success", `圖片 ${slotIndex} 已從 Drive / 圖片連結導入。`);
+    } catch (error) {
+      showFlash("error", error.message || "Drive 圖片導入失敗。");
+    } finally {
+      setLookBusyKey("");
+    }
+  }
+
+  function clearLook(slotIndex) {
+    if (!editingId) return;
+    requestConfirm({
+      title: "清空圖片",
+      message: `將清空圖片 ${slotIndex} 的檔案與來源資料。此動作無法復原。`,
+      confirmLabel: "清空圖片",
+      onConfirm: async () => {
+        await apiFetch(`/api/character-profiles/${editingId}/looks/${slotIndex}`, {
+          method: "DELETE",
+          token,
+        });
+        await refreshProject();
+        showFlash("success", `圖片 ${slotIndex} 已清空。`);
+      },
+    });
+  }
+
+  async function uploadLooksBatch() {
+    if (!editingId) return;
+    const files = batchFiles.slice(0, 9);
+    if (!files.length) {
+      showFlash("error", "請先選擇最多 9 張本地圖片。");
+      return;
+    }
+    setLookBusyKey("batch-upload");
+    try {
+      for (const [index, file] of files.entries()) {
+        const slotIndex = index + 1;
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("label", fileStem(file.name) || `圖片 ${slotIndex}`);
+        await apiFetch(`/api/character-profiles/${editingId}/looks/${slotIndex}/upload`, {
+          method: "POST",
+          token,
+          formData,
+        });
+      }
+      setBatchFiles([]);
+      setBatchInputVersion((value) => value + 1);
+      await refreshProject();
+      showFlash("success", `已批量上傳 ${files.length} 張角色圖片。`);
+    } catch (error) {
+      showFlash("error", error.message || "批量上傳失敗。");
+    } finally {
+      setLookBusyKey("");
+    }
+  }
+
+  async function importLooksBatchFromDrive() {
+    if (!editingId) return;
+    const urls = batchDriveUrls.split("\n").map((item) => item.trim()).filter(Boolean).slice(0, 9);
+    if (!urls.length) {
+      showFlash("error", "請先貼上最多 9 個 Drive / 圖片連結，每行一個。");
+      return;
+    }
+    setLookBusyKey("batch-drive");
+    try {
+      for (const [index, url] of urls.entries()) {
+        const slotIndex = index + 1;
+        await apiFetch(`/api/character-profiles/${editingId}/looks/${slotIndex}/drive-import`, {
+          method: "POST",
+          token,
+          body: {
+            url,
+            label: `圖片 ${slotIndex}`,
+          },
+        });
+      }
+      setBatchDriveUrls("");
+      await refreshProject();
+      showFlash("success", `已批量導入 ${urls.length} 張角色圖片。`);
+    } catch (error) {
+      showFlash("error", error.message || "批量導入失敗。");
+    } finally {
+      setLookBusyKey("");
+    }
+  }
+
+  return (
+    <div className="grid">
+      <div className="grid two">
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>角色設定</h2>
+              <div className="subtext">{project ? `目前專案：${project.title}` : "請先選取專案"}</div>
+            </div>
+          <span className="tag">{characters.length} 個角色</span>
+        </div>
+        {!project ? (
+          <div className="empty-state">請先回到專案頁選取一個專案，再建立角色。</div>
+        ) : (
+          <div className="list">
+            {characters.map((character) => (
+              <div key={character.id} className="list-item">
+                <div className="title-row">
+                  <strong>{character.name}</strong>
+                  <div className="pill-row">
+                    <span className="tag">{character.voice_profile_name}</span>
+                    <span className="tag">{character.looks_count || 0} 張圖片</span>
+                  </div>
+                </div>
+                <div className="title-row" style={{ alignItems: "flex-start", marginTop: 10 }}>
+                  {character.avatar_url ? <img src={character.avatar_url} alt={character.name} style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: "1px solid var(--line)" }} /> : <div className="editor-card" style={{ width: 56, height: 56, display: "grid", placeItems: "center", padding: 0 }}>{character.name.slice(0, 1)}</div>}
+                  <div style={{ flex: 1 }}>
+                    <div className="subtext">{character.display_title || character.archetype || "未設定角色職稱"}</div>
+                    <div className="subtext">{character.voice_name || "未提供聲線名稱"}</div>
+                    <div className="subtext">{character.summary || "尚未填寫角色摘要。"}</div>
+                  </div>
+                </div>
+                <div className="pill-row" style={{ marginTop: 10 }}>
+                  <span className="tag">速度 {character.speed_override ?? "沿用聲線"}</span>
+                  <span className="tag">{character.style_override || "沿用聲線風格"}</span>
+                  {character.default_mood ? <span className="tag">{character.default_mood}</span> : null}
+                </div>
+                <div className="toolbar" style={{ marginTop: 12, marginBottom: 0 }}>
+                  <button className="button-secondary" onClick={() => loadCharacter(character)}>編輯</button>
+                  <button className="button-secondary" onClick={() => requestDeleteCharacter(character)}>刪除</button>
+                </div>
+              </div>
+            ))}
+            {!characters.length ? <div className="empty-state">先建立旁白或人物角色，再回到文本準備頁指派段落。</div> : null}
+          </div>
+        )}
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>{editingId ? "編輯角色" : "建立角色"}</h2>
+            <div className="subtext">先為角色綁定一個聲線，再把段落指派給角色。</div>
+          </div>
+        </div>
+        {!project ? (
+          <div className="empty-state">請先選取專案。</div>
+        ) : (
+          <form className="form-grid" onSubmit={submitCharacter}>
+            {formError ? <div className="flash error">{formError}</div> : null}
+            {formSuccess ? <div className="flash success">{formSuccess}</div> : null}
+            <div className="editor-card">
+              <div className="eyebrow">角色預設</div>
+              <div className="toolbar">
+                {Object.entries(CHARACTER_PRESETS).map(([key, preset]) => (
+                  <button key={key} type="button" className="button-secondary" onClick={() => applyPreset(key)}>{preset.label}</button>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <label>角色名稱</label>
+              <input className="input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>角色職稱</label>
+              <input className="input" placeholder="例如：大鬧天宮的齊天大聖" value={form.display_title} onChange={(event) => setForm({ ...form, display_title: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>角色原型</label>
+              <input className="input" placeholder="例如：Hero / Trickster / Mentor" value={form.archetype} onChange={(event) => setForm({ ...form, archetype: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>綁定聲線</label>
+              <select className="select" value={form.voice_profile_id} onChange={(event) => setForm({ ...form, voice_profile_id: event.target.value })}>
+                <option value="">請選擇聲線</option>
+                {voices.map((voice) => (
+                  <option key={voice.id} value={String(voice.id)}>{voice.name} · {voice.voice_name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>角色頭像</label>
+              <input className="input" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setAvatarFile(event.target.files?.[0] || null)} />
+            </div>
+            <div className="field">
+              <label>速度覆寫</label>
+              <input className="input" type="number" min="0.7" max="1.4" step="0.05" placeholder="留空沿用聲線" value={form.speed_override} onChange={(event) => setForm({ ...form, speed_override: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>風格覆寫</label>
+              <input className="input" placeholder="留空沿用聲線風格" value={form.style_override} onChange={(event) => setForm({ ...form, style_override: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>角色摘要</label>
+              <textarea className="textarea small" value={form.summary} onChange={(event) => setForm({ ...form, summary: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>個性介紹</label>
+              <textarea className="textarea small" value={form.personality} onChange={(event) => setForm({ ...form, personality: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>背景故事</label>
+              <textarea className="textarea small" value={form.backstory} onChange={(event) => setForm({ ...form, backstory: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>招牌台詞</label>
+              <input className="input" value={form.catchphrase} onChange={(event) => setForm({ ...form, catchphrase: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>預設情緒</label>
+              <input className="input" value={form.default_mood} onChange={(event) => setForm({ ...form, default_mood: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>角色說明</label>
+              <textarea className="textarea small" value={form.instructions} onChange={(event) => setForm({ ...form, instructions: event.target.value })} />
+            </div>
+            {[
+              ["warmth", "親和"],
+              ["intensity", "張力"],
+              ["humor", "幽默"],
+              ["mystery", "神秘"],
+              ["bravery", "勇氣"],
+              ["discipline", "紀律"],
+            ].map(([key, label]) => (
+              <div className="field" key={key}>
+                <label>{label} {form[key]}</label>
+                <input className="input" type="range" min="0" max="100" value={form[key]} onChange={(event) => setForm({ ...form, [key]: Number(event.target.value) })} />
+              </div>
+            ))}
+            <div className="toolbar">
+              <button type="submit" className="button" disabled={saving}>{saving ? "儲存中..." : editingId ? "儲存角色" : "建立角色"}</button>
+              {editingId ? <button type="button" className="button-secondary" disabled={saving} onClick={resetForm}>取消編輯</button> : null}
+            </div>
+          </form>
+        )}
+        </section>
+      </div>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>角色圖片集</h2>
+            <div className="subtext">可為每個角色一次上傳最多 9 張圖片，或批量貼上 Drive 分享連結 / 圖片 URL。</div>
+          </div>
+          {currentCharacter ? <span className="tag brand">{currentCharacter.name}</span> : <span className="tag">未選角色</span>}
+        </div>
+        {!currentCharacter ? (
+          <div className="empty-state">先在左側選一個角色並按「編輯」，再管理角色圖片。</div>
+        ) : (
+          <div className="grid">
+            <div className="grid two">
+              <div className="panel" style={{ background: "rgba(255,255,255,0.68)" }}>
+                <div className="panel-head">
+                  <div>
+                    <h3>一次上傳多張</h3>
+                    <div className="subtext">一次選最多 9 張本地圖片，系統會依順序保存到角色圖片集。</div>
+                  </div>
+                </div>
+                <div className="field">
+                  <label>本地圖片（最多 9 張）</label>
+                  <input key={batchInputVersion} className="input" type="file" multiple accept="image/png,image/jpeg,image/webp" onChange={(event) => setBatchFiles(Array.from(event.target.files || []).slice(0, 9))} />
+                </div>
+                <div className="subtext">{batchFiles.length ? `已選擇 ${batchFiles.length} 張圖片` : "尚未選擇圖片"}</div>
+                <div className="toolbar">
+                  <button className="button" disabled={lookBusyKey === "batch-upload"} onClick={uploadLooksBatch}>
+                    {lookBusyKey === "batch-upload" ? "批量上傳中..." : "開始上傳"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="panel" style={{ background: "rgba(255,255,255,0.68)" }}>
+                <div className="panel-head">
+                  <div>
+                    <h3>一次導入多個連結</h3>
+                    <div className="subtext">每行一個 Drive 分享連結或圖片 URL，系統會依順序保存到角色圖片集。</div>
+                  </div>
+                </div>
+                <div className="field">
+                  <label>Drive / 圖片連結</label>
+                  <textarea className="textarea small" placeholder={"每行一個連結\n最多 9 個"} value={batchDriveUrls} onChange={(event) => setBatchDriveUrls(event.target.value)} />
+                </div>
+                <div className="toolbar">
+                  <button className="button" disabled={lookBusyKey === "batch-drive"} onClick={importLooksBatchFromDrive}>
+                    {lookBusyKey === "batch-drive" ? "批量導入中..." : "開始導入"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="album-head">
+              <div className="subtext">已上傳 {currentCharacter.looks_count || 0} / 9 張</div>
+            </div>
+
+            <div className="image-wall">
+              {lookSlots.map((look) => {
+                const draft = lookDrafts[look.slot_index] || { label: look.label || `圖片 ${look.slot_index}`, driveUrl: "", file: null };
+                const sourceLabel = look.source_type === "drive" ? "Drive" : look.source_type === "url" ? "連結" : look.image_url ? "本地" : "待上傳";
+                return (
+                  <div key={look.slot_index} className={`image-tile ${look.image_url ? "" : "empty"}`}>
+                    <div className="image-thumb">
+                      {look.image_url ? (
+                        <img src={look.image_url} alt={look.label} className="image-thumb-img" />
+                      ) : (
+                        <div className="image-empty-copy">
+                          <strong>待上傳</strong>
+                          <span>可由上方批量加入</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="image-meta">
+                      <div className="image-meta-head">
+                        <strong>{draft.label || `圖片 ${look.slot_index}`}</strong>
+                        <span className="tag">{sourceLabel}</span>
+                      </div>
+                      <input className="input" value={draft.label} onChange={(event) => updateLookDraft(look.slot_index, { label: event.target.value })} />
+                      <div className="image-actions">
+                        <button className="button-flat" disabled={lookBusyKey === `label:${look.slot_index}`} onClick={() => saveLookLabel(look.slot_index)}>
+                        {lookBusyKey === `label:${look.slot_index}` ? "儲存中..." : "儲存標題"}
+                        </button>
+                        <button className="button-flat-danger" onClick={() => clearLook(look.slot_index)}>清空</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ProjectModelSettingsPage({ token, project, refreshProject, showFlash, mode, profiles = [] }) {
   const [providerInfo, setProviderInfo] = useState(null);
   const [form, setForm] = useState(mode === "comic" ? COMIC_SETTINGS_DEFAULT : VIDEO_SETTINGS_DEFAULT);
   const [savingKey, setSavingKey] = useState("");
+  const [profileName, setProfileName] = useState("");
 
   useEffect(() => {
     if (!token) return;
@@ -1236,28 +2239,32 @@ function ProjectModelSettingsPage({ token, project, refreshProject, showFlash, m
   }, [token]);
 
   useEffect(() => {
+    const defaults = modelSettingsDefaults(mode, providerInfo);
     if (mode === "comic") {
-      setForm(mergeModelSettings(COMIC_SETTINGS_DEFAULT, project?.comic_settings));
+      setForm(mergeModelSettings(defaults, project?.comic_settings));
     } else {
-      setForm(mergeModelSettings(VIDEO_SETTINGS_DEFAULT, project?.video_settings));
+      setForm(mergeModelSettings(defaults, project?.video_settings));
     }
-  }, [mode, project?.id, project?.comic_settings, project?.video_settings]);
+  }, [mode, project?.id, project?.comic_settings, project?.video_settings, providerInfo]);
 
   const comicCatalog = providerInfo?.catalog?.comic || {};
   const videoCatalog = providerInfo?.catalog?.video || {};
+  const defaults = modelSettingsDefaults(mode, providerInfo);
+  const profileKey = mode === "comic" ? "comic_settings" : "video_settings";
+  const profileEndpoint = mode === "comic" ? "comic-profiles" : "video-profiles";
+  const pageLabel = mode === "comic" ? "漫畫" : "Video";
 
   async function saveProjectSettings(value) {
     if (!project) return;
-    const key = mode === "comic" ? "comic_settings" : "video_settings";
-    setSavingKey(key);
+    setSavingKey(profileKey);
     try {
       await apiFetch(`/api/projects/${project.id}`, {
         method: "PATCH",
         token,
-        body: { [key]: value },
+        body: { [profileKey]: value },
       });
       await refreshProject({ projectId: project.id });
-      showFlash("success", key === "comic_settings" ? "漫畫設定已儲存。" : "Video 設定已儲存。");
+      showFlash("success", profileKey === "comic_settings" ? "漫畫設定已儲存。" : "Video 設定已儲存。");
     } catch (error) {
       showFlash("error", error.message || "設定儲存失敗。");
     } finally {
@@ -1265,18 +2272,184 @@ function ProjectModelSettingsPage({ token, project, refreshProject, showFlash, m
     }
   }
 
+  async function createProfileFromCurrent() {
+    if (!project) return;
+    if (!profileName.trim()) {
+      showFlash("error", `請先輸入${pageLabel}設定名稱。`);
+      return;
+    }
+    setSavingKey(`${profileEndpoint}:create`);
+    try {
+      await apiFetch(`/api/projects/${project.id}/${profileEndpoint}`, {
+        method: "POST",
+        token,
+        body: {
+          name: profileName.trim(),
+          settings: form,
+        },
+      });
+      await refreshProject({ projectId: project.id });
+      setProfileName("");
+      showFlash("success", `${pageLabel}設定已建立。`);
+    } catch (error) {
+      showFlash("error", error.message || "建立設定失敗。");
+    } finally {
+      setSavingKey("");
+    }
+  }
+
+  async function applyProfile(profile) {
+    const nextSettings = mergeModelSettings(defaults, profile.settings);
+    setForm(nextSettings);
+    await saveProjectSettings(nextSettings);
+  }
+
   if (mode === "comic") {
     return (
+      <div className="grid two">
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>漫畫設定</h2>
+              <div className="subtext">{project ? `目前專案：${project.title}` : "請先選取專案"}</div>
+            </div>
+            <span className={`tag ${form.enabled ? "brand" : ""}`}>{form.enabled ? "已啟用" : "未啟用"}</span>
+          </div>
+          {!project ? (
+            <div className="empty-state">請先回到專案頁選取一個專案，再設定漫畫模型。</div>
+          ) : (
+            <form className="form-grid" onSubmit={async (event) => {
+              event.preventDefault();
+              await saveProjectSettings(form);
+            }}>
+              <div className="field">
+                <label>啟用</label>
+                <select className="select" value={form.enabled ? "true" : "false"} onChange={(event) => setForm({ ...form, enabled: event.target.value === "true" })}>
+                  <option value="false">未啟用</option>
+                  <option value="true">啟用</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>劇本模型</label>
+                <select className="select" value={form.script_model} onChange={(event) => setForm({ ...form, script_model: event.target.value })}>
+                  {(comicCatalog.script_models || [defaults.script_model]).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>分鏡模型</label>
+                <select className="select" value={form.storyboard_model} onChange={(event) => setForm({ ...form, storyboard_model: event.target.value })}>
+                  {(comicCatalog.storyboard_models || [defaults.storyboard_model]).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>圖像模型</label>
+                <select className="select" value={form.image_model} onChange={(event) => setForm({ ...form, image_model: event.target.value })}>
+                  {(comicCatalog.image_models || [defaults.image_model]).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>風格預設</label>
+                <select className="select" value={form.style_preset} onChange={(event) => setForm({ ...form, style_preset: event.target.value })}>
+                  {(comicCatalog.style_presets || [defaults.style_preset]).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>色彩模式</label>
+                <select className="select" value={form.color_mode} onChange={(event) => setForm({ ...form, color_mode: event.target.value })}>
+                  {(comicCatalog.color_modes || [defaults.color_mode]).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>畫幅比例</label>
+                <select className="select" value={form.aspect_ratio} onChange={(event) => setForm({ ...form, aspect_ratio: event.target.value })}>
+                  {(comicCatalog.aspect_ratios || [defaults.aspect_ratio]).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>角色一致性</label>
+                <select className="select" value={form.character_consistency} onChange={(event) => setForm({ ...form, character_consistency: event.target.value })}>
+                  {(comicCatalog.character_consistency_levels || [defaults.character_consistency]).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>負面提示</label>
+                <textarea className="textarea small" value={form.negative_prompt} onChange={(event) => setForm({ ...form, negative_prompt: event.target.value })} />
+              </div>
+              <button className="button" disabled={savingKey === "comic_settings"}>{savingKey === "comic_settings" ? "儲存中..." : "儲存漫畫設定"}</button>
+            </form>
+          )}
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>已建立的漫畫設定</h2>
+              <div className="subtext">可把目前表單另存為設定樣板，再快速套用到目前專案。</div>
+            </div>
+            <span className="tag">{profiles.length} 組</span>
+          </div>
+          {!project ? (
+            <div className="empty-state">請先選取專案後，再建立漫畫設定。</div>
+          ) : (
+            <>
+              <div className="toolbar">
+                <input className="input" placeholder="新的漫畫設定名稱" value={profileName} onChange={(event) => setProfileName(event.target.value)} />
+                <button className="button-secondary" disabled={savingKey === "comic-profiles:create"} onClick={createProfileFromCurrent}>
+                  {savingKey === "comic-profiles:create" ? "建立中..." : "以目前內容建立"}
+                </button>
+              </div>
+              <div className="list">
+                {profiles.map((profile) => (
+                  <div key={profile.id} className="list-item">
+                    <div className="title-row">
+                      <strong>{profile.name}</strong>
+                      <span className="tag">{profile.project_id ? "專案" : "系統"}</span>
+                    </div>
+                    <div className="pill-row" style={{ marginTop: 10 }}>
+                      <span className="tag">{profile.settings.script_model}</span>
+                      <span className="tag">{profile.settings.image_model}</span>
+                      <span className="tag">{profile.settings.aspect_ratio}</span>
+                    </div>
+                    <div className="toolbar" style={{ marginTop: 12, marginBottom: 0 }}>
+                      <button className="button-secondary" onClick={() => applyProfile(profile)}>套用到目前專案</button>
+                    </div>
+                  </div>
+                ))}
+                {!profiles.length ? <div className="empty-state">尚未建立漫畫設定。</div> : null}
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid two">
       <section className="panel">
         <div className="panel-head">
           <div>
-            <h2>漫畫設定</h2>
+            <h2>Video 設定</h2>
             <div className="subtext">{project ? `目前專案：${project.title}` : "請先選取專案"}</div>
           </div>
           <span className={`tag ${form.enabled ? "brand" : ""}`}>{form.enabled ? "已啟用" : "未啟用"}</span>
         </div>
         {!project ? (
-          <div className="empty-state">請先回到專案頁選取一個專案，再設定漫畫模型。</div>
+          <div className="empty-state">請先回到專案頁選取一個專案，再設定影片模型。</div>
         ) : (
           <form className="form-grid" onSubmit={async (event) => {
             event.preventDefault();
@@ -1290,17 +2463,17 @@ function ProjectModelSettingsPage({ token, project, refreshProject, showFlash, m
               </select>
             </div>
             <div className="field">
-              <label>劇本模型</label>
+              <label>腳本模型</label>
               <select className="select" value={form.script_model} onChange={(event) => setForm({ ...form, script_model: event.target.value })}>
-                {(comicCatalog.script_models || [COMIC_SETTINGS_DEFAULT.script_model]).map((item) => (
+                {(videoCatalog.script_models || [defaults.script_model]).map((item) => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
             </div>
             <div className="field">
-              <label>分鏡模型</label>
-              <select className="select" value={form.storyboard_model} onChange={(event) => setForm({ ...form, storyboard_model: event.target.value })}>
-                {(comicCatalog.storyboard_models || [COMIC_SETTINGS_DEFAULT.storyboard_model]).map((item) => (
+              <label>鏡頭模型</label>
+              <select className="select" value={form.shot_model} onChange={(event) => setForm({ ...form, shot_model: event.target.value })}>
+                {(videoCatalog.shot_models || [defaults.shot_model]).map((item) => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
@@ -1308,23 +2481,23 @@ function ProjectModelSettingsPage({ token, project, refreshProject, showFlash, m
             <div className="field">
               <label>圖像模型</label>
               <select className="select" value={form.image_model} onChange={(event) => setForm({ ...form, image_model: event.target.value })}>
-                {(comicCatalog.image_models || [COMIC_SETTINGS_DEFAULT.image_model]).map((item) => (
+                {(videoCatalog.image_models || [defaults.image_model]).map((item) => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
             </div>
             <div className="field">
-              <label>風格預設</label>
-              <select className="select" value={form.style_preset} onChange={(event) => setForm({ ...form, style_preset: event.target.value })}>
-                {(comicCatalog.style_presets || [COMIC_SETTINGS_DEFAULT.style_preset]).map((item) => (
+              <label>影片模型</label>
+              <select className="select" value={form.video_model} onChange={(event) => setForm({ ...form, video_model: event.target.value })}>
+                {(videoCatalog.video_models || [defaults.video_model]).map((item) => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
             </div>
             <div className="field">
-              <label>色彩模式</label>
-              <select className="select" value={form.color_mode} onChange={(event) => setForm({ ...form, color_mode: event.target.value })}>
-                {(comicCatalog.color_modes || [COMIC_SETTINGS_DEFAULT.color_mode]).map((item) => (
+              <label>字幕模型</label>
+              <select className="select" value={form.subtitle_model} onChange={(event) => setForm({ ...form, subtitle_model: event.target.value })}>
+                {(videoCatalog.subtitle_models || [defaults.subtitle_model]).map((item) => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
@@ -1332,15 +2505,23 @@ function ProjectModelSettingsPage({ token, project, refreshProject, showFlash, m
             <div className="field">
               <label>畫幅比例</label>
               <select className="select" value={form.aspect_ratio} onChange={(event) => setForm({ ...form, aspect_ratio: event.target.value })}>
-                {(comicCatalog.aspect_ratios || [COMIC_SETTINGS_DEFAULT.aspect_ratio]).map((item) => (
+                {(videoCatalog.aspect_ratios || [defaults.aspect_ratio]).map((item) => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
             </div>
             <div className="field">
-              <label>角色一致性</label>
-              <select className="select" value={form.character_consistency} onChange={(event) => setForm({ ...form, character_consistency: event.target.value })}>
-                {(comicCatalog.character_consistency_levels || [COMIC_SETTINGS_DEFAULT.character_consistency]).map((item) => (
+              <label>時長</label>
+              <select className="select" value={String(form.duration_seconds)} onChange={(event) => setForm({ ...form, duration_seconds: Number(event.target.value) })}>
+                {(videoCatalog.duration_options || [defaults.duration_seconds]).map((item) => (
+                  <option key={item} value={String(item)}>{item} 秒</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>動態風格</label>
+              <select className="select" value={form.motion_style} onChange={(event) => setForm({ ...form, motion_style: event.target.value })}>
+                {(videoCatalog.motion_styles || [defaults.motion_style]).map((item) => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
@@ -1349,129 +2530,75 @@ function ProjectModelSettingsPage({ token, project, refreshProject, showFlash, m
               <label>負面提示</label>
               <textarea className="textarea small" value={form.negative_prompt} onChange={(event) => setForm({ ...form, negative_prompt: event.target.value })} />
             </div>
-            <button className="button" disabled={savingKey === "comic_settings"}>{savingKey === "comic_settings" ? "儲存中..." : "儲存漫畫設定"}</button>
+            <button className="button" disabled={savingKey === "video_settings"}>{savingKey === "video_settings" ? "儲存中..." : "儲存 Video 設定"}</button>
           </form>
         )}
       </section>
-    );
-  }
 
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h2>Video 設定</h2>
-          <div className="subtext">{project ? `目前專案：${project.title}` : "請先選取專案"}</div>
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>已建立的 Video 設定</h2>
+            <div className="subtext">先調好目前表單，再另存成樣板，之後可一鍵套用。</div>
+          </div>
+          <span className="tag">{profiles.length} 組</span>
         </div>
-        <span className={`tag ${form.enabled ? "brand" : ""}`}>{form.enabled ? "已啟用" : "未啟用"}</span>
-      </div>
-      {!project ? (
-        <div className="empty-state">請先回到專案頁選取一個專案，再設定影片模型。</div>
-      ) : (
-        <form className="form-grid" onSubmit={async (event) => {
-          event.preventDefault();
-          await saveProjectSettings(form);
-        }}>
-          <div className="field">
-            <label>啟用</label>
-            <select className="select" value={form.enabled ? "true" : "false"} onChange={(event) => setForm({ ...form, enabled: event.target.value === "true" })}>
-              <option value="false">未啟用</option>
-              <option value="true">啟用</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>腳本模型</label>
-            <select className="select" value={form.script_model} onChange={(event) => setForm({ ...form, script_model: event.target.value })}>
-              {(videoCatalog.script_models || [VIDEO_SETTINGS_DEFAULT.script_model]).map((item) => (
-                <option key={item} value={item}>{item}</option>
+        {!project ? (
+          <div className="empty-state">請先選取專案後，再建立 Video 設定。</div>
+        ) : (
+          <>
+            <div className="toolbar">
+              <input className="input" placeholder="新的 Video 設定名稱" value={profileName} onChange={(event) => setProfileName(event.target.value)} />
+              <button className="button-secondary" disabled={savingKey === "video-profiles:create"} onClick={createProfileFromCurrent}>
+                {savingKey === "video-profiles:create" ? "建立中..." : "以目前內容建立"}
+              </button>
+            </div>
+            <div className="list">
+              {profiles.map((profile) => (
+                <div key={profile.id} className="list-item">
+                  <div className="title-row">
+                    <strong>{profile.name}</strong>
+                    <span className="tag">{profile.project_id ? "專案" : "系統"}</span>
+                  </div>
+                  <div className="pill-row" style={{ marginTop: 10 }}>
+                    <span className="tag">{profile.settings.script_model}</span>
+                    <span className="tag">{profile.settings.video_model}</span>
+                    <span className="tag">{profile.settings.duration_seconds} 秒</span>
+                  </div>
+                  <div className="toolbar" style={{ marginTop: 12, marginBottom: 0 }}>
+                    <button className="button-secondary" onClick={() => applyProfile(profile)}>套用到目前專案</button>
+                  </div>
+                </div>
               ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>鏡頭模型</label>
-            <select className="select" value={form.shot_model} onChange={(event) => setForm({ ...form, shot_model: event.target.value })}>
-              {(videoCatalog.shot_models || [VIDEO_SETTINGS_DEFAULT.shot_model]).map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>圖像模型</label>
-            <select className="select" value={form.image_model} onChange={(event) => setForm({ ...form, image_model: event.target.value })}>
-              {(videoCatalog.image_models || [VIDEO_SETTINGS_DEFAULT.image_model]).map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>影片模型</label>
-            <select className="select" value={form.video_model} onChange={(event) => setForm({ ...form, video_model: event.target.value })}>
-              {(videoCatalog.video_models || [VIDEO_SETTINGS_DEFAULT.video_model]).map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>字幕模型</label>
-            <select className="select" value={form.subtitle_model} onChange={(event) => setForm({ ...form, subtitle_model: event.target.value })}>
-              {(videoCatalog.subtitle_models || [VIDEO_SETTINGS_DEFAULT.subtitle_model]).map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>畫幅比例</label>
-            <select className="select" value={form.aspect_ratio} onChange={(event) => setForm({ ...form, aspect_ratio: event.target.value })}>
-              {(videoCatalog.aspect_ratios || [VIDEO_SETTINGS_DEFAULT.aspect_ratio]).map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>時長</label>
-            <select className="select" value={String(form.duration_seconds)} onChange={(event) => setForm({ ...form, duration_seconds: Number(event.target.value) })}>
-              {(videoCatalog.duration_options || [VIDEO_SETTINGS_DEFAULT.duration_seconds]).map((item) => (
-                <option key={item} value={String(item)}>{item} 秒</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>動態風格</label>
-            <select className="select" value={form.motion_style} onChange={(event) => setForm({ ...form, motion_style: event.target.value })}>
-              {(videoCatalog.motion_styles || [VIDEO_SETTINGS_DEFAULT.motion_style]).map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>負面提示</label>
-            <textarea className="textarea small" value={form.negative_prompt} onChange={(event) => setForm({ ...form, negative_prompt: event.target.value })} />
-          </div>
-          <button className="button" disabled={savingKey === "video_settings"}>{savingKey === "video_settings" ? "儲存中..." : "儲存 Video 設定"}</button>
-        </form>
-      )}
-    </section>
+              {!profiles.length ? <div className="empty-state">尚未建立 Video 設定。</div> : null}
+            </div>
+          </>
+        )}
+      </section>
+    </div>
   );
 }
 
-function ComicSettingsPage({ token, project, refreshProject, showFlash }) {
+function ComicSettingsPage({ token, project, comicProfiles, refreshProject, showFlash }) {
   return (
     <ProjectModelSettingsPage
       mode="comic"
       token={token}
       project={project}
+      profiles={comicProfiles}
       refreshProject={refreshProject}
       showFlash={showFlash}
     />
   );
 }
 
-function VideoSettingsPage({ token, project, refreshProject, showFlash }) {
+function VideoSettingsPage({ token, project, videoProfiles, refreshProject, showFlash }) {
   return (
     <ProjectModelSettingsPage
       mode="video"
       token={token}
       project={project}
+      profiles={videoProfiles}
       refreshProject={refreshProject}
       showFlash={showFlash}
     />
@@ -1846,6 +2973,9 @@ function SettingsPage({ token, project }) {
               <div className="subtext" style={{ marginTop: 10 }}>
                 預設 ASR provider：{providerInfo.defaults?.asr_provider || "auto"}
               </div>
+              <div className="subtext" style={{ marginTop: 8 }}>
+                模型註冊表：{providerInfo.registry?.path || "config/model_registry.yaml"}
+              </div>
             </div>
           ) : null}
         </div>
@@ -1855,21 +2985,21 @@ function SettingsPage({ token, project }) {
         <div className="panel-head">
           <div>
             <h2>多模態規劃</h2>
-            <div className="subtext">漫畫與 Video 模型設定已移到「聲線設定」頁底部。</div>
+            <div className="subtext">漫畫與 Video 目前都使用獨立頁面，並支援建立可重用的設定樣板。</div>
           </div>
         </div>
         <div className="list">
           <div className="list-item">
             <strong>漫畫設定</strong>
-            <div className="subtext">請到「聲線設定」頁，在聲線區塊下方設定劇本、分鏡與圖像模型。</div>
+            <div className="subtext">請到左側「漫畫設定」頁編輯目前專案配置，或以目前內容另存新的樣板。</div>
           </div>
           <div className="list-item">
             <strong>Video 設定</strong>
-            <div className="subtext">請到「聲線設定」頁，在漫畫設定下方設定腳本、鏡頭、圖像、影片與字幕模型。</div>
+            <div className="subtext">請到左側「Video 設定」頁編輯目前專案配置，或以目前內容另存新的樣板。</div>
           </div>
           <div className="list-item">
             <strong>目前選中專案</strong>
-            <div className="subtext">{project ? `${project.title} 可直接在聲線設定頁編輯這兩組配置。` : "請先選取專案後，再到聲線設定頁編輯。"}</div>
+            <div className="subtext">{project ? `${project.title} 可直接在漫畫設定與 Video 設定頁編輯並套用樣板。` : "請先選取專案後，再到左側的漫畫設定或 Video 設定頁編輯。"}</div>
           </div>
           <div className="list-item">
             <strong>環境變數</strong>

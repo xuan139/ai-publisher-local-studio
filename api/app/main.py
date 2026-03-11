@@ -1,26 +1,37 @@
 from __future__ import annotations
 
 import json
+import mimetypes
+import os
 import random
 import shutil
 import sqlite3
+import urllib.parse
+import urllib.request
 from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .ai_providers import ProviderConfigError, ProviderRequestError, generate_speech, transcribe_audio
 from .audio_utils import concat_wavs, create_export_zip, public_file_path, slugify
-from .config import ELEVENLABS_ASR_MODELS, ELEVENLABS_TTS_MODELS, OPENAI_TTS_MODELS, OPENAI_TTS_VOICES, get_settings
+from .config import get_settings
 from .db import BASE_DIR, GENERATED_DIR, connect, get_conn, init_db, utc_now
+from .model_registry import REGISTRY_PATH, get_model_registry, get_registry_defaults, get_system_catalog
 from .schemas import (
+    BatchCharacterAssignRequest,
+    CharacterLookImportRequest,
+    CharacterLookUpdate,
+    CharacterProfileCreate,
+    CharacterProfileUpdate,
     IssueCreate,
     IssueUpdate,
     LoginRequest,
+    ModelProfileCreate,
     ProjectCreate,
     ProjectUpdate,
     RejectRequest,
@@ -33,48 +44,7 @@ from .text_utils import extract_text_from_upload, split_into_chapters, split_int
 
 WEB_DIR = BASE_DIR.parent / "web"
 APP_TITLE = "AI Publisher Local Studio"
-COMIC_SETTINGS_DEFAULT = {
-    "enabled": False,
-    "script_model": "openai:gpt-4.1",
-    "storyboard_model": "google:gemini-2.0-flash",
-    "image_model": "openai:gpt-image-1",
-    "style_preset": "cinematic-ink",
-    "color_mode": "full-color",
-    "aspect_ratio": "4:5",
-    "character_consistency": "medium",
-    "negative_prompt": "",
-}
-VIDEO_SETTINGS_DEFAULT = {
-    "enabled": False,
-    "script_model": "openai:gpt-4.1",
-    "shot_model": "google:gemini-2.0-flash",
-    "image_model": "openai:gpt-image-1",
-    "video_model": "runway:gen-3",
-    "subtitle_model": "openai:gpt-4.1-mini",
-    "aspect_ratio": "16:9",
-    "duration_seconds": 30,
-    "motion_style": "cinematic",
-    "negative_prompt": "",
-}
-COMIC_MODEL_CATALOG = {
-    "script_models": ["openai:gpt-4.1", "openai:gpt-4o", "google:gemini-2.0-flash", "google:gemini-2.5-pro"],
-    "storyboard_models": ["openai:gpt-4.1", "google:gemini-2.0-flash", "google:gemini-2.5-pro"],
-    "image_models": ["openai:gpt-image-1", "bfl:flux-pro", "stability:sdxl"],
-    "style_presets": ["cinematic-ink", "anime-color", "watercolor", "noir"],
-    "color_modes": ["full-color", "black-white", "duotone"],
-    "aspect_ratios": ["1:1", "4:5", "3:4", "16:9"],
-    "character_consistency_levels": ["low", "medium", "high"],
-}
-VIDEO_MODEL_CATALOG = {
-    "script_models": ["openai:gpt-4.1", "openai:gpt-4o", "google:gemini-2.0-flash", "google:gemini-2.5-pro"],
-    "shot_models": ["openai:gpt-4.1", "google:gemini-2.0-flash", "google:gemini-2.5-pro"],
-    "image_models": ["openai:gpt-image-1", "bfl:flux-pro", "stability:sdxl"],
-    "video_models": ["runway:gen-3", "kling:v1.6", "pika:2.2"],
-    "subtitle_models": ["openai:gpt-4.1-mini", "openai:gpt-4o-mini", "google:gemini-2.0-flash"],
-    "aspect_ratios": ["16:9", "9:16", "1:1", "4:5"],
-    "motion_styles": ["cinematic", "anime", "documentary", "social-short"],
-    "duration_options": [15, 30, 45, 60],
-}
+LOOK_SLOT_COUNT = 9
 
 app = FastAPI(title=APP_TITLE)
 app.add_middleware(
@@ -115,12 +85,176 @@ def merge_settings(raw_value: str | dict | None, defaults: dict) -> dict:
     return merged
 
 
+def comic_settings_defaults() -> dict:
+    return get_registry_defaults()["comic_settings"]
+
+
+def video_settings_defaults() -> dict:
+    return get_registry_defaults()["video_settings"]
+
+
 def project_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     project = dict(row)
-    project["comic_settings"] = merge_settings(project.get("comic_settings"), COMIC_SETTINGS_DEFAULT)
-    project["video_settings"] = merge_settings(project.get("video_settings"), VIDEO_SETTINGS_DEFAULT)
+    project["comic_settings"] = merge_settings(project.get("comic_settings"), comic_settings_defaults())
+    project["video_settings"] = merge_settings(project.get("video_settings"), video_settings_defaults())
     project["metrics"] = project_metrics(conn, row["id"])
     return project
+
+
+def model_profile_payload(row: sqlite3.Row, defaults: dict) -> dict:
+    payload = dict(row)
+    payload["settings"] = merge_settings(payload.get("settings"), defaults)
+    return payload
+
+
+def character_profile_payload(row: sqlite3.Row | None) -> dict | None:
+    if not row:
+        return None
+    payload = dict(row)
+    payload["avatar_url"] = public_file_path(payload["avatar_path"]) if payload.get("avatar_path") else ""
+    payload["looks"] = []
+    payload["looks_count"] = 0
+    return payload
+
+
+def character_look_payload(row: sqlite3.Row | None, slot_index: int) -> dict:
+    if not row:
+        return {
+            "id": None,
+            "slot_index": slot_index,
+            "label": f"圖片 {slot_index}",
+            "image_path": "",
+            "image_url": "",
+            "source_type": "",
+            "source_ref": "",
+            "created_at": "",
+            "updated_at": "",
+        }
+    payload = dict(row)
+    payload["label"] = payload.get("label") or f"圖片 {slot_index}"
+    payload["image_url"] = public_file_path(payload["image_path"]) if payload.get("image_path") else ""
+    return payload
+
+
+def list_character_looks(conn: sqlite3.Connection, character_profile_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM character_looks
+        WHERE character_profile_id = ?
+        ORDER BY slot_index
+        """,
+        (character_profile_id,),
+    ).fetchall()
+    by_slot = {row["slot_index"]: row for row in rows}
+    return [character_look_payload(by_slot.get(slot_index), slot_index) for slot_index in range(1, LOOK_SLOT_COUNT + 1)]
+
+
+def attach_character_looks(conn: sqlite3.Connection, payload: dict | None) -> dict | None:
+    if not payload:
+        return payload
+    looks = list_character_looks(conn, payload["id"])
+    payload["looks"] = looks
+    payload["looks_count"] = sum(1 for look in looks if look["image_path"])
+    return payload
+
+
+def parse_drive_or_remote_url(raw_url: str) -> tuple[str, str]:
+    parsed = urllib.parse.urlparse(raw_url.strip())
+    if not parsed.scheme or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="Invalid image URL")
+    host = parsed.netloc.lower()
+    if "drive.google.com" in host:
+        file_id = ""
+        parts = [part for part in parsed.path.split("/") if part]
+        if "d" in parts:
+            index = parts.index("d")
+            if index + 1 < len(parts):
+                file_id = parts[index + 1]
+        if not file_id:
+            query = urllib.parse.parse_qs(parsed.query)
+            file_id = (query.get("id") or [""])[0]
+        if not file_id:
+            raise HTTPException(status_code=400, detail="Unsupported Google Drive link")
+        return f"https://drive.google.com/uc?export=download&id={file_id}", "drive"
+    return raw_url.strip(), "url"
+
+
+def download_remote_image(raw_url: str) -> tuple[bytes, str, str, str]:
+    fetch_url, source_type = parse_drive_or_remote_url(raw_url)
+    request = urllib.request.Request(fetch_url, headers={"User-Agent": "AI Publisher Local Studio/1.0"})
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            content_type = response.headers.get_content_type()
+            data = response.read(12 * 1024 * 1024 + 1)
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch remote image: {error}") from error
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Remote image exceeds 12MB limit")
+    if not data:
+        raise HTTPException(status_code=400, detail="Remote image is empty")
+    suffix = mimetypes.guess_extension(content_type or "") or Path(urllib.parse.urlparse(fetch_url).path).suffix.lower() or ".png"
+    if suffix == ".jpe":
+        suffix = ".jpg"
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+        raise HTTPException(status_code=400, detail="Unsupported remote image type")
+    return data, suffix, source_type, fetch_url
+
+
+def upsert_character_look(
+    conn: sqlite3.Connection,
+    character: dict,
+    slot_index: int,
+    *,
+    label: str,
+    image_bytes: bytes | None = None,
+    suffix: str | None = None,
+    source_type: str = "local",
+    source_ref: str = "",
+) -> sqlite3.Row:
+    if slot_index < 1 or slot_index > LOOK_SLOT_COUNT:
+        raise HTTPException(status_code=400, detail=f"slot_index must be between 1 and {LOOK_SLOT_COUNT}")
+
+    existing = conn.execute(
+        "SELECT * FROM character_looks WHERE character_profile_id = ? AND slot_index = ?",
+        (character["id"], slot_index),
+    ).fetchone()
+
+    image_path = existing["image_path"] if existing else ""
+    if image_bytes is not None:
+        look_dir = GENERATED_DIR / "characters" / f"project_{character['project_id']}" / f"character_{character['id']}"
+        look_dir.mkdir(parents=True, exist_ok=True)
+        resolved_suffix = suffix or ".png"
+        next_path = look_dir / f"look_{slot_index}{resolved_suffix}"
+        next_path.write_bytes(image_bytes)
+        if image_path and image_path != str(next_path):
+            remove_generated_file(image_path)
+        image_path = str(next_path)
+
+    now = utc_now()
+    final_label = (label or f"圖片 {slot_index}").strip()
+    if existing:
+        conn.execute(
+            """
+            UPDATE character_looks
+            SET label = ?, image_path = ?, source_type = ?, source_ref = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (final_label, image_path, source_type, source_ref, now, existing["id"]),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO character_looks (character_profile_id, slot_index, label, image_path, source_type, source_ref, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (character["id"], slot_index, final_label, image_path, source_type, source_ref, now, now),
+        )
+
+    row = conn.execute(
+        "SELECT * FROM character_looks WHERE character_profile_id = ? AND slot_index = ?",
+        (character["id"], slot_index),
+    ).fetchone()
+    return row
 
 
 def fetch_user_by_token(token: str) -> dict:
@@ -168,20 +302,48 @@ def get_segment(conn: sqlite3.Connection, segment_id: int) -> sqlite3.Row:
     return row
 
 
-def voice_for_project(conn: sqlite3.Connection, project_id: int, segment_voice_id: int | None = None) -> sqlite3.Row:
+def get_character_profile(conn: sqlite3.Connection, character_profile_id: int) -> sqlite3.Row:
+    row = conn.execute("SELECT * FROM character_profiles WHERE id = ?", (character_profile_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Character profile not found")
+    return row
+
+
+def character_query() -> str:
+    return """
+        SELECT character_profiles.*, voice_profiles.name AS voice_profile_name, voice_profiles.voice_name AS voice_name
+        FROM character_profiles
+        JOIN voice_profiles ON voice_profiles.id = character_profiles.voice_profile_id
+    """
+
+
+def voice_for_project(conn: sqlite3.Connection, project_id: int, segment_voice_id: int | None = None, character_profile_id: int | None = None) -> dict:
     if segment_voice_id:
         row = conn.execute("SELECT * FROM voice_profiles WHERE id = ?", (segment_voice_id,)).fetchone()
         if row:
-            return row
+            return dict(row)
+    if character_profile_id:
+        character = conn.execute("SELECT * FROM character_profiles WHERE id = ?", (character_profile_id,)).fetchone()
+        if character:
+            voice = conn.execute("SELECT * FROM voice_profiles WHERE id = ?", (character["voice_profile_id"],)).fetchone()
+            if voice:
+                payload = dict(voice)
+                if character["speed_override"] is not None:
+                    payload["speed"] = character["speed_override"]
+                if character["style_override"]:
+                    payload["style"] = character["style_override"]
+                if character["instructions"]:
+                    payload["instructions"] = character["instructions"]
+                return payload
     project = get_project(conn, project_id)
     if project["default_voice_profile_id"]:
         row = conn.execute("SELECT * FROM voice_profiles WHERE id = ?", (project["default_voice_profile_id"],)).fetchone()
         if row:
-            return row
+            return dict(row)
     row = conn.execute("SELECT * FROM voice_profiles WHERE is_default = 1 ORDER BY id LIMIT 1").fetchone()
     if not row:
         raise HTTPException(status_code=400, detail="No voice profile configured")
-    return row
+    return dict(row)
 
 
 def project_metrics(conn: sqlite3.Connection, project_id: int) -> dict:
@@ -221,8 +383,20 @@ def segment_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "SELECT COUNT(*) AS count FROM review_issues WHERE segment_id = ? AND status = 'open'",
         (segment["id"],),
     ).fetchone()["count"]
+    character = None
+    if segment.get("character_profile_id"):
+        character = conn.execute(
+            """
+            SELECT character_profiles.*, voice_profiles.name AS voice_profile_name, voice_profiles.voice_name AS voice_name
+            FROM character_profiles
+            JOIN voice_profiles ON voice_profiles.id = character_profiles.voice_profile_id
+            WHERE character_profiles.id = ?
+            """,
+            (segment["character_profile_id"],),
+        ).fetchone()
     segment["latest_take"] = audio_take_payload(latest_take) if latest_take else None
     segment["open_issue_count"] = issue_count
+    segment["character_profile"] = attach_character_looks(conn, character_profile_payload(character))
     return segment
 
 
@@ -472,7 +646,7 @@ def run_segment_generation(job_id: int) -> None:
             "UPDATE segments SET status = 'generating', updated_at = ? WHERE id = ?",
             (utc_now(), segment["id"]),
         )
-        voice = voice_for_project(conn, segment["project_id"], segment["voice_profile_id"])
+        voice = voice_for_project(conn, segment["project_id"], segment["voice_profile_id"], segment["character_profile_id"])
 
     try:
         base_name = f"segment-{segment['id']}-v{datetime.now(timezone.utc).strftime('%H%M%S')}"
@@ -670,8 +844,8 @@ def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user
     now = utc_now()
     with get_conn() as conn:
         default_voice = conn.execute("SELECT id FROM voice_profiles WHERE is_default = 1 ORDER BY id LIMIT 1").fetchone()
-        comic_settings = json.dumps(merge_settings(payload.comic_settings, COMIC_SETTINGS_DEFAULT), ensure_ascii=False)
-        video_settings = json.dumps(merge_settings(payload.video_settings, VIDEO_SETTINGS_DEFAULT), ensure_ascii=False)
+        comic_settings = json.dumps(merge_settings(payload.comic_settings, comic_settings_defaults()), ensure_ascii=False)
+        video_settings = json.dumps(merge_settings(payload.video_settings, video_settings_defaults()), ensure_ascii=False)
         project_id = conn.execute(
             """
             INSERT INTO projects (title, author, language, description, comic_settings, video_settings, status, default_voice_profile_id, created_by, created_at, updated_at)
@@ -712,9 +886,9 @@ def update_project(project_id: int, payload: ProjectUpdate, user: dict = Depends
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
     if "comic_settings" in updates:
-        updates["comic_settings"] = json.dumps(merge_settings(updates["comic_settings"], COMIC_SETTINGS_DEFAULT), ensure_ascii=False)
+        updates["comic_settings"] = json.dumps(merge_settings(updates["comic_settings"], comic_settings_defaults()), ensure_ascii=False)
     if "video_settings" in updates:
-        updates["video_settings"] = json.dumps(merge_settings(updates["video_settings"], VIDEO_SETTINGS_DEFAULT), ensure_ascii=False)
+        updates["video_settings"] = json.dumps(merge_settings(updates["video_settings"], video_settings_defaults()), ensure_ascii=False)
     updates["updated_at"] = utc_now()
     set_clause = ", ".join(f"{key} = ?" for key in updates)
     params = list(updates.values()) + [project_id]
@@ -732,6 +906,7 @@ def delete_project(project_id: int, user: dict = Depends(get_current_user)) -> d
         GENERATED_DIR / "audio" / f"project_{project_id}",
         GENERATED_DIR / "renders" / f"project_{project_id}",
         GENERATED_DIR / "exports" / f"project_{project_id}",
+        GENERATED_DIR / "characters" / f"project_{project_id}",
     ]
     with get_conn() as conn:
         project = dict(get_project(conn, project_id))
@@ -849,10 +1024,13 @@ def update_segment(segment_id: int, payload: SegmentUpdate, user: dict = Depends
             "tts_text": payload.tts_text,
             "updated_at": utc_now(),
         }
+        provided_fields = payload.model_fields_set
         if payload.status is not None:
             updates["status"] = payload.status
-        if payload.voice_profile_id is not None:
+        if "voice_profile_id" in provided_fields:
             updates["voice_profile_id"] = payload.voice_profile_id
+        if "character_profile_id" in provided_fields:
+            updates["character_profile_id"] = payload.character_profile_id
         set_clause = ", ".join(f"{key} = ?" for key in updates)
         conn.execute(f"UPDATE segments SET {set_clause} WHERE id = ?", list(updates.values()) + [segment_id])
         conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), segment["project_id"]))
@@ -901,41 +1079,381 @@ def list_voice_profiles(project_id: int, user: dict = Depends(get_current_user))
         return {"items": [dict(row) for row in rows]}
 
 
+@app.get("/api/projects/{project_id}/character-profiles")
+def list_character_profiles(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        rows = conn.execute(
+            f"""
+            {character_query()}
+            WHERE character_profiles.project_id = ?
+            ORDER BY character_profiles.id ASC
+            """,
+            (project_id,),
+        ).fetchall()
+        return {"items": [attach_character_looks(conn, character_profile_payload(row)) for row in rows]}
+
+
+@app.post("/api/projects/{project_id}/character-profiles")
+def create_character_profile(project_id: int, payload: CharacterProfileCreate, user: dict = Depends(get_current_user)) -> dict:
+    now = utc_now()
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        voice = conn.execute("SELECT * FROM voice_profiles WHERE id = ?", (payload.voice_profile_id,)).fetchone()
+        if not voice:
+            raise HTTPException(status_code=404, detail="Voice profile not found")
+        character_id = conn.execute(
+            """
+            INSERT INTO character_profiles (
+                project_id, name, voice_profile_id, display_title, archetype, summary, personality,
+                backstory, catchphrase, default_mood, preset_key, speed_override, style_override,
+                instructions, warmth, intensity, humor, mystery, bravery, discipline, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                payload.name.strip(),
+                payload.voice_profile_id,
+                payload.display_title,
+                payload.archetype,
+                payload.summary,
+                payload.personality,
+                payload.backstory,
+                payload.catchphrase,
+                payload.default_mood,
+                payload.preset_key,
+                payload.speed_override,
+                payload.style_override,
+                payload.instructions,
+                payload.warmth,
+                payload.intensity,
+                payload.humor,
+                payload.mystery,
+                payload.bravery,
+                payload.discipline,
+                now,
+            ),
+        ).lastrowid
+        row = conn.execute(
+            f"""
+            {character_query()}
+            WHERE character_profiles.id = ?
+            """,
+            (character_id,),
+        ).fetchone()
+        response_payload = attach_character_looks(conn, character_profile_payload(row))
+    return {"character_profile": response_payload}
+
+
+@app.patch("/api/character-profiles/{character_profile_id}")
+def update_character_profile(character_profile_id: int, payload: CharacterProfileUpdate, user: dict = Depends(get_current_user)) -> dict:
+    provided_fields = payload.model_fields_set
+    updates = {key: value for key, value in payload.model_dump().items() if key in provided_fields}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No updates provided")
+    with get_conn() as conn:
+        existing = get_character_profile(conn, character_profile_id)
+        if "voice_profile_id" in updates:
+            voice = conn.execute("SELECT * FROM voice_profiles WHERE id = ?", (updates["voice_profile_id"],)).fetchone()
+            if not voice:
+                raise HTTPException(status_code=404, detail="Voice profile not found")
+        set_clause = ", ".join(f"{key} = ?" for key in updates)
+        conn.execute(f"UPDATE character_profiles SET {set_clause} WHERE id = ?", list(updates.values()) + [character_profile_id])
+        row = conn.execute(
+            f"""
+            {character_query()}
+            WHERE character_profiles.id = ?
+            """,
+            (character_profile_id,),
+        ).fetchone()
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), existing["project_id"]))
+        response_payload = attach_character_looks(conn, character_profile_payload(row))
+    return {"character_profile": response_payload}
+
+
+@app.delete("/api/character-profiles/{character_profile_id}")
+def delete_character_profile(character_profile_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        character = dict(get_character_profile(conn, character_profile_id))
+        look_rows = conn.execute("SELECT image_path FROM character_looks WHERE character_profile_id = ?", (character_profile_id,)).fetchall()
+        conn.execute("UPDATE segments SET character_profile_id = NULL, updated_at = ? WHERE character_profile_id = ?", (utc_now(), character_profile_id))
+        conn.execute("DELETE FROM character_profiles WHERE id = ?", (character_profile_id,))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), character["project_id"]))
+    for look_row in look_rows:
+        remove_generated_file(look_row["image_path"])
+    remove_generated_file(character.get("avatar_path"))
+    return {"success": True, "deleted_character_profile_id": character_profile_id}
+
+
+@app.post("/api/character-profiles/{character_profile_id}/avatar")
+async def upload_character_avatar(character_profile_id: int, file: UploadFile = File(...), user: dict = Depends(get_current_user)) -> dict:
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    suffix = Path(file.filename or "avatar.png").suffix.lower() or ".png"
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+        raise HTTPException(status_code=400, detail="Unsupported image type")
+    with get_conn() as conn:
+        character = dict(get_character_profile(conn, character_profile_id))
+        avatar_dir = GENERATED_DIR / "characters" / f"project_{character['project_id']}"
+        avatar_dir.mkdir(parents=True, exist_ok=True)
+        avatar_path = avatar_dir / f"character_{character_profile_id}{suffix}"
+        avatar_path.write_bytes(raw)
+        previous_path = character.get("avatar_path")
+        conn.execute("UPDATE character_profiles SET avatar_path = ? WHERE id = ?", (str(avatar_path), character_profile_id))
+        row = conn.execute(
+            f"""
+            {character_query()}
+            WHERE character_profiles.id = ?
+            """,
+            (character_profile_id,),
+        ).fetchone()
+        response_payload = attach_character_looks(conn, character_profile_payload(row))
+    if previous_path and previous_path != str(avatar_path):
+        remove_generated_file(previous_path)
+    return {"character_profile": response_payload}
+
+
+@app.patch("/api/character-profiles/{character_profile_id}/looks/{slot_index}")
+def update_character_look(character_profile_id: int, slot_index: int, payload: CharacterLookUpdate, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        character = dict(get_character_profile(conn, character_profile_id))
+        row = upsert_character_look(
+            conn,
+            character,
+            slot_index,
+            label=payload.label,
+            source_type="local",
+            source_ref="",
+        )
+    return {"look": character_look_payload(row, slot_index)}
+
+
+@app.post("/api/character-profiles/{character_profile_id}/looks/{slot_index}/upload")
+async def upload_character_look(
+    character_profile_id: int,
+    slot_index: int,
+    file: UploadFile = File(...),
+    label: str = Form(""),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    suffix = Path(file.filename or "look.png").suffix.lower() or ".png"
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+        raise HTTPException(status_code=400, detail="Unsupported image type")
+    with get_conn() as conn:
+        character = dict(get_character_profile(conn, character_profile_id))
+        row = upsert_character_look(
+            conn,
+            character,
+            slot_index,
+            label=label,
+            image_bytes=raw,
+            suffix=suffix,
+            source_type="local",
+            source_ref=file.filename or "",
+        )
+    return {"look": character_look_payload(row, slot_index)}
+
+
+@app.post("/api/character-profiles/{character_profile_id}/looks/{slot_index}/drive-import")
+def import_character_look_from_drive(
+    character_profile_id: int,
+    slot_index: int,
+    payload: CharacterLookImportRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    image_bytes, suffix, source_type, source_ref = download_remote_image(payload.url)
+    with get_conn() as conn:
+        character = dict(get_character_profile(conn, character_profile_id))
+        row = upsert_character_look(
+            conn,
+            character,
+            slot_index,
+            label=payload.label,
+            image_bytes=image_bytes,
+            suffix=suffix,
+            source_type=source_type,
+            source_ref=source_ref,
+        )
+    return {"look": character_look_payload(row, slot_index)}
+
+
+@app.delete("/api/character-profiles/{character_profile_id}/looks/{slot_index}")
+def delete_character_look(character_profile_id: int, slot_index: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        get_character_profile(conn, character_profile_id)
+        existing = conn.execute(
+            "SELECT * FROM character_looks WHERE character_profile_id = ? AND slot_index = ?",
+            (character_profile_id, slot_index),
+        ).fetchone()
+        if existing:
+            conn.execute("DELETE FROM character_looks WHERE id = ?", (existing["id"],))
+            remove_generated_file(existing["image_path"])
+    return {"success": True, "slot_index": slot_index}
+
+
+@app.post("/api/segments/batch-assign-character")
+def batch_assign_character(payload: BatchCharacterAssignRequest, user: dict = Depends(get_current_user)) -> dict:
+    if not payload.segment_ids:
+        raise HTTPException(status_code=400, detail="No segments selected")
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT id, project_id, chapter_id FROM segments WHERE id IN ({','.join('?' for _ in payload.segment_ids)})",
+            payload.segment_ids,
+        ).fetchall()
+        if len(rows) != len(payload.segment_ids):
+            raise HTTPException(status_code=404, detail="Some segments were not found")
+        project_ids = {row["project_id"] for row in rows}
+        if len(project_ids) != 1:
+            raise HTTPException(status_code=400, detail="Segments must belong to the same project")
+        if payload.character_profile_id is not None:
+            character = get_character_profile(conn, payload.character_profile_id)
+            if character["project_id"] != next(iter(project_ids)):
+                raise HTTPException(status_code=400, detail="Character does not belong to this project")
+        now = utc_now()
+        conn.execute(
+            f"UPDATE segments SET character_profile_id = ?, updated_at = ? WHERE id IN ({','.join('?' for _ in payload.segment_ids)})",
+            [payload.character_profile_id, now, *payload.segment_ids],
+        )
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, next(iter(project_ids))))
+    return {"success": True, "segment_count": len(payload.segment_ids)}
+
+
+@app.post("/api/chapters/{chapter_id}/assign-character")
+def assign_chapter_character(chapter_id: int, payload: BatchCharacterAssignRequest, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        chapter = get_chapter(conn, chapter_id)
+        if payload.character_profile_id is not None:
+            character = get_character_profile(conn, payload.character_profile_id)
+            if character["project_id"] != chapter["project_id"]:
+                raise HTTPException(status_code=400, detail="Character does not belong to this project")
+        now = utc_now()
+        conn.execute("UPDATE segments SET character_profile_id = ?, updated_at = ? WHERE chapter_id = ?", (payload.character_profile_id, now, chapter_id))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, chapter["project_id"]))
+        count = conn.execute("SELECT COUNT(*) AS count FROM segments WHERE chapter_id = ?", (chapter_id,)).fetchone()["count"]
+    return {"success": True, "segment_count": count}
+
+
+@app.get("/api/projects/{project_id}/comic-profiles")
+def list_comic_profiles(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        rows = conn.execute(
+            """
+            SELECT * FROM comic_profiles
+            WHERE project_id IS NULL OR project_id = ?
+            ORDER BY project_id IS NOT NULL DESC, id ASC
+            """,
+            (project_id,),
+        ).fetchall()
+        return {"items": [model_profile_payload(row, comic_settings_defaults()) for row in rows]}
+
+
+@app.post("/api/projects/{project_id}/comic-profiles")
+def create_comic_profile(project_id: int, payload: ModelProfileCreate, user: dict = Depends(get_current_user)) -> dict:
+    now = utc_now()
+    settings = merge_settings(payload.settings, comic_settings_defaults())
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        profile_id = conn.execute(
+            """
+            INSERT INTO comic_profiles (project_id, name, settings, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (project_id, payload.name.strip(), json.dumps(settings, ensure_ascii=False), now),
+        ).lastrowid
+        row = conn.execute("SELECT * FROM comic_profiles WHERE id = ?", (profile_id,)).fetchone()
+    return {"profile": model_profile_payload(row, comic_settings_defaults())}
+
+
+@app.get("/api/projects/{project_id}/video-profiles")
+def list_video_profiles(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        rows = conn.execute(
+            """
+            SELECT * FROM video_profiles
+            WHERE project_id IS NULL OR project_id = ?
+            ORDER BY project_id IS NOT NULL DESC, id ASC
+            """,
+            (project_id,),
+        ).fetchall()
+        return {"items": [model_profile_payload(row, video_settings_defaults()) for row in rows]}
+
+
+@app.post("/api/projects/{project_id}/video-profiles")
+def create_video_profile(project_id: int, payload: ModelProfileCreate, user: dict = Depends(get_current_user)) -> dict:
+    now = utc_now()
+    settings = merge_settings(payload.settings, video_settings_defaults())
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        profile_id = conn.execute(
+            """
+            INSERT INTO video_profiles (project_id, name, settings, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (project_id, payload.name.strip(), json.dumps(settings, ensure_ascii=False), now),
+        ).lastrowid
+        row = conn.execute("SELECT * FROM video_profiles WHERE id = ?", (profile_id,)).fetchone()
+    return {"profile": model_profile_payload(row, video_settings_defaults())}
+
+
 @app.get("/api/system/providers")
 def system_providers(user: dict = Depends(get_current_user)) -> dict:
     settings = get_settings()
+    registry = get_model_registry()
+    catalog = get_system_catalog()
+    registry_defaults = get_registry_defaults()
+
+    def configured_for(provider_key: str, provider_payload: dict) -> bool:
+        if provider_key == "macos":
+            return True
+        requires_env = provider_payload.get("requires_env") or ""
+        if not requires_env:
+            return False
+        if provider_key == "openai":
+            return settings.has_openai
+        if provider_key == "elevenlabs":
+            return settings.has_elevenlabs
+        return bool(os.environ.get(requires_env, "").strip())
+
+    providers = {}
+    for provider_key, provider_payload in registry["providers"].items():
+        providers[provider_key] = {
+            "configured": configured_for(provider_key, provider_payload),
+            "label": provider_payload.get("label") or provider_key,
+            "kind": provider_payload.get("kind", []),
+            "requires_env": provider_payload.get("requires_env", ""),
+        }
+        if provider_payload.get("tts_models"):
+            providers[provider_key]["tts_models"] = provider_payload["tts_models"]
+        if provider_payload.get("asr_models"):
+            providers[provider_key]["asr_models"] = provider_payload["asr_models"]
+        if provider_payload.get("tts_voices"):
+            providers[provider_key]["tts_voices"] = provider_payload["tts_voices"]
+
+    providers.setdefault("openai", {})
+    providers["openai"]["default_tts_model"] = settings.openai_tts_model
+    providers["openai"]["default_asr_model"] = settings.openai_asr_model
+    providers.setdefault("elevenlabs", {})
+    providers["elevenlabs"]["default_tts_model"] = settings.elevenlabs_tts_model
+    providers["elevenlabs"]["default_asr_model"] = settings.elevenlabs_asr_model
+
     return {
-        "providers": {
-            "macos": {
-                "configured": True,
-                "label": "macOS say",
-                "kind": ["tts"],
-            },
-            "openai": {
-                "configured": settings.has_openai,
-                "label": "OpenAI",
-                "kind": ["tts", "asr"],
-                "default_tts_model": settings.openai_tts_model,
-                "default_asr_model": settings.openai_asr_model,
-            },
-            "elevenlabs": {
-                "configured": settings.has_elevenlabs,
-                "label": "ElevenLabs",
-                "kind": ["tts", "asr"],
-                "default_tts_model": settings.elevenlabs_tts_model,
-                "default_asr_model": settings.elevenlabs_asr_model,
-            },
-        },
-        "catalog": {
-            "openai_tts_models": OPENAI_TTS_MODELS,
-            "openai_tts_voices": OPENAI_TTS_VOICES,
-            "elevenlabs_tts_models": ELEVENLABS_TTS_MODELS,
-            "elevenlabs_asr_models": ELEVENLABS_ASR_MODELS,
-            "comic": COMIC_MODEL_CATALOG,
-            "video": VIDEO_MODEL_CATALOG,
-        },
+        "providers": providers,
+        "catalog": catalog,
         "defaults": {
             "asr_provider": settings.default_asr_provider,
+            "comic_settings": registry_defaults["comic_settings"],
+            "video_settings": registry_defaults["video_settings"],
+        },
+        "registry": {
+            "version": registry["version"],
+            "path": str(REGISTRY_PATH),
         },
     }
 
@@ -993,7 +1511,7 @@ def update_voice_profile(voice_profile_id: int, payload: VoiceProfileUpdate, use
 def generate_segment(segment_id: int, background: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
     with get_conn() as conn:
         segment = get_segment(conn, segment_id)
-        voice = voice_for_project(conn, segment["project_id"], segment["voice_profile_id"])
+        voice = voice_for_project(conn, segment["project_id"], segment["voice_profile_id"], segment["character_profile_id"])
         job_id = conn.execute(
             """
             INSERT INTO generation_jobs (project_id, chapter_id, segment_id, job_type, status, provider, model, input_text, created_at, updated_at)
@@ -1020,7 +1538,7 @@ def generate_chapter(chapter_id: int, background: BackgroundTasks, user: dict = 
         ).fetchall()
         job_ids: list[int] = []
         for segment in segments:
-            voice = voice_for_project(conn, chapter["project_id"], segment["voice_profile_id"])
+            voice = voice_for_project(conn, chapter["project_id"], segment["voice_profile_id"], segment["character_profile_id"])
             job_id = conn.execute(
                 """
                 INSERT INTO generation_jobs (project_id, chapter_id, segment_id, job_type, status, provider, model, input_text, created_at, updated_at)

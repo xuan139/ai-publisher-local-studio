@@ -109,6 +109,19 @@ chmod +x run_local.sh
 - 這一版會將上述設定保存到 SQLite 的 `projects` 資料中
 - 目前只做配置保存與回顯，尚未直接觸發漫畫或影片生成任務
 
+### 模型註冊表
+
+現在模型選項已改成由 `YAML` 驅動，不再需要為每次新增模型改前後端程式碼。
+
+- 註冊表檔案：`config/model_registry.yaml`
+- 可調整內容：
+  - Provider 清單與顯示名稱
+  - OpenAI / ElevenLabs / macOS 的 TTS / ASR 模型與聲線列表
+  - `漫畫設定 / Video 設定` 的預設值
+  - `漫畫 / Video` 頁下拉框中可選的模型清單
+
+修改完成後，重新啟動本機應用即可生效。
+
 ### 配置方式
 
 ```bash

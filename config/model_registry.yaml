@@ -1,0 +1,232 @@
+version: 1
+
+providers:
+  macos:
+    label: macOS say
+    kind:
+      - tts
+    tts_models:
+      - say
+    tts_voices:
+      - Tingting
+      - Eddy (Chinese (China mainland))
+      - Samantha
+      - Daniel
+
+  openai:
+    label: OpenAI
+    kind:
+      - llm
+      - tts
+      - asr
+      - image
+    requires_env: OPENAI_API_KEY
+    tts_models:
+      - gpt-4o-mini-tts
+      - tts-1
+      - tts-1-hd
+    tts_voices:
+      - alloy
+      - ash
+      - ballad
+      - coral
+      - echo
+      - fable
+      - nova
+      - onyx
+      - sage
+      - shimmer
+      - verse
+    asr_models:
+      - gpt-4o-mini-transcribe
+
+  elevenlabs:
+    label: ElevenLabs
+    kind:
+      - tts
+      - asr
+    requires_env: ELEVENLABS_API_KEY
+    tts_models:
+      - eleven_multilingual_v2
+      - eleven_v3
+      - eleven_flash_v2_5
+      - eleven_turbo_v2_5
+    asr_models:
+      - scribe_v2
+      - scribe_v1
+
+  google:
+    label: Google AI
+    kind:
+      - llm
+      - tts
+      - image
+      - video
+    requires_env: GOOGLE_API_KEY
+
+  anthropic:
+    label: Anthropic
+    kind:
+      - llm
+    requires_env: ANTHROPIC_API_KEY
+
+  xai:
+    label: xAI
+    kind:
+      - llm
+    requires_env: XAI_API_KEY
+
+  deepseek:
+    label: DeepSeek
+    kind:
+      - llm
+    requires_env: DEEPSEEK_API_KEY
+
+  qwen:
+    label: Qwen
+    kind:
+      - llm
+    requires_env: QWEN_API_KEY
+
+  moonshot:
+    label: Moonshot
+    kind:
+      - llm
+    requires_env: MOONSHOT_API_KEY
+
+  runway:
+    label: Runway
+    kind:
+      - video
+    requires_env: RUNWAY_API_KEY
+
+  pika:
+    label: Pika
+    kind:
+      - video
+    requires_env: PIKA_API_KEY
+
+  kling:
+    label: Kling
+    kind:
+      - video
+    requires_env: KLING_API_KEY
+
+defaults:
+  comic_settings:
+    enabled: false
+    script_model: openai:gpt-4.1
+    storyboard_model: google:gemini-2.0-flash
+    image_model: openai:gpt-image-1
+    style_preset: cinematic-ink
+    color_mode: full-color
+    aspect_ratio: "4:5"
+    character_consistency: medium
+    negative_prompt: ""
+
+  video_settings:
+    enabled: false
+    script_model: openai:gpt-4.1
+    shot_model: google:gemini-2.0-flash
+    image_model: openai:gpt-image-1
+    video_model: runway:gen-3
+    subtitle_model: openai:gpt-4.1-mini
+    aspect_ratio: "16:9"
+    duration_seconds: 30
+    motion_style: cinematic
+    negative_prompt: ""
+
+catalog:
+  comic:
+    script_models:
+      - openai:gpt-4.1
+      - openai:gpt-4o
+      - google:gemini-2.0-flash
+      - google:gemini-2.5-pro
+      - anthropic:claude-3.7-sonnet
+      - xai:grok-2
+      - deepseek:deepseek-chat
+      - qwen:qwen-max
+      - moonshot:kimi-k2
+    storyboard_models:
+      - openai:gpt-4.1
+      - google:gemini-2.0-flash
+      - google:gemini-2.5-pro
+      - anthropic:claude-3.7-sonnet
+      - xai:grok-2
+    image_models:
+      - openai:gpt-image-1
+      - bfl:flux-pro
+      - stability:sdxl
+      - google:imagen-3
+      - midjourney:v6
+    style_presets:
+      - cinematic-ink
+      - anime-color
+      - watercolor
+      - noir
+      - manga-screen-tone
+      - cel-shaded
+    color_modes:
+      - full-color
+      - black-white
+      - duotone
+    aspect_ratios:
+      - "1:1"
+      - "4:5"
+      - "3:4"
+      - "16:9"
+    character_consistency_levels:
+      - low
+      - medium
+      - high
+
+  video:
+    script_models:
+      - openai:gpt-4.1
+      - openai:gpt-4o
+      - google:gemini-2.0-flash
+      - google:gemini-2.5-pro
+      - anthropic:claude-3.7-sonnet
+      - xai:grok-2
+      - deepseek:deepseek-chat
+      - qwen:qwen-max
+      - moonshot:kimi-k2
+    shot_models:
+      - openai:gpt-4.1
+      - google:gemini-2.0-flash
+      - google:gemini-2.5-pro
+      - anthropic:claude-3.7-sonnet
+      - xai:grok-2
+    image_models:
+      - openai:gpt-image-1
+      - bfl:flux-pro
+      - stability:sdxl
+      - google:imagen-3
+    video_models:
+      - runway:gen-3
+      - kling:v1.6
+      - pika:2.2
+      - luma:dream-machine
+      - hailuo:minimax-video
+    subtitle_models:
+      - openai:gpt-4.1-mini
+      - openai:gpt-4o-mini
+      - google:gemini-2.0-flash
+      - anthropic:claude-3.5-haiku
+    aspect_ratios:
+      - "16:9"
+      - "9:16"
+      - "1:1"
+      - "4:5"
+    motion_styles:
+      - cinematic
+      - anime
+      - documentary
+      - social-short
+      - trailer
+    duration_options:
+      - 15
+      - 30
+      - 45
+      - 60
