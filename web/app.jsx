@@ -1,4 +1,4 @@
-const { useEffect, useMemo, useState } = React;
+const { useEffect, useMemo, useRef, useState } = React;
 
 const STORAGE_KEY = "ai-publisher-token";
 const NAV_ITEMS = [
@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { key: "characters", label: "角色設定" },
   { key: "comic", label: "漫畫設定" },
   { key: "video", label: "Video 設定" },
-  { key: "generate", label: "生成工作台" },
+  { key: "generate", label: "生成任務" },
   { key: "review", label: "審核校對" },
   { key: "export", label: "匯出交付" },
   { key: "settings", label: "系統設定" },
@@ -528,6 +528,7 @@ function App() {
               await loadProject(selectedProjectId, selectedChapterId);
               showFlash("success", "匯出任務已建立。");
             },
+            requestConfirm,
             showFlash,
           })}
         />
@@ -569,18 +570,85 @@ function App() {
   );
 }
 
-function routeActions({ route, selectedProject, selectedChapter, onCreated, onImportDone, onGenerateDone, onRenderDone, onExportDone, token, showFlash }) {
+function routeActions({ route, selectedProject, selectedChapter, onCreated, onImportDone, onGenerateDone, onRenderDone, onExportDone, token, requestConfirm, showFlash }) {
   if (route === "text" && selectedProject) {
     return <ImportInline token={token} project={selectedProject} onDone={onImportDone} showFlash={showFlash} />;
   }
   if (route === "generate" && selectedChapter) {
     return (
-      <button className="button" onClick={async () => {
-        await apiFetch(`/api/chapters/${selectedChapter.id}/generate`, { method: "POST", token });
-        onGenerateDone();
-      }}>
-        生成本章
-      </button>
+      <>
+        <button className="button" onClick={async () => {
+          await apiFetch(`/api/chapters/${selectedChapter.id}/generate`, { method: "POST", token });
+          onGenerateDone();
+        }}>
+          生成本章
+        </button>
+        <button
+          className="button-secondary"
+          onClick={async () => {
+            if (!selectedProject?.default_voice_profile_id) {
+              showFlash("error", "請先在聲線設定裡設定專案預設聲線。");
+              return;
+            }
+            let preview;
+            try {
+              preview = await apiFetch(`/api/projects/${selectedProject.id}/generate-with-default-voice/preview`, { token });
+            } catch (error) {
+              showFlash("error", error.message || "無法取得生成預估。");
+              return;
+            }
+            requestConfirm({
+              title: "整個專案統一使用預設聲線",
+              message: [
+                `會覆蓋整個專案，共 ${preview.chapter_count} 個章節。`,
+                `將提交 ${preview.queueable_segment_count} 段生成任務。`,
+                `預設聲線：${preview.voice_profile?.name || "未命名聲線"} / ${preview.voice_profile?.provider || "未知"} / ${preview.voice_profile?.model || "未知模型"}。`,
+                preview.cleared_override_count ? `會清除 ${preview.cleared_override_count} 個段落角色或聲線覆寫。` : "目前沒有段落角色或聲線覆寫。",
+                preview.is_elevenlabs ? "目前使用 ElevenLabs。實際 credits 取決於總字符數與生成段數，長文本批量生成請留意額度。" : "",
+              ].filter(Boolean).join(" "),
+              confirmLabel: "清除全專案覆寫並生成",
+              onConfirm: async () => {
+                await apiFetch(`/api/projects/${selectedProject.id}/generate-with-default-voice`, { method: "POST", token });
+                onGenerateDone();
+              },
+            });
+          }}
+        >
+          生成全專案
+        </button>
+        <button
+          className="button-secondary"
+          onClick={async () => {
+            if (!selectedProject?.default_voice_profile_id) {
+              showFlash("error", "請先在聲線設定裡設定專案預設聲線。");
+              return;
+            }
+            let preview;
+            try {
+              preview = await apiFetch(`/api/chapters/${selectedChapter.id}/generate-with-default-voice/preview`, { token });
+            } catch (error) {
+              showFlash("error", error.message || "無法取得生成預估。");
+              return;
+            }
+            requestConfirm({
+              title: "統一使用專案預設聲線",
+              message: [
+                `將提交 ${preview.queueable_segment_count} 段生成任務。`,
+                `預設聲線：${preview.voice_profile?.name || "未命名聲線"} / ${preview.voice_profile?.provider || "未知"} / ${preview.voice_profile?.model || "未知模型"}。`,
+                preview.cleared_override_count ? `會清除 ${preview.cleared_override_count} 個段落角色或聲線覆寫。` : "目前沒有段落角色或聲線覆寫。",
+                preview.is_elevenlabs ? "目前使用 ElevenLabs。實際 credits 取決於總字符數與生成段數，長文本批量生成請留意額度。" : "",
+              ].filter(Boolean).join(" "),
+              confirmLabel: "清除覆寫並生成",
+              onConfirm: async () => {
+                await apiFetch(`/api/chapters/${selectedChapter.id}/generate-with-default-voice`, { method: "POST", token });
+                onGenerateDone();
+              },
+            });
+          }}
+        >
+          預設聲線批量生成
+        </button>
+      </>
     );
   }
   if (route === "export" && selectedChapter) {
@@ -865,13 +933,13 @@ function PageContent(props) {
     return <VideoSettingsPage token={token} project={project} videoProfiles={videoProfiles} refreshProject={refreshProject} showFlash={showFlash} />;
   }
   if (route === "generate") {
-    return <GeneratePage token={token} project={project} selectedChapter={selectedChapter} segments={segments} jobs={jobs} refreshProject={refreshProject} showFlash={showFlash} />;
+    return <GeneratePage token={token} project={project} selectedChapter={selectedChapter} selectedChapterId={selectedChapterId} setSelectedChapterId={setSelectedChapterId} voices={voices} segments={segments} jobs={jobs} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
   }
   if (route === "review") {
     return <ReviewPage token={token} project={project} reviewQueue={reviewQueue} refreshProject={refreshProject} showFlash={showFlash} />;
   }
   if (route === "export") {
-    return <ExportPage token={token} project={project} selectedChapter={selectedChapter} renders={renders} exportsList={exportsList} refreshProject={refreshProject} showFlash={showFlash} />;
+    return <ExportPage token={token} project={project} selectedChapter={selectedChapter} selectedChapterId={selectedChapterId} setSelectedChapterId={setSelectedChapterId} renders={renders} exportsList={exportsList} refreshProject={refreshProject} showFlash={showFlash} />;
   }
   if (route === "settings") {
     return <SettingsPage token={token} project={project} refreshProject={refreshProject} showFlash={showFlash} />;
@@ -1030,6 +1098,7 @@ function ProjectsPage({ projects = [], selectedProject, token, refreshProject, d
 function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setSelectedChapterId, segments, voices, characters, jobs, refreshProject, requestConfirm, showFlash }) {
   const [activeSegmentId, setActiveSegmentId] = useState(null);
   const [segmentBusyAction, setSegmentBusyAction] = useState("");
+  const [voiceBusy, setVoiceBusy] = useState(false);
   const activeSegment = segments.find((segment) => segment.id === activeSegmentId) || segments[0] || null;
   const [draftText, setDraftText] = useState("");
   const [voiceId, setVoiceId] = useState("");
@@ -1186,6 +1255,26 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
     }
   }
 
+  async function updateDefaultVoice(nextVoiceId) {
+    if (!project) return;
+    setVoiceBusy(true);
+    try {
+      await apiFetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        token,
+        body: {
+          default_voice_profile_id: nextVoiceId ? Number(nextVoiceId) : null,
+        },
+      });
+      await refreshProject({ projectId: project.id, chapterId: selectedChapterId || project.chapters?.[0]?.id || null });
+      showFlash("success", "專案預設聲線已更新。");
+    } catch (error) {
+      showFlash("error", error.message || "更新專案預設聲線失敗。");
+    } finally {
+      setVoiceBusy(false);
+    }
+  }
+
   function requestDeleteSegment(segment) {
     const nextSegmentId = segments.find((item) => item.id !== segment.id)?.id || null;
     requestConfirm({
@@ -1234,6 +1323,24 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
             <h3>{selectedChapter?.title || "尚未選擇章節"}</h3>
             <div className="subtext">左側選段，右側儲存可朗讀稿。</div>
           </div>
+        </div>
+        <div className="toolbar" style={{ marginBottom: 10 }}>
+          <label className="subtext" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+            專案預設聲線
+            <select
+              className="select"
+              disabled={voiceBusy || !voices.length}
+              value={project?.default_voice_profile_id ? String(project.default_voice_profile_id) : ""}
+              onChange={(event) => updateDefaultVoice(event.target.value)}
+            >
+              {!voices.length ? <option value="">尚無可用聲線</option> : null}
+              {voices.map((voice) => (
+                <option key={voice.id} value={voice.id}>
+                  {voice.name} / {voice.provider} / {voice.model}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         {!selectedChapter ? (
           <div className="empty-state">請先匯入文本，再選擇章節。</div>
@@ -2605,27 +2712,230 @@ function VideoSettingsPage({ token, project, videoProfiles, refreshProject, show
   );
 }
 
-function GeneratePage({ token, project, selectedChapter, segments, jobs, refreshProject, showFlash }) {
+function GeneratePage({ token, project, selectedChapter, selectedChapterId, setSelectedChapterId, voices, segments, jobs, refreshProject, requestConfirm, showFlash }) {
+  const [busyAction, setBusyAction] = useState("");
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [segmentPage, setSegmentPage] = useState(1);
+  const [segmentPageSize, setSegmentPageSize] = useState(10);
+  const [jobPage, setJobPage] = useState(1);
+  const [jobPageSize, setJobPageSize] = useState(10);
+
+  const totalSegmentPages = Math.max(1, Math.ceil(segments.length / segmentPageSize));
+  const pagedSegments = useMemo(() => {
+    const start = (segmentPage - 1) * segmentPageSize;
+    return segments.slice(start, start + segmentPageSize);
+  }, [segments, segmentPage, segmentPageSize]);
+  const totalJobPages = Math.max(1, Math.ceil(jobs.length / jobPageSize));
+  const pagedJobs = useMemo(() => {
+    const start = (jobPage - 1) * jobPageSize;
+    return jobs.slice(start, start + jobPageSize);
+  }, [jobs, jobPage, jobPageSize]);
+
+  useEffect(() => {
+    setSegmentPage(1);
+  }, [selectedChapter?.id, segments.length]);
+
+  useEffect(() => {
+    setJobPage(1);
+  }, [selectedChapter?.id, jobs.length]);
+
+  useEffect(() => {
+    if (segmentPage > totalSegmentPages) {
+      setSegmentPage(totalSegmentPages);
+    }
+  }, [segmentPage, totalSegmentPages]);
+
+  useEffect(() => {
+    if (jobPage > totalJobPages) {
+      setJobPage(totalJobPages);
+    }
+  }, [jobPage, totalJobPages]);
+
+  function previewSummaryLines(preview) {
+    const voice = preview.voice_profile || {};
+    const lines = [
+      `將提交 ${preview.queueable_segment_count} 段生成任務。`,
+      `預設聲線：${voice.name || "未命名聲線"} / ${voice.provider || "未知"} / ${voice.model || "未知模型"}。`,
+    ];
+    if (preview.chapter_count) {
+      lines.unshift(`會覆蓋整個專案，共 ${preview.chapter_count} 個章節。`);
+    }
+    if (preview.cleared_override_count) {
+      lines.push(`會清除 ${preview.cleared_override_count} 個段落角色或聲線覆寫。`);
+    } else {
+      lines.push("目前沒有段落角色或聲線覆寫。");
+    }
+    if (preview.is_elevenlabs) {
+      lines.push("目前使用 ElevenLabs。實際 credits 取決於總字符數與生成段數，長文本批量生成請留意額度。");
+    }
+    return lines.join(" ");
+  }
+
+  async function generateSelectedChapter() {
+    if (!selectedChapter) return;
+    setBusyAction("chapter");
+    try {
+      await apiFetch(`/api/chapters/${selectedChapter.id}/generate`, { method: "POST", token });
+      await refreshProject({ chapterId: selectedChapter.id });
+      showFlash("success", "整章生成任務已建立。");
+    } catch (error) {
+      showFlash("error", error.message || "整章生成失敗。");
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  async function requestGenerateWithDefaultVoice() {
+    if (!selectedChapter) return;
+    if (!project?.default_voice_profile_id) {
+      showFlash("error", "請先在聲線設定裡設定專案預設聲線。");
+      return;
+    }
+    let preview;
+    try {
+      preview = await apiFetch(`/api/chapters/${selectedChapter.id}/generate-with-default-voice/preview`, { token });
+    } catch (error) {
+      showFlash("error", error.message || "無法取得生成預估。");
+      return;
+    }
+    requestConfirm({
+      title: "統一使用專案預設聲線",
+      message: previewSummaryLines(preview),
+      confirmLabel: "清除覆寫並生成",
+      onConfirm: async () => {
+        setBusyAction("default");
+        try {
+          const payload = await apiFetch(`/api/chapters/${selectedChapter.id}/generate-with-default-voice`, { method: "POST", token });
+          await refreshProject({ chapterId: selectedChapter.id });
+          showFlash("success", `已建立 ${payload.job_ids.length} 筆任務，並清除 ${payload.cleared_override_count} 個覆寫。`);
+        } finally {
+          setBusyAction("");
+        }
+      },
+    });
+  }
+
+  async function requestGenerateProjectWithDefaultVoice() {
+    if (!project) return;
+    if (!project.default_voice_profile_id) {
+      showFlash("error", "請先在聲線設定裡設定專案預設聲線。");
+      return;
+    }
+    let preview;
+    try {
+      preview = await apiFetch(`/api/projects/${project.id}/generate-with-default-voice/preview`, { token });
+    } catch (error) {
+      showFlash("error", error.message || "無法取得生成預估。");
+      return;
+    }
+    requestConfirm({
+      title: "整個專案統一使用預設聲線",
+      message: previewSummaryLines(preview),
+      confirmLabel: "清除全專案覆寫並生成",
+      onConfirm: async () => {
+        setBusyAction("project-default");
+        try {
+          const payload = await apiFetch(`/api/projects/${project.id}/generate-with-default-voice`, { method: "POST", token });
+          await refreshProject({ projectId: project.id, chapterId: selectedChapter?.id || project.chapters?.[0]?.id || null });
+          showFlash("success", `已為 ${payload.chapter_count} 個章節建立 ${payload.job_ids.length} 筆任務，並清除 ${payload.cleared_override_count} 個覆寫。`);
+        } finally {
+          setBusyAction("");
+        }
+      },
+    });
+  }
+
+  async function updateDefaultVoice(nextVoiceId) {
+    if (!project) return;
+    setVoiceBusy(true);
+    try {
+      await apiFetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        token,
+        body: {
+          default_voice_profile_id: nextVoiceId ? Number(nextVoiceId) : null,
+        },
+      });
+      await refreshProject({ projectId: project.id, chapterId: selectedChapterId || project.chapters?.[0]?.id || null });
+      showFlash("success", "專案預設聲線已更新。");
+    } catch (error) {
+      showFlash("error", error.message || "更新專案預設聲線失敗。");
+    } finally {
+      setVoiceBusy(false);
+    }
+  }
+
   return (
     <div className="grid two">
       <section className="panel">
         <div className="panel-head">
           <div>
-            <h2>生成工作台</h2>
+            <h2>生成任務</h2>
             <div className="subtext">本機版使用 FastAPI BackgroundTasks，不另外啟動 worker。</div>
           </div>
-          {selectedChapter ? <span className="tag brand">{selectedChapter.title}</span> : null}
+          {selectedChapter ? <span className="tag brand">目前：{selectedChapter.order_index}. {selectedChapter.title}</span> : null}
+        </div>
+        <div className="toolbar" style={{ marginBottom: 10 }}>
+          <label className="subtext" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+            章節
+            <select
+              className="select"
+              value={selectedChapterId || ""}
+              onChange={(event) => setSelectedChapterId(Number(event.target.value))}
+            >
+              {(project?.chapters || []).map((chapter) => (
+                <option key={chapter.id} value={chapter.id}>
+                  {chapter.order_index}. {chapter.title} ({chapter.segment_count} 段)
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="subtext" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+            預設聲線
+            <select
+              className="select"
+              disabled={voiceBusy || !voices.length}
+              value={project?.default_voice_profile_id ? String(project.default_voice_profile_id) : ""}
+              onChange={(event) => updateDefaultVoice(event.target.value)}
+            >
+              {!voices.length ? <option value="">尚無可用聲線</option> : null}
+              {voices.map((voice) => (
+                <option key={voice.id} value={voice.id}>
+                  {voice.name} / {voice.provider} / {voice.model}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="toolbar">
           {selectedChapter ? (
-            <button className="button" onClick={async () => {
-              await apiFetch(`/api/chapters/${selectedChapter.id}/generate`, { method: "POST", token });
-              await refreshProject();
-              showFlash("success", "整章生成任務已建立。");
-            }}>
-              生成目前章節
-            </button>
+            <>
+              <button className="button" disabled={busyAction !== ""} onClick={generateSelectedChapter}>
+                {busyAction === "chapter" ? "建立任務中..." : "生成目前章節"}
+              </button>
+              <button className="button-secondary" disabled={busyAction !== ""} onClick={requestGenerateWithDefaultVoice}>
+                {busyAction === "default" ? "建立任務中..." : "使用專案預設聲線批量生成"}
+              </button>
+              <button className="button-secondary" disabled={busyAction !== ""} onClick={requestGenerateProjectWithDefaultVoice}>
+                {busyAction === "project-default" ? "建立任務中..." : "整個專案統一聲線批量生成"}
+              </button>
+            </>
           ) : null}
+        </div>
+        <div className="pager-row">
+          <div className="subtext">共 {segments.length} 段，第 {segmentPage} / {totalSegmentPages} 頁</div>
+          <div className="toolbar" style={{ marginBottom: 0 }}>
+            <label className="subtext">
+              每頁
+              <select className="select pager-select" value={segmentPageSize} onChange={(event) => setSegmentPageSize(Number(event.target.value))}>
+                {SEGMENT_PAGE_SIZES.map((size) => (
+                  <option key={size} value={size}>{size} 段</option>
+                ))}
+              </select>
+            </label>
+            <button className="button-secondary" disabled={segmentPage <= 1} onClick={() => setSegmentPage((current) => Math.max(1, current - 1))}>上一頁</button>
+            <button className="button-secondary" disabled={segmentPage >= totalSegmentPages} onClick={() => setSegmentPage((current) => Math.min(totalSegmentPages, current + 1))}>下一頁</button>
+          </div>
         </div>
         <table className="table">
           <thead>
@@ -2636,7 +2946,7 @@ function GeneratePage({ token, project, selectedChapter, segments, jobs, refresh
             </tr>
           </thead>
           <tbody>
-            {segments.map((segment) => (
+            {pagedSegments.map((segment) => (
               <tr key={segment.id}>
                 <td>
                   <strong>{segment.order_index}</strong>
@@ -2657,6 +2967,21 @@ function GeneratePage({ token, project, selectedChapter, segments, jobs, refresh
             <div className="subtext">最近 80 筆任務紀錄。</div>
           </div>
         </div>
+        <div className="pager-row">
+          <div className="subtext">共 {jobs.length} 筆，第 {jobPage} / {totalJobPages} 頁</div>
+          <div className="toolbar" style={{ marginBottom: 0 }}>
+            <label className="subtext">
+              每頁
+              <select className="select pager-select" value={jobPageSize} onChange={(event) => setJobPageSize(Number(event.target.value))}>
+                {SEGMENT_PAGE_SIZES.map((size) => (
+                  <option key={size} value={size}>{size} 筆</option>
+                ))}
+              </select>
+            </label>
+            <button className="button-secondary" disabled={jobPage <= 1} onClick={() => setJobPage((current) => Math.max(1, current - 1))}>上一頁</button>
+            <button className="button-secondary" disabled={jobPage >= totalJobPages} onClick={() => setJobPage((current) => Math.min(totalJobPages, current + 1))}>下一頁</button>
+          </div>
+        </div>
         <table className="table">
           <thead>
             <tr>
@@ -2667,7 +2992,7 @@ function GeneratePage({ token, project, selectedChapter, segments, jobs, refresh
             </tr>
           </thead>
           <tbody>
-            {jobs.map((job) => (
+            {pagedJobs.map((job) => (
               <tr key={job.id}>
                 <td>
                   <strong>{jobTypeLabel(job.job_type)}</strong>
@@ -2690,14 +3015,51 @@ function ReviewPage({ token, reviewQueue, refreshProject, showFlash }) {
   const [issues, setIssues] = useState([]);
   const [takes, setTakes] = useState([]);
   const [newIssue, setNewIssue] = useState({ issue_type: "manual_review", severity: "medium", description: "" });
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewPageSize, setReviewPageSize] = useState(10);
 
   const current = reviewQueue.find((segment) => segment.id === selectedId) || reviewQueue[0] || null;
+  const totalReviewPages = Math.max(1, Math.ceil(reviewQueue.length / reviewPageSize));
+  const pagedReviewQueue = useMemo(() => {
+    const start = (reviewPage - 1) * reviewPageSize;
+    return reviewQueue.slice(start, start + reviewPageSize);
+  }, [reviewQueue, reviewPage, reviewPageSize]);
 
   useEffect(() => {
     if (!selectedId && reviewQueue[0]) {
       setSelectedId(reviewQueue[0].id);
     }
   }, [reviewQueue, selectedId]);
+
+  useEffect(() => {
+    setReviewPage(1);
+  }, [reviewQueue.length]);
+
+  useEffect(() => {
+    if (reviewPage > totalReviewPages) {
+      setReviewPage(totalReviewPages);
+    }
+  }, [reviewPage, totalReviewPages]);
+
+  useEffect(() => {
+    if (!current) return;
+    const index = reviewQueue.findIndex((segment) => segment.id === current.id);
+    if (index < 0) return;
+    const nextPage = Math.floor(index / reviewPageSize) + 1;
+    if (nextPage !== reviewPage) {
+      setReviewPage(nextPage);
+    }
+  }, [current?.id, reviewPage, reviewPageSize, reviewQueue]);
+
+  function goToReviewPage(nextPage) {
+    const targetPage = Math.max(1, Math.min(totalReviewPages, nextPage));
+    const start = (targetPage - 1) * reviewPageSize;
+    const nextSegment = reviewQueue[start] || null;
+    setReviewPage(targetPage);
+    if (nextSegment) {
+      setSelectedId(nextSegment.id);
+    }
+  }
 
   useEffect(() => {
     if (current) {
@@ -2716,7 +3078,7 @@ function ReviewPage({ token, reviewQueue, refreshProject, showFlash }) {
   }, [current?.id, token]);
 
   if (!reviewQueue.length) {
-    return <div className="empty-state">目前沒有待審核段落。請先到生成工作台建立音訊。</div>;
+    return <div className="empty-state">目前沒有待審核段落。請先到生成任務建立音訊。</div>;
   }
 
   return (
@@ -2728,8 +3090,23 @@ function ReviewPage({ token, reviewQueue, refreshProject, showFlash }) {
             <div className="subtext">有問題的段落優先。</div>
           </div>
         </div>
+        <div className="pager-row">
+          <div className="subtext">共 {reviewQueue.length} 段，第 {reviewPage} / {totalReviewPages} 頁</div>
+          <div className="toolbar" style={{ marginBottom: 0 }}>
+            <label className="subtext">
+              每頁
+              <select className="select pager-select" value={reviewPageSize} onChange={(event) => setReviewPageSize(Number(event.target.value))}>
+                {SEGMENT_PAGE_SIZES.map((size) => (
+                  <option key={size} value={size}>{size} 段</option>
+                ))}
+              </select>
+            </label>
+            <button className="button-secondary" disabled={reviewPage <= 1} onClick={() => goToReviewPage(reviewPage - 1)}>上一頁</button>
+            <button className="button-secondary" disabled={reviewPage >= totalReviewPages} onClick={() => goToReviewPage(reviewPage + 1)}>下一頁</button>
+          </div>
+        </div>
         <div className="list">
-          {reviewQueue.map((segment) => (
+          {pagedReviewQueue.map((segment) => (
             <button key={segment.id} className={`project-button ${current?.id === segment.id ? "active" : ""}`} onClick={() => setSelectedId(segment.id)}>
               <div className="title-row">
                 <strong>段落 {segment.order_index}</strong>
@@ -2855,7 +3232,7 @@ function ReviewPage({ token, reviewQueue, refreshProject, showFlash }) {
   );
 }
 
-function ExportPage({ token, project, selectedChapter, renders, exportsList, refreshProject, showFlash }) {
+function ExportPage({ token, project, selectedChapter, selectedChapterId, setSelectedChapterId, renders, exportsList, refreshProject, showFlash }) {
   return (
     <div className="grid two">
       <section className="panel">
@@ -2864,7 +3241,23 @@ function ExportPage({ token, project, selectedChapter, renders, exportsList, ref
             <h2>章節渲染</h2>
             <div className="subtext">先把已通過的段落拼成章節 wav。</div>
           </div>
-          {selectedChapter ? <span className="tag brand">{selectedChapter.title}</span> : null}
+          {selectedChapter ? <span className="tag brand">目前：{selectedChapter.order_index}. {selectedChapter.title}</span> : null}
+        </div>
+        <div className="toolbar" style={{ marginBottom: 10 }}>
+          <label className="subtext" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+            章節
+            <select
+              className="select"
+              value={selectedChapterId || ""}
+              onChange={(event) => setSelectedChapterId(Number(event.target.value))}
+            >
+              {(project?.chapters || []).map((chapter) => (
+                <option key={chapter.id} value={chapter.id}>
+                  {chapter.order_index}. {chapter.title} ({chapter.segment_count} 段)
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="toolbar">
           {selectedChapter ? (
@@ -3136,10 +3529,92 @@ function ProjectCreateModal({ open, token, onClose, onCreated, showFlash }) {
 function ImportInline({ token, project, onDone, showFlash }) {
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [localPath, setLocalPath] = useState("");
+  const inputRef = useRef(null);
+
+  function handleFiles(fileList) {
+    const nextFile = fileList?.[0] || null;
+    setFile(nextFile);
+    setDragActive(false);
+  }
 
   return (
-    <div className="toolbar">
-      <input className="file-input" type="file" accept=".txt,.md,.docx" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+    <div className="toolbar import-toolbar">
+      <div
+        className={`import-dropzone ${dragActive ? "active" : ""}`}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragActive(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          if (event.currentTarget === event.target) {
+            setDragActive(false);
+          }
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          handleFiles(event.dataTransfer?.files);
+        }}
+      >
+        <div className="import-dropzone-title">拖曳 `.epub / .html / .xhtml / .txt / .md / .docx` 到這裡</div>
+        <div className="subtext">如果系統檔案選擇器不讓你選檔，直接把檔案拖進來。</div>
+        <div className="toolbar" style={{ marginTop: 10 }}>
+          <button className="button button-secondary" type="button" onClick={() => inputRef.current?.click()}>
+            選擇檔案
+          </button>
+          <div className="subtext">
+            {file ? `目前檔案：${file.name}` : "尚未選擇檔案"}
+          </div>
+        </div>
+      </div>
+      <div className="field">
+        <label>或直接貼本機檔案路徑</label>
+        <div className="toolbar">
+          <input
+            className="input"
+            placeholder="/Users/.../book.epub 或 /Users/.../chapter.xhtml"
+            value={localPath}
+            onChange={(event) => setLocalPath(event.target.value)}
+          />
+          <button
+            className="button button-secondary"
+            disabled={!localPath.trim() || busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await apiFetch(`/api/projects/${project.id}/import-local`, {
+                  method: "POST",
+                  token,
+                  body: { path: localPath.trim() },
+                });
+                setFile(null);
+                setLocalPath("");
+                onDone();
+              } catch (error) {
+                showFlash("error", error.message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "匯入中..." : "從路徑匯入"}
+          </button>
+        </div>
+        <div className="subtext">支援 `.epub / .html / .xhtml / .txt / .md / .docx`，也可以直接貼 Finder 裡的完整檔案路徑。</div>
+      </div>
+      <input
+        ref={inputRef}
+        className="file-input"
+        type="file"
+        style={{ display: "none" }}
+        onChange={(event) => handleFiles(event.target.files)}
+      />
       <button className="button" disabled={!file || busy} onClick={async () => {
         if (!file) return;
         setBusy(true);
@@ -3151,6 +3626,8 @@ function ImportInline({ token, project, onDone, showFlash }) {
             token,
             formData,
           });
+          setFile(null);
+          setLocalPath("");
           onDone();
         } catch (error) {
           showFlash("error", error.message);

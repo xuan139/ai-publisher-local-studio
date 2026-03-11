@@ -18,7 +18,7 @@
 
 ## 主要能力
 
-- 支援 `.txt / .md / .docx` 文本匯入
+- 支援 `.txt / .md / .docx / .epub / .html / .xhtml` 文本匯入
 - 自動拆章拆段
 - `source_text / tts_text` 雙軌編輯
 - 聲線設定與段落級覆寫

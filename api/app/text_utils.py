@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import posixpath
 import re
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
 
 
@@ -21,7 +22,27 @@ def extract_text_from_upload(filename: str, raw: bytes) -> str:
         return decode_text(raw)
     if suffix == ".docx":
         return extract_docx_text(raw)
+    if suffix in {".html", ".xhtml", ".htm"}:
+        title, body = extract_html_document(raw)
+        if body:
+            return f"{title}\n\n{body}".strip() if title else body
+        raise ValueError("HTML file does not contain readable text content")
     raise ValueError(f"Unsupported file type: {suffix}")
+
+
+def extract_chapters_from_upload(filename: str, raw: bytes) -> list[tuple[str, str]]:
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".epub":
+        chapters = extract_epub_chapters(raw)
+        if chapters:
+            return chapters
+        raise ValueError("EPUB file does not contain readable chapters")
+    if suffix in {".html", ".xhtml", ".htm"}:
+        title, body = extract_html_document(raw)
+        if body:
+            return [(title or "Chapter 1", body)]
+        raise ValueError("HTML file does not contain readable text content")
+    return split_into_chapters(extract_text_from_upload(filename, raw))
 
 
 def extract_docx_text(raw: bytes) -> str:
@@ -44,6 +65,174 @@ def io_bytes(raw: bytes):
     from io import BytesIO
 
     return BytesIO(raw)
+
+
+def extract_epub_chapters(raw: bytes) -> list[tuple[str, str]]:
+    with zipfile.ZipFile(io_bytes(raw)) as archive:
+        package_path = find_epub_package_path(archive)
+        package_root = ElementTree.fromstring(archive.read(package_path))
+        manifest = parse_epub_manifest(package_root)
+        spine = parse_epub_spine(package_root)
+        base_dir = PurePosixPath(package_path).parent
+        chapters: list[tuple[str, str]] = []
+
+        for item_id in spine:
+            item = manifest.get(item_id)
+            if not item or "nav" in item["properties"]:
+                continue
+            href = item["href"]
+            media_type = item["media_type"]
+            if media_type not in {"application/xhtml+xml", "application/xml", "text/html"} and not href.lower().endswith(
+                (".xhtml", ".html", ".htm")
+            ):
+                continue
+            document_path = normalize_epub_path(base_dir, href)
+            try:
+                document_bytes = archive.read(document_path)
+            except KeyError:
+                continue
+            title, body = extract_epub_document(document_bytes)
+            if not body:
+                continue
+            chapter_title = title or f"Chapter {len(chapters) + 1}"
+            chapters.append((chapter_title, body))
+
+        return chapters
+
+
+def find_epub_package_path(archive: zipfile.ZipFile) -> str:
+    try:
+        container_xml = archive.read("META-INF/container.xml")
+    except KeyError as exc:
+        raise ValueError("EPUB is missing META-INF/container.xml") from exc
+    root = ElementTree.fromstring(container_xml)
+    for node in root.iter():
+        if tag_name(node.tag) == "rootfile":
+            full_path = (node.attrib.get("full-path") or "").strip()
+            if full_path:
+                return full_path
+    raise ValueError("EPUB package path not found")
+
+
+def parse_epub_manifest(root: ElementTree.Element) -> dict[str, dict[str, object]]:
+    manifest: dict[str, dict[str, object]] = {}
+    for node in root.iter():
+        if tag_name(node.tag) != "item":
+            continue
+        item_id = (node.attrib.get("id") or "").strip()
+        href = (node.attrib.get("href") or "").strip()
+        if not item_id or not href:
+            continue
+        manifest[item_id] = {
+            "href": href,
+            "media_type": (node.attrib.get("media-type") or "").strip(),
+            "properties": {entry for entry in (node.attrib.get("properties") or "").split() if entry},
+        }
+    return manifest
+
+
+def parse_epub_spine(root: ElementTree.Element) -> list[str]:
+    spine: list[str] = []
+    for node in root.iter():
+        if tag_name(node.tag) != "itemref":
+            continue
+        item_id = (node.attrib.get("idref") or "").strip()
+        if item_id:
+            spine.append(item_id)
+    return spine
+
+
+def normalize_epub_path(base_dir: PurePosixPath, href: str) -> str:
+    joined = posixpath.normpath(posixpath.join(base_dir.as_posix(), href))
+    return joined.lstrip("/")
+
+
+def extract_epub_document(raw: bytes) -> tuple[str, str]:
+    root = ElementTree.fromstring(raw)
+    title = ""
+    body = None
+
+    for node in root.iter():
+        name = tag_name(node.tag)
+        if name == "title" and not title:
+            title = normalize_inline_text("".join(node.itertext()))
+        if name == "body":
+            body = node
+            break
+
+    if body is None:
+        body = root
+
+    blocks: list[str] = []
+    heading = ""
+    for node in body.iter():
+        name = tag_name(node.tag)
+        if name in {"script", "style", "svg", "math"}:
+            continue
+        if name in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            text = normalize_inline_text("".join(node.itertext()))
+            if text:
+                if not heading:
+                    heading = text
+                if not blocks or blocks[-1] != text:
+                    blocks.append(text)
+            continue
+        if name in {"p", "li", "blockquote", "pre"}:
+            text = normalize_inline_text("".join(node.itertext()))
+            if text and (not blocks or blocks[-1] != text):
+                blocks.append(text)
+
+    document_title = heading or title
+    if document_title and blocks and blocks[0] == document_title:
+        blocks = blocks[1:]
+
+    body_text = "\n\n".join(blocks).strip()
+    if not body_text:
+        fallback = normalize_inline_text(" ".join(body.itertext()))
+        if fallback and fallback != document_title:
+            body_text = fallback
+
+    return document_title, body_text
+
+
+def extract_html_document(raw: bytes) -> tuple[str, str]:
+    text = decode_text(raw).strip()
+    if not text:
+        return "", ""
+    try:
+        return extract_epub_document(text.encode("utf-8"))
+    except ElementTree.ParseError:
+        wrapped = f"<html><body>{text}</body></html>"
+        try:
+            return extract_epub_document(wrapped.encode("utf-8"))
+        except ElementTree.ParseError:
+            plain = strip_html_tags(text)
+            return "", plain
+
+
+def strip_html_tags(text: str) -> str:
+    normalized = re.sub(r"(?is)<(script|style).*?>.*?</\\1>", " ", text)
+    normalized = re.sub(r"(?i)<br\\s*/?>", "\n", normalized)
+    normalized = re.sub(r"(?i)</p\\s*>", "\n\n", normalized)
+    normalized = re.sub(r"(?i)</div\\s*>", "\n", normalized)
+    normalized = re.sub(r"(?i)</li\\s*>", "\n", normalized)
+    normalized = re.sub(r"<[^>]+>", " ", normalized)
+    normalized = re.sub(r"&nbsp;", " ", normalized)
+    normalized = re.sub(r"&amp;", "&", normalized)
+    normalized = re.sub(r"&lt;", "<", normalized)
+    normalized = re.sub(r"&gt;", ">", normalized)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    normalized = re.sub(r"[ \t]+", " ", normalized)
+    return normalized.strip()
+
+
+def normalize_inline_text(text: str) -> str:
+    collapsed = re.sub(r"\s+", " ", text or "").strip()
+    return collapsed
+
+
+def tag_name(tag: str) -> str:
+    return tag.split("}", 1)[-1] if "}" in tag else tag
 
 
 CHAPTER_PATTERNS = [
@@ -119,4 +308,3 @@ def normalize_text(text: str) -> str:
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
-

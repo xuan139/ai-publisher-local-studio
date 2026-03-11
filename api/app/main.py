@@ -33,6 +33,7 @@ from .schemas import (
     LoginRequest,
     ModelProfileCreate,
     ProjectCreate,
+    ProjectImportLocalRequest,
     ProjectUpdate,
     RejectRequest,
     SegmentUpdate,
@@ -40,7 +41,7 @@ from .schemas import (
     VoiceProfileUpdate,
 )
 from .security import create_token, verify_password
-from .text_utils import extract_text_from_upload, split_into_chapters, split_into_segments
+from .text_utils import extract_chapters_from_upload, split_into_segments
 
 WEB_DIR = BASE_DIR.parent / "web"
 APP_TITLE = "AI Publisher Local Studio"
@@ -580,6 +581,50 @@ def remove_generated_tree(path: Path) -> None:
     prune_empty_generated_parents(resolved.parent)
 
 
+def import_project_document(project_id: int, filename: str, raw: bytes, user_id: int) -> int:
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    try:
+        chapters = extract_chapters_from_upload(filename or "upload.txt", raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        remove_generated_tree(GENERATED_DIR / "audio" / f"project_{project_id}")
+        remove_generated_tree(GENERATED_DIR / "renders" / f"project_{project_id}")
+        remove_generated_tree(GENERATED_DIR / "exports" / f"project_{project_id}")
+        remove_generated_tree(GENERATED_DIR / "imports" / f"project_{project_id}")
+        conn.execute("DELETE FROM chapters WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM export_tasks WHERE project_id = ?", (project_id,))
+        now = utc_now()
+        import_dir = GENERATED_DIR / "imports" / f"project_{project_id}"
+        import_dir.mkdir(parents=True, exist_ok=True)
+        import_path = import_dir / (filename or f"project_{project_id}.txt")
+        import_path.write_bytes(raw)
+        for chapter_index, (title, body) in enumerate(chapters, start=1):
+            chapter_id = conn.execute(
+                """
+                INSERT INTO chapters (project_id, title, order_index, source_text, tts_text, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)
+                """,
+                (project_id, title, chapter_index, body, body, now, now),
+            ).lastrowid
+            segments = split_into_segments(body)
+            for segment_index, segment_text in enumerate(segments, start=1):
+                conn.execute(
+                    """
+                    INSERT INTO segments (project_id, chapter_id, order_index, source_text, tts_text, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, 'ready', ?, ?)
+                    """,
+                    (project_id, chapter_id, segment_index, segment_text, segment_text, now, now),
+                )
+        conn.execute("UPDATE projects SET status = 'active', updated_at = ? WHERE id = ?", (now, project_id))
+        log_activity(conn, user_id, "project", project_id, "import", filename or "")
+
+    return len(chapters)
+
+
 def artifact_paths_from_query(conn: sqlite3.Connection, query: str, params: tuple) -> set[Path]:
     rows = conn.execute(query, params).fetchall()
     paths: set[Path] = set()
@@ -712,6 +757,162 @@ def run_segment_generation(job_id: int) -> None:
                 "UPDATE segments SET status = 'rejected', updated_at = ? WHERE id = ?",
                 (utc_now(), segment["id"]),
             )
+
+
+def queue_chapter_generation_jobs(
+    conn: sqlite3.Connection,
+    chapter: sqlite3.Row | dict,
+    *,
+    force_project_default_voice: bool = False,
+) -> tuple[list[int], int]:
+    chapter_payload = dict(chapter)
+    chapter_id = chapter_payload["id"]
+    project_id = chapter_payload["project_id"]
+    cleared_override_count = 0
+
+    if force_project_default_voice:
+        project = get_project(conn, project_id)
+        if not project["default_voice_profile_id"]:
+            raise HTTPException(status_code=400, detail="請先設定專案預設聲線")
+        cleared_override_count = conn.execute(
+            """
+            SELECT COUNT(*) AS value
+            FROM segments
+            WHERE chapter_id = ? AND (voice_profile_id IS NOT NULL OR character_profile_id IS NOT NULL)
+            """,
+            (chapter_id,),
+        ).fetchone()["value"]
+        conn.execute(
+            """
+            UPDATE segments
+            SET voice_profile_id = NULL,
+                character_profile_id = NULL,
+                updated_at = ?
+            WHERE chapter_id = ?
+            """,
+            (utc_now(), chapter_id),
+        )
+
+    segments = conn.execute(
+        """
+        SELECT * FROM segments
+        WHERE chapter_id = ? AND COALESCE(tts_text, '') <> ''
+        ORDER BY order_index
+        """,
+        (chapter_id,),
+    ).fetchall()
+    job_ids: list[int] = []
+    for segment in segments:
+        voice = voice_for_project(conn, project_id, segment["voice_profile_id"], segment["character_profile_id"])
+        job_id = conn.execute(
+            """
+            INSERT INTO generation_jobs (project_id, chapter_id, segment_id, job_type, status, provider, model, input_text, created_at, updated_at)
+            VALUES (?, ?, ?, 'generate_segment', 'pending', ?, ?, ?, ?, ?)
+            """,
+            (project_id, chapter_id, segment["id"], voice["provider"], voice["model"], segment["tts_text"], utc_now(), utc_now()),
+        ).lastrowid
+        conn.execute("UPDATE segments SET status = 'queued', updated_at = ? WHERE id = ?", (utc_now(), segment["id"]))
+        job_ids.append(job_id)
+    return job_ids, cleared_override_count
+
+
+def queue_project_generation_jobs(
+    conn: sqlite3.Connection,
+    project_id: int,
+    *,
+    force_project_default_voice: bool = False,
+) -> tuple[list[int], int, int]:
+    get_project(conn, project_id)
+    chapters = conn.execute(
+        "SELECT * FROM chapters WHERE project_id = ? ORDER BY order_index, id",
+        (project_id,),
+    ).fetchall()
+    all_job_ids: list[int] = []
+    cleared_override_count = 0
+    chapter_count = 0
+    for chapter in chapters:
+        job_ids, cleared_count = queue_chapter_generation_jobs(
+            conn,
+            chapter,
+            force_project_default_voice=force_project_default_voice,
+        )
+        if job_ids:
+            chapter_count += 1
+            all_job_ids.extend(job_ids)
+        cleared_override_count += cleared_count
+    return all_job_ids, cleared_override_count, chapter_count
+
+
+def generation_preview_for_chapter(conn: sqlite3.Connection, chapter_id: int) -> dict:
+    chapter = get_chapter(conn, chapter_id)
+    project = get_project(conn, chapter["project_id"])
+    if not project["default_voice_profile_id"]:
+        raise HTTPException(status_code=400, detail="請先設定專案預設聲線")
+    voice = conn.execute("SELECT * FROM voice_profiles WHERE id = ?", (project["default_voice_profile_id"],)).fetchone()
+    queueable_segment_count = conn.execute(
+        """
+        SELECT COUNT(*) AS value
+        FROM segments
+        WHERE chapter_id = ? AND COALESCE(tts_text, '') <> ''
+        """,
+        (chapter_id,),
+    ).fetchone()["value"]
+    cleared_override_count = conn.execute(
+        """
+        SELECT COUNT(*) AS value
+        FROM segments
+        WHERE chapter_id = ? AND (voice_profile_id IS NOT NULL OR character_profile_id IS NOT NULL)
+        """,
+        (chapter_id,),
+    ).fetchone()["value"]
+    return {
+        "scope": "chapter",
+        "chapter_id": chapter_id,
+        "chapter_title": chapter["title"],
+        "project_id": project["id"],
+        "project_title": project["title"],
+        "queueable_segment_count": queueable_segment_count,
+        "cleared_override_count": cleared_override_count,
+        "voice_profile": dict(voice) if voice else None,
+        "is_elevenlabs": bool(voice and voice["provider"] == "elevenlabs"),
+    }
+
+
+def generation_preview_for_project(conn: sqlite3.Connection, project_id: int) -> dict:
+    project = get_project(conn, project_id)
+    if not project["default_voice_profile_id"]:
+        raise HTTPException(status_code=400, detail="請先設定專案預設聲線")
+    voice = conn.execute("SELECT * FROM voice_profiles WHERE id = ?", (project["default_voice_profile_id"],)).fetchone()
+    queueable_segment_count = conn.execute(
+        """
+        SELECT COUNT(*) AS value
+        FROM segments
+        WHERE project_id = ? AND COALESCE(tts_text, '') <> ''
+        """,
+        (project_id,),
+    ).fetchone()["value"]
+    cleared_override_count = conn.execute(
+        """
+        SELECT COUNT(*) AS value
+        FROM segments
+        WHERE project_id = ? AND (voice_profile_id IS NOT NULL OR character_profile_id IS NOT NULL)
+        """,
+        (project_id,),
+    ).fetchone()["value"]
+    chapter_count = conn.execute(
+        "SELECT COUNT(*) AS value FROM chapters WHERE project_id = ?",
+        (project_id,),
+    ).fetchone()["value"]
+    return {
+        "scope": "project",
+        "project_id": project_id,
+        "project_title": project["title"],
+        "chapter_count": chapter_count,
+        "queueable_segment_count": queueable_segment_count,
+        "cleared_override_count": cleared_override_count,
+        "voice_profile": dict(voice) if voice else None,
+        "is_elevenlabs": bool(voice and voice["provider"] == "elevenlabs"),
+    }
 
 
 def run_chapter_render(render_id: int) -> None:
@@ -924,45 +1125,25 @@ async def import_project_text(
     user: dict = Depends(get_current_user),
 ) -> dict:
     raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
-    extracted = extract_text_from_upload(file.filename or "upload.txt", raw)
-    chapters = split_into_chapters(extracted)
+    chapter_count = import_project_document(project_id, file.filename or "upload.txt", raw, user["id"])
+    return {"success": True, "chapter_count": chapter_count}
 
-    with get_conn() as conn:
-        project = get_project(conn, project_id)
-        remove_generated_tree(GENERATED_DIR / "audio" / f"project_{project_id}")
-        remove_generated_tree(GENERATED_DIR / "renders" / f"project_{project_id}")
-        remove_generated_tree(GENERATED_DIR / "exports" / f"project_{project_id}")
-        remove_generated_tree(GENERATED_DIR / "imports" / f"project_{project_id}")
-        conn.execute("DELETE FROM chapters WHERE project_id = ?", (project_id,))
-        conn.execute("DELETE FROM export_tasks WHERE project_id = ?", (project_id,))
-        now = utc_now()
-        import_dir = GENERATED_DIR / "imports" / f"project_{project_id}"
-        import_dir.mkdir(parents=True, exist_ok=True)
-        import_path = import_dir / (file.filename or f"project_{project_id}.txt")
-        import_path.write_bytes(raw)
-        for chapter_index, (title, body) in enumerate(chapters, start=1):
-            chapter_id = conn.execute(
-                """
-                INSERT INTO chapters (project_id, title, order_index, source_text, tts_text, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)
-                """,
-                (project_id, title, chapter_index, body, body, now, now),
-            ).lastrowid
-            segments = split_into_segments(body)
-            for segment_index, segment_text in enumerate(segments, start=1):
-                conn.execute(
-                    """
-                    INSERT INTO segments (project_id, chapter_id, order_index, source_text, tts_text, status, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, 'ready', ?, ?)
-                    """,
-                    (project_id, chapter_id, segment_index, segment_text, segment_text, now, now),
-                )
-        conn.execute("UPDATE projects SET status = 'active', updated_at = ? WHERE id = ?", (now, project_id))
-        log_activity(conn, user["id"], "project", project_id, "import", file.filename or "")
 
-    return {"success": True, "chapter_count": len(chapters)}
+@app.post("/api/projects/{project_id}/import-local")
+def import_project_local_path(
+    project_id: int,
+    payload: ProjectImportLocalRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    path = Path(payload.path).expanduser()
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=400, detail="Local file path does not exist")
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"Unable to read local file: {exc}") from exc
+    chapter_count = import_project_document(project_id, path.name, raw, user["id"])
+    return {"success": True, "chapter_count": chapter_count}
 
 
 @app.get("/api/projects/{project_id}/chapters")
@@ -1528,29 +1709,49 @@ def generate_segment(segment_id: int, background: BackgroundTasks, user: dict = 
 def generate_chapter(chapter_id: int, background: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
     with get_conn() as conn:
         chapter = get_chapter(conn, chapter_id)
-        segments = conn.execute(
-            """
-            SELECT * FROM segments
-            WHERE chapter_id = ? AND COALESCE(tts_text, '') <> ''
-            ORDER BY order_index
-            """,
-            (chapter_id,),
-        ).fetchall()
-        job_ids: list[int] = []
-        for segment in segments:
-            voice = voice_for_project(conn, chapter["project_id"], segment["voice_profile_id"], segment["character_profile_id"])
-            job_id = conn.execute(
-                """
-                INSERT INTO generation_jobs (project_id, chapter_id, segment_id, job_type, status, provider, model, input_text, created_at, updated_at)
-                VALUES (?, ?, ?, 'generate_segment', 'pending', ?, ?, ?, ?, ?)
-                """,
-                (chapter["project_id"], chapter_id, segment["id"], voice["provider"], voice["model"], segment["tts_text"], utc_now(), utc_now()),
-            ).lastrowid
-            conn.execute("UPDATE segments SET status = 'queued', updated_at = ? WHERE id = ?", (utc_now(), segment["id"]))
-            job_ids.append(job_id)
+        job_ids, _ = queue_chapter_generation_jobs(conn, chapter)
     for job_id in job_ids:
         background.add_task(run_segment_generation, job_id)
     return {"job_ids": job_ids}
+
+
+@app.get("/api/chapters/{chapter_id}/generate-with-default-voice/preview")
+def preview_generate_chapter_with_default_voice(chapter_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        return generation_preview_for_chapter(conn, chapter_id)
+
+
+@app.post("/api/chapters/{chapter_id}/generate-with-default-voice")
+def generate_chapter_with_default_voice(chapter_id: int, background: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        chapter = get_chapter(conn, chapter_id)
+        job_ids, cleared_override_count = queue_chapter_generation_jobs(conn, chapter, force_project_default_voice=True)
+    for job_id in job_ids:
+        background.add_task(run_segment_generation, job_id)
+    return {"job_ids": job_ids, "cleared_override_count": cleared_override_count}
+
+
+@app.get("/api/projects/{project_id}/generate-with-default-voice/preview")
+def preview_generate_project_with_default_voice(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        return generation_preview_for_project(conn, project_id)
+
+
+@app.post("/api/projects/{project_id}/generate-with-default-voice")
+def generate_project_with_default_voice(project_id: int, background: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        job_ids, cleared_override_count, chapter_count = queue_project_generation_jobs(
+            conn,
+            project_id,
+            force_project_default_voice=True,
+        )
+    for job_id in job_ids:
+        background.add_task(run_segment_generation, job_id)
+    return {
+        "job_ids": job_ids,
+        "cleared_override_count": cleared_override_count,
+        "chapter_count": chapter_count,
+    }
 
 
 @app.get("/api/projects/{project_id}/jobs")

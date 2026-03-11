@@ -28,6 +28,10 @@ class ProjectUpdate(BaseModel):
     default_voice_profile_id: int | None = None
 
 
+class ProjectImportLocalRequest(BaseModel):
+    path: str = Field(min_length=1)
+
+
 class SegmentUpdate(BaseModel):
     tts_text: str
     status: str | None = None
