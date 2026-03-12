@@ -24,6 +24,7 @@ This changelog starts on March 12, 2026. Earlier history is available in git com
   - `story_character_name`
 - Added chapter-level character detection and automatic batch binding.
 - Added multi-select segment merge for contiguous segments in the same chapter.
+- Added UI language switching for `繁體中文`, `简体中文`, `English`, `日本語`, and `한국어`.
 - Added `docs/comic_workflow_plan.md`.
 
 ### Changed
@@ -31,6 +32,7 @@ This changelog starts on March 12, 2026. Earlier history is available in git com
 - Expanded the character workflow to support narrator, lead, supporting, background, and custom roles.
 - Updated text preparation so segments can bind to a novel character or narrator role and can clear role binding or voice overrides.
 - Updated project summaries to show project type and comic page/panel metrics.
+- Updated the login page and sidebar so language selection is available before and after sign-in.
 - Updated documentation to reflect the current local implementation instead of only the original design intent.
 
 ### Fixed

@@ -1,6 +1,604 @@
 const { useEffect, useMemo, useRef, useState } = React;
 
 const STORAGE_KEY = "ai-publisher-token";
+const LOCALE_STORAGE_KEY = "ai-publisher-locale";
+const DEFAULT_LOCALE = "zh-Hant";
+const SUPPORTED_LOCALES = ["zh-Hant", "zh-Hans", "en", "ja", "ko"];
+const LOCALE_OPTIONS = [
+  { value: "zh-Hant", nativeLabel: "繁體中文" },
+  { value: "zh-Hans", nativeLabel: "简体中文" },
+  { value: "en", nativeLabel: "English" },
+  { value: "ja", nativeLabel: "日本語" },
+  { value: "ko", nativeLabel: "한국어" },
+];
+const LOCALE_FORMAT_CODES = {
+  "zh-Hant": "zh-TW",
+  "zh-Hans": "zh-CN",
+  en: "en-US",
+  ja: "ja-JP",
+  ko: "ko-KR",
+};
+let ACTIVE_LOCALE = DEFAULT_LOCALE;
+const TEXT_NODE_ORIGINALS = new WeakMap();
+const ATTRIBUTE_ORIGINALS = new WeakMap();
+const I18N = {
+  "zh-Hant": {
+    "common.language": "語言",
+    "common.logout": "登出",
+    "common.notProvided": "未提供",
+    "common.unfilledAuthor": "未填作者",
+    "common.unclassified": "未分類",
+    "common.noPageSelected": "未選擇頁面",
+    "error.requestFailed": "請求失敗",
+    "login.titleLineOne": "本機版",
+    "login.titleLineTwo": "Audiobook Studio",
+    "login.description": "這是一個先跑通完整業務閉環的本機版原型。它包含登入、專案管理、文本匯入、章節拆分、本地 TTS 生成、審核與章節匯出。",
+    "login.signIn": "登入",
+    "login.signingIn": "登入中...",
+    "login.enterStudio": "進入 Studio",
+    "login.localAdminReady": "預設本地管理員帳號已建立。",
+    "login.webApp": "網頁應用",
+    "login.email": "電子郵件",
+    "login.password": "密碼",
+    "login.defaultAccount": "預設帳號：",
+    "sidebar.brandEyebrow": "本機有聲書工作台",
+    "sidebar.projectWorkspace": "專案工作台",
+    "sidebar.projectSelected": "已選專案",
+    "sidebar.projectUnselected": "未選專案",
+    "sidebar.audiobookFlow": "有聲書流程",
+    "sidebar.audiobookHint": "文本、角色、聲線、生成與審核",
+    "sidebar.comicFlow": "漫畫流程",
+    "sidebar.comicHint": "腳本、分鏡、畫格與排版",
+    "sidebar.systemExtensions": "系統與擴展",
+    "sidebar.systemHint": "模型模板與系統設定",
+    "sidebar.externalLlm": "外部 LLM",
+    "sidebar.officialLinks": "官方入口",
+    "topbar.defaultEyebrow": "AI Publisher / 本機 MVP",
+    "topbar.noProject": "請先建立專案並匯入文本。",
+    "topbar.projectContext": "目前專案：{project}，登入使用者：{user}",
+    "character.unsetTitle": "未設定角色職稱",
+    "character.boundStoryCharacter": "綁定小說角色：{name}",
+    "comic.pageTitle": "第 {pageNo} 頁{suffix}",
+  },
+  "zh-Hans": {
+    "common.language": "语言",
+    "common.logout": "退出",
+    "common.notProvided": "未提供",
+    "common.unfilledAuthor": "未填作者",
+    "common.unclassified": "未分类",
+    "common.noPageSelected": "未选择页面",
+    "error.requestFailed": "请求失败",
+    "login.titleLineOne": "本机版",
+    "login.titleLineTwo": "Audiobook Studio",
+    "login.description": "这是一个先跑通完整业务闭环的本机版原型。它包含登录、项目管理、文本导入、章节拆分、本地 TTS 生成、审核与章节导出。",
+    "login.signIn": "登录",
+    "login.signingIn": "登录中...",
+    "login.enterStudio": "进入 Studio",
+    "login.localAdminReady": "默认本地管理员账号已建立。",
+    "login.webApp": "网页应用",
+    "login.email": "电子邮箱",
+    "login.password": "密码",
+    "login.defaultAccount": "默认账号：",
+    "sidebar.brandEyebrow": "本机有声书工作台",
+    "sidebar.projectWorkspace": "项目工作台",
+    "sidebar.projectSelected": "已选项目",
+    "sidebar.projectUnselected": "未选项目",
+    "sidebar.audiobookFlow": "有声书流程",
+    "sidebar.audiobookHint": "文本、角色、声线、生成与审核",
+    "sidebar.comicFlow": "漫画流程",
+    "sidebar.comicHint": "脚本、分镜、画格与排版",
+    "sidebar.systemExtensions": "系统与扩展",
+    "sidebar.systemHint": "模型模板与系统设置",
+    "sidebar.externalLlm": "外部 LLM",
+    "sidebar.officialLinks": "官方入口",
+    "topbar.defaultEyebrow": "AI Publisher / 本机 MVP",
+    "topbar.noProject": "请先创建项目并导入文本。",
+    "topbar.projectContext": "当前项目：{project}，登录用户：{user}",
+    "character.unsetTitle": "未设置角色职称",
+    "character.boundStoryCharacter": "绑定小说角色：{name}",
+    "comic.pageTitle": "第 {pageNo} 页{suffix}",
+  },
+  en: {
+    "common.language": "Language",
+    "common.logout": "Sign out",
+    "common.notProvided": "Not provided",
+    "common.unfilledAuthor": "Author missing",
+    "common.unclassified": "Unclassified",
+    "common.noPageSelected": "No page selected",
+    "error.requestFailed": "Request failed",
+    "login.titleLineOne": "Local",
+    "login.titleLineTwo": "Audiobook Studio",
+    "login.description": "This local prototype is designed to validate the full production loop first. It includes sign-in, project management, text import, chapter splitting, local TTS generation, review, and chapter export.",
+    "login.signIn": "Sign in",
+    "login.signingIn": "Signing in...",
+    "login.enterStudio": "Enter Studio",
+    "login.localAdminReady": "The default local admin account is ready.",
+    "login.webApp": "Web app",
+    "login.email": "Email",
+    "login.password": "Password",
+    "login.defaultAccount": "Default account:",
+    "sidebar.brandEyebrow": "Local audiobook workspace",
+    "sidebar.projectWorkspace": "Project workspace",
+    "sidebar.projectSelected": "Project selected",
+    "sidebar.projectUnselected": "No project selected",
+    "sidebar.audiobookFlow": "Audiobook flow",
+    "sidebar.audiobookHint": "Text, characters, voices, generation, and review",
+    "sidebar.comicFlow": "Comic flow",
+    "sidebar.comicHint": "Script, storyboard, panels, and layout",
+    "sidebar.systemExtensions": "System and extensions",
+    "sidebar.systemHint": "Model presets and system settings",
+    "sidebar.externalLlm": "External LLMs",
+    "sidebar.officialLinks": "Official links",
+    "topbar.defaultEyebrow": "AI Publisher / Local MVP",
+    "topbar.noProject": "Create a project and import text first.",
+    "topbar.projectContext": "Current project: {project}. Signed in as {user}.",
+    "character.unsetTitle": "Role title not set",
+    "character.boundStoryCharacter": "Bound story character: {name}",
+    "comic.pageTitle": "Page {pageNo}{suffix}",
+  },
+  ja: {
+    "common.language": "言語",
+    "common.logout": "ログアウト",
+    "common.notProvided": "未設定",
+    "common.unfilledAuthor": "作者未入力",
+    "common.unclassified": "未分類",
+    "common.noPageSelected": "ページ未選択",
+    "error.requestFailed": "リクエストに失敗しました",
+    "login.titleLineOne": "ローカル版",
+    "login.titleLineTwo": "Audiobook Studio",
+    "login.description": "これは業務フロー全体を先に通すためのローカル版プロトタイプです。ログイン、プロジェクト管理、テキスト取り込み、章分割、ローカル TTS 生成、レビュー、章エクスポートを含みます。",
+    "login.signIn": "ログイン",
+    "login.signingIn": "ログイン中...",
+    "login.enterStudio": "Studio に入る",
+    "login.localAdminReady": "既定のローカル管理者アカウントを用意しています。",
+    "login.webApp": "Web アプリ",
+    "login.email": "メールアドレス",
+    "login.password": "パスワード",
+    "login.defaultAccount": "既定アカウント：",
+    "sidebar.brandEyebrow": "ローカル音声書籍ワークスペース",
+    "sidebar.projectWorkspace": "プロジェクトワークスペース",
+    "sidebar.projectSelected": "選択済み",
+    "sidebar.projectUnselected": "未選択",
+    "sidebar.audiobookFlow": "音声書籍フロー",
+    "sidebar.audiobookHint": "テキスト、キャラクター、音声、生成、レビュー",
+    "sidebar.comicFlow": "コミックフロー",
+    "sidebar.comicHint": "脚本、絵コンテ、コマ、レイアウト",
+    "sidebar.systemExtensions": "システムと拡張",
+    "sidebar.systemHint": "モデルプリセットとシステム設定",
+    "sidebar.externalLlm": "外部 LLM",
+    "sidebar.officialLinks": "公式リンク",
+    "topbar.defaultEyebrow": "AI Publisher / ローカル MVP",
+    "topbar.noProject": "先にプロジェクトを作成してテキストを取り込んでください。",
+    "topbar.projectContext": "現在のプロジェクト: {project}、ログイン中: {user}",
+    "character.unsetTitle": "役割名未設定",
+    "character.boundStoryCharacter": "小説キャラクター紐付け: {name}",
+    "comic.pageTitle": "{pageNo} ページ{suffix}",
+  },
+  ko: {
+    "common.language": "언어",
+    "common.logout": "로그아웃",
+    "common.notProvided": "정보 없음",
+    "common.unfilledAuthor": "작가 미입력",
+    "common.unclassified": "미분류",
+    "common.noPageSelected": "페이지 미선택",
+    "error.requestFailed": "요청에 실패했습니다",
+    "login.titleLineOne": "로컬 버전",
+    "login.titleLineTwo": "Audiobook Studio",
+    "login.description": "이 로컬 프로토타입은 먼저 전체 제작 흐름을 검증하기 위해 만들어졌습니다. 로그인, 프로젝트 관리, 텍스트 가져오기, 장 분할, 로컬 TTS 생성, 검수, 장 내보내기를 포함합니다.",
+    "login.signIn": "로그인",
+    "login.signingIn": "로그인 중...",
+    "login.enterStudio": "Studio 시작",
+    "login.localAdminReady": "기본 로컬 관리자 계정이 준비되어 있습니다.",
+    "login.webApp": "웹 앱",
+    "login.email": "이메일",
+    "login.password": "비밀번호",
+    "login.defaultAccount": "기본 계정:",
+    "sidebar.brandEyebrow": "로컬 오디오북 워크스페이스",
+    "sidebar.projectWorkspace": "프로젝트 워크스페이스",
+    "sidebar.projectSelected": "선택됨",
+    "sidebar.projectUnselected": "미선택",
+    "sidebar.audiobookFlow": "오디오북 흐름",
+    "sidebar.audiobookHint": "텍스트, 캐릭터, 음성, 생성, 검수",
+    "sidebar.comicFlow": "만화 흐름",
+    "sidebar.comicHint": "스크립트, 콘티, 패널, 레이아웃",
+    "sidebar.systemExtensions": "시스템 및 확장",
+    "sidebar.systemHint": "모델 프리셋 및 시스템 설정",
+    "sidebar.externalLlm": "외부 LLM",
+    "sidebar.officialLinks": "공식 링크",
+    "topbar.defaultEyebrow": "AI Publisher / 로컬 MVP",
+    "topbar.noProject": "먼저 프로젝트를 만들고 텍스트를 가져오세요.",
+    "topbar.projectContext": "현재 프로젝트: {project}, 로그인 사용자: {user}",
+    "character.unsetTitle": "역할명이 설정되지 않았습니다",
+    "character.boundStoryCharacter": "소설 캐릭터 연결: {name}",
+    "comic.pageTitle": "{pageNo}페이지{suffix}",
+  },
+};
+const EXACT_TRANSLATIONS = {
+  "zh-Hans": {
+    "AI Publisher 本機工作台": "AI Publisher 本机工作台",
+    "專案": "项目",
+    "專案列表": "项目列表",
+    "未填作者": "未填作者",
+    "未提供": "未提供",
+    "後端": "后端",
+    "資料庫": "数据库",
+    "語音": "语音",
+    "範圍": "范围",
+    "文本準備": "文本准备",
+    "聲線設定": "声线设置",
+    "角色設定": "角色设置",
+    "漫畫腳本": "漫画脚本",
+    "分鏡工作台": "分镜工作台",
+    "畫格生成": "画格生成",
+    "頁面排版": "页面排版",
+    "漫畫設定": "漫画设置",
+    "Video 設定": "Video 设置",
+    "生成任務": "生成任务",
+    "審核校對": "审核校对",
+    "匯出交付": "导出交付",
+    "系統設定": "系统设置",
+    "建立專案": "创建项目",
+    "刪除": "删除",
+    "生成本章": "生成本章",
+    "匯出專案": "导出项目",
+    "渲染本章": "渲染本章",
+    "章節": "章节",
+    "章節地圖": "章节地图",
+    "畫格": "画格",
+    "漫畫頁": "漫画页",
+    "有聲書流程": "有声书流程",
+    "漫畫流程": "漫画流程",
+    "系統與擴展": "系统与扩展",
+    "外部 LLM": "外部 LLM",
+    "官方入口": "官方入口",
+    "文本、角色、聲線、生成與審核": "文本、角色、声线、生成与审核",
+    "腳本、分鏡、畫格與排版": "脚本、分镜、画格与排版",
+    "模型模板與系統設定": "模型模板与系统设置",
+    "目前還沒有專案": "当前还没有项目",
+    "章節渲染": "章节渲染",
+    "專案匯出": "项目导出",
+    "本機運行環境": "本机运行环境",
+    "多模態規劃": "多模态规划",
+    "建立": "创建",
+    "建立中...": "创建中...",
+    "取消": "取消",
+    "儲存": "保存",
+    "儲存中...": "保存中...",
+    "生成": "生成",
+    "生成中...": "生成中...",
+    "分析本章人物": "分析本章人物",
+    "自動建立並綁定": "自动创建并绑定",
+    "套用到勾選段落": "应用到勾选段落",
+    "套用到整章": "应用到整章",
+    "解除角色綁定": "解除角色绑定",
+    "解除聲線覆寫": "解除声线覆盖",
+    "全選本頁": "全选本页",
+    "取消本頁全選": "取消本页全选",
+    "合併為一段": "合并为一段",
+    "合併段落": "合并段落",
+    "分析中...": "分析中...",
+    "綁定中...": "绑定中...",
+    "通過": "通过",
+    "退回": "退回",
+    "重新生成": "重新生成",
+    "新增人工問題": "新增人工问题",
+    "渲染目前章節": "渲染当前章节",
+    "匯出 ZIP": "导出 ZIP",
+    "下載 ZIP": "下载 ZIP",
+    "標題": "标题",
+    "作者": "作者",
+    "語言": "语言",
+    "專案類型": "项目类型",
+    "描述": "描述",
+    "電子郵件": "电子邮箱",
+    "密碼": "密码",
+    "登入": "登录",
+    "登入中...": "登录中...",
+    "進入 Studio": "进入 Studio",
+    "選擇檔案": "选择文件",
+    "匯入文本": "导入文本",
+    "從路徑匯入": "从路径导入",
+    "匯入中...": "导入中...",
+    "處理中...": "处理中...",
+    "請確認": "请确认",
+    "尚未選擇檔案": "尚未选择文件",
+    "請先建立專案並匯入文本。": "请先创建项目并导入文本。",
+    "新專案已建立。": "新项目已创建。",
+    "文本匯入完成，章節與段落已建立。": "文本导入完成，章节与段落已建立。",
+    "生成任務已送出。": "生成任务已提交。",
+    "章節渲染任務已建立。": "章节渲染任务已建立。",
+    "匯出任務已建立。": "导出任务已建立。",
+    "登入成功，本機版 Studio 已就緒。": "登录成功，本机版 Studio 已就绪。",
+  },
+  en: {
+    "AI Publisher 本機工作台": "AI Publisher Local Studio",
+    "專案": "Projects",
+    "專案列表": "Project List",
+    "未填作者": "Author missing",
+    "未提供": "Not provided",
+    "後端": "Backend",
+    "資料庫": "Database",
+    "語音": "Voice",
+    "範圍": "Scope",
+    "文本準備": "Text Prep",
+    "聲線設定": "Voice Setup",
+    "角色設定": "Character Setup",
+    "漫畫腳本": "Comic Script",
+    "分鏡工作台": "Storyboard",
+    "畫格生成": "Panel Generation",
+    "頁面排版": "Page Layout",
+    "漫畫設定": "Comic Settings",
+    "Video 設定": "Video Settings",
+    "生成任務": "Generation Jobs",
+    "審核校對": "Review",
+    "匯出交付": "Export",
+    "系統設定": "System Settings",
+    "建立專案": "Create Project",
+    "刪除": "Delete",
+    "生成本章": "Generate Chapter",
+    "匯出專案": "Export Project",
+    "渲染本章": "Render Chapter",
+    "章節": "Chapters",
+    "章節地圖": "Chapter Map",
+    "畫格": "Panels",
+    "漫畫頁": "Comic Pages",
+    "有聲書流程": "Audiobook Flow",
+    "漫畫流程": "Comic Flow",
+    "系統與擴展": "System and Extensions",
+    "外部 LLM": "External LLMs",
+    "官方入口": "Official Links",
+    "文本、角色、聲線、生成與審核": "Text, characters, voices, generation, and review",
+    "腳本、分鏡、畫格與排版": "Script, storyboard, panels, and layout",
+    "模型模板與系統設定": "Model presets and system settings",
+    "目前還沒有專案": "No projects yet",
+    "章節渲染": "Chapter Render",
+    "專案匯出": "Project Export",
+    "本機運行環境": "Local Runtime",
+    "多模態規劃": "Multimodal Plan",
+    "建立": "Create",
+    "建立中...": "Creating...",
+    "取消": "Cancel",
+    "儲存": "Save",
+    "儲存中...": "Saving...",
+    "生成": "Generate",
+    "生成中...": "Generating...",
+    "分析本章人物": "Analyze Chapter Characters",
+    "自動建立並綁定": "Auto-create and bind",
+    "套用到勾選段落": "Apply to selected segments",
+    "套用到整章": "Apply to chapter",
+    "解除角色綁定": "Clear character binding",
+    "解除聲線覆寫": "Clear voice override",
+    "全選本頁": "Select page",
+    "取消本頁全選": "Clear page selection",
+    "合併為一段": "Merge into one",
+    "合併段落": "Merge segments",
+    "分析中...": "Analyzing...",
+    "綁定中...": "Binding...",
+    "通過": "Approve",
+    "退回": "Reject",
+    "重新生成": "Regenerate",
+    "新增人工問題": "Add manual issue",
+    "渲染目前章節": "Render chapter",
+    "匯出 ZIP": "Export ZIP",
+    "下載 ZIP": "Download ZIP",
+    "標題": "Title",
+    "作者": "Author",
+    "語言": "Language",
+    "專案類型": "Project Type",
+    "描述": "Description",
+    "電子郵件": "Email",
+    "密碼": "Password",
+    "登入": "Sign in",
+    "登入中...": "Signing in...",
+    "進入 Studio": "Enter Studio",
+    "選擇檔案": "Choose File",
+    "匯入文本": "Import Text",
+    "從路徑匯入": "Import from Path",
+    "匯入中...": "Importing...",
+    "處理中...": "Processing...",
+    "請確認": "Please confirm",
+    "尚未選擇檔案": "No file selected",
+    "請先建立專案並匯入文本。": "Create a project and import text first.",
+    "新專案已建立。": "Project created.",
+    "文本匯入完成，章節與段落已建立。": "Text import finished. Chapters and segments were created.",
+    "生成任務已送出。": "Generation job submitted.",
+    "章節渲染任務已建立。": "Chapter render job created.",
+    "匯出任務已建立。": "Export job created.",
+    "登入成功，本機版 Studio 已就緒。": "Signed in. The local Studio is ready.",
+  },
+  ja: {
+    "AI Publisher 本機工作台": "AI Publisher ローカルスタジオ",
+    "專案": "プロジェクト",
+    "專案列表": "プロジェクト一覧",
+    "未填作者": "作者未入力",
+    "未提供": "未設定",
+    "後端": "バックエンド",
+    "資料庫": "データベース",
+    "語音": "音声",
+    "範圍": "範囲",
+    "文本準備": "テキスト準備",
+    "聲線設定": "音声設定",
+    "角色設定": "キャラクター設定",
+    "漫畫腳本": "コミック脚本",
+    "分鏡工作台": "絵コンテ",
+    "畫格生成": "コマ生成",
+    "頁面排版": "ページレイアウト",
+    "漫畫設定": "コミック設定",
+    "Video 設定": "Video 設定",
+    "生成任務": "生成タスク",
+    "審核校對": "レビュー",
+    "匯出交付": "書き出し",
+    "系統設定": "システム設定",
+    "建立專案": "プロジェクト作成",
+    "刪除": "削除",
+    "生成本章": "この章を生成",
+    "匯出專案": "プロジェクト書き出し",
+    "渲染本章": "この章をレンダー",
+    "章節": "章",
+    "章節地圖": "章マップ",
+    "畫格": "コマ",
+    "漫畫頁": "コミックページ",
+    "有聲書流程": "音声書籍フロー",
+    "漫畫流程": "コミックフロー",
+    "系統與擴展": "システムと拡張",
+    "外部 LLM": "外部 LLM",
+    "官方入口": "公式リンク",
+    "文本、角色、聲線、生成與審核": "テキスト、キャラクター、音声、生成、レビュー",
+    "腳本、分鏡、畫格與排版": "脚本、絵コンテ、コマ、レイアウト",
+    "模型模板與系統設定": "モデルプリセットとシステム設定",
+    "目前還沒有專案": "まだプロジェクトがありません",
+    "章節渲染": "章レンダー",
+    "專案匯出": "プロジェクト書き出し",
+    "本機運行環境": "ローカル実行環境",
+    "多模態規劃": "マルチモーダル計画",
+    "建立": "作成",
+    "建立中...": "作成中...",
+    "取消": "キャンセル",
+    "儲存": "保存",
+    "儲存中...": "保存中...",
+    "生成": "生成",
+    "生成中...": "生成中...",
+    "分析本章人物": "この章の人物を分析",
+    "自動建立並綁定": "自動作成して紐付け",
+    "套用到勾選段落": "選択段落に適用",
+    "套用到整章": "章全体に適用",
+    "解除角色綁定": "キャラクター紐付け解除",
+    "解除聲線覆寫": "音声上書きを解除",
+    "全選本頁": "このページを全選択",
+    "取消本頁全選": "このページの選択解除",
+    "合併為一段": "1段に結合",
+    "合併段落": "段落を結合",
+    "分析中...": "分析中...",
+    "綁定中...": "紐付け中...",
+    "通過": "承認",
+    "退回": "差し戻し",
+    "重新生成": "再生成",
+    "新增人工問題": "手動課題を追加",
+    "渲染目前章節": "現在の章をレンダー",
+    "匯出 ZIP": "ZIP 書き出し",
+    "下載 ZIP": "ZIP をダウンロード",
+    "標題": "タイトル",
+    "作者": "作者",
+    "語言": "言語",
+    "專案類型": "プロジェクト種別",
+    "描述": "説明",
+    "電子郵件": "メールアドレス",
+    "密碼": "パスワード",
+    "登入": "ログイン",
+    "登入中...": "ログイン中...",
+    "進入 Studio": "Studio に入る",
+    "選擇檔案": "ファイルを選択",
+    "匯入文本": "テキストを取り込む",
+    "從路徑匯入": "パスから取り込む",
+    "匯入中...": "取り込み中...",
+    "處理中...": "処理中...",
+    "請確認": "確認してください",
+    "尚未選擇檔案": "ファイル未選択",
+    "請先建立專案並匯入文本。": "先にプロジェクトを作成してテキストを取り込んでください。",
+    "新專案已建立。": "新しいプロジェクトを作成しました。",
+    "文本匯入完成，章節與段落已建立。": "テキストの取り込みが完了し、章と段落を作成しました。",
+    "生成任務已送出。": "生成タスクを送信しました。",
+    "章節渲染任務已建立。": "章レンダータスクを作成しました。",
+    "匯出任務已建立。": "書き出しタスクを作成しました。",
+    "登入成功，本機版 Studio 已就緒。": "ログインしました。ローカル Studio の準備ができました。",
+  },
+  ko: {
+    "AI Publisher 本機工作台": "AI Publisher 로컬 스튜디오",
+    "專案": "프로젝트",
+    "專案列表": "프로젝트 목록",
+    "未填作者": "작가 미입력",
+    "未提供": "정보 없음",
+    "後端": "백엔드",
+    "資料庫": "데이터베이스",
+    "語音": "음성",
+    "範圍": "범위",
+    "文本準備": "텍스트 준비",
+    "聲線設定": "음성 설정",
+    "角色設定": "캐릭터 설정",
+    "漫畫腳本": "만화 스크립트",
+    "分鏡工作台": "콘티 작업대",
+    "畫格生成": "패널 생성",
+    "頁面排版": "페이지 레이아웃",
+    "漫畫設定": "만화 설정",
+    "Video 設定": "Video 설정",
+    "生成任務": "생성 작업",
+    "審核校對": "검수",
+    "匯出交付": "내보내기",
+    "系統設定": "시스템 설정",
+    "建立專案": "프로젝트 생성",
+    "刪除": "삭제",
+    "生成本章": "이 장 생성",
+    "匯出專案": "프로젝트 내보내기",
+    "渲染本章": "이 장 렌더링",
+    "章節": "장",
+    "章節地圖": "장 맵",
+    "畫格": "패널",
+    "漫畫頁": "만화 페이지",
+    "有聲書流程": "오디오북 흐름",
+    "漫畫流程": "만화 흐름",
+    "系統與擴展": "시스템 및 확장",
+    "外部 LLM": "외부 LLM",
+    "官方入口": "공식 링크",
+    "文本、角色、聲線、生成與審核": "텍스트, 캐릭터, 음성, 생성, 검수",
+    "腳本、分鏡、畫格與排版": "스크립트, 콘티, 패널, 레이아웃",
+    "模型模板與系統設定": "모델 프리셋 및 시스템 설정",
+    "目前還沒有專案": "아직 프로젝트가 없습니다",
+    "章節渲染": "장 렌더링",
+    "專案匯出": "프로젝트 내보내기",
+    "本機運行環境": "로컬 실행 환경",
+    "多模態規劃": "멀티모달 계획",
+    "建立": "생성",
+    "建立中...": "생성 중...",
+    "取消": "취소",
+    "儲存": "저장",
+    "儲存中...": "저장 중...",
+    "生成": "생성",
+    "生成中...": "생성 중...",
+    "分析本章人物": "이 장의 인물 분석",
+    "自動建立並綁定": "자동 생성 및 연결",
+    "套用到勾選段落": "선택한 문단에 적용",
+    "套用到整章": "전체 장에 적용",
+    "解除角色綁定": "캐릭터 연결 해제",
+    "解除聲線覆寫": "음성 덮어쓰기 해제",
+    "全選本頁": "이 페이지 전체 선택",
+    "取消本頁全選": "이 페이지 선택 해제",
+    "合併為一段": "한 문단으로 병합",
+    "合併段落": "문단 병합",
+    "分析中...": "분석 중...",
+    "綁定中...": "연결 중...",
+    "通過": "승인",
+    "退回": "반려",
+    "重新生成": "다시 생성",
+    "新增人工問題": "수동 이슈 추가",
+    "渲染目前章節": "현재 장 렌더링",
+    "匯出 ZIP": "ZIP 내보내기",
+    "下載 ZIP": "ZIP 다운로드",
+    "標題": "제목",
+    "作者": "작가",
+    "語言": "언어",
+    "專案類型": "프로젝트 유형",
+    "描述": "설명",
+    "電子郵件": "이메일",
+    "密碼": "비밀번호",
+    "登入": "로그인",
+    "登入中...": "로그인 중...",
+    "進入 Studio": "Studio 시작",
+    "選擇檔案": "파일 선택",
+    "匯入文本": "텍스트 가져오기",
+    "從路徑匯入": "경로에서 가져오기",
+    "匯入中...": "가져오는 중...",
+    "處理中...": "처리 중...",
+    "請確認": "확인해 주세요",
+    "尚未選擇檔案": "선택된 파일 없음",
+    "請先建立專案並匯入文本。": "먼저 프로젝트를 만들고 텍스트를 가져오세요.",
+    "新專案已建立。": "새 프로젝트가 생성되었습니다.",
+    "文本匯入完成，章節與段落已建立。": "텍스트 가져오기가 완료되었고 장과 문단이 생성되었습니다.",
+    "生成任務已送出。": "생성 작업이 제출되었습니다.",
+    "章節渲染任務已建立。": "장 렌더링 작업이 생성되었습니다.",
+    "匯出任務已建立。": "내보내기 작업이 생성되었습니다.",
+    "登入成功，本機版 Studio 已就緒。": "로그인되었습니다. 로컬 Studio 가 준비되었습니다.",
+  },
+};
 const NAV_ITEMS = [
   { key: "projects", label: "專案" },
   { key: "text", label: "文本準備" },
@@ -33,42 +631,42 @@ const EXTERNAL_LLM_LINKS = [
   { key: "perplexity", label: "Perplexity", meta: "Search", url: "https://www.perplexity.ai/" },
 ];
 const STATUS_LABELS = {
-  draft: "草稿",
-  active: "進行中",
-  ready: "待生成",
-  queued: "已排隊",
-  generating: "生成中",
-  review_required: "待審核",
-  approved: "已通過",
-  rejected: "已退回",
-  rendered: "已渲染",
-  pending: "待處理",
-  running: "執行中",
-  succeeded: "已完成",
-  failed: "失敗",
-  open: "未處理",
-  resolved: "已解決",
+  draft: { "zh-Hant": "草稿", "zh-Hans": "草稿", en: "Draft", ja: "下書き", ko: "초안" },
+  active: { "zh-Hant": "進行中", "zh-Hans": "进行中", en: "In Progress", ja: "進行中", ko: "진행 중" },
+  ready: { "zh-Hant": "待生成", "zh-Hans": "待生成", en: "Ready", ja: "生成待ち", ko: "생성 대기" },
+  queued: { "zh-Hant": "已排隊", "zh-Hans": "已排队", en: "Queued", ja: "キュー済み", ko: "대기열 등록" },
+  generating: { "zh-Hant": "生成中", "zh-Hans": "生成中", en: "Generating", ja: "生成中", ko: "생성 중" },
+  review_required: { "zh-Hant": "待審核", "zh-Hans": "待审核", en: "Needs Review", ja: "レビュー待ち", ko: "검토 필요" },
+  approved: { "zh-Hant": "已通過", "zh-Hans": "已通过", en: "Approved", ja: "承認済み", ko: "승인됨" },
+  rejected: { "zh-Hant": "已退回", "zh-Hans": "已退回", en: "Rejected", ja: "差し戻し", ko: "반려됨" },
+  rendered: { "zh-Hant": "已渲染", "zh-Hans": "已渲染", en: "Rendered", ja: "レンダー済み", ko: "렌더링 완료" },
+  pending: { "zh-Hant": "待處理", "zh-Hans": "待处理", en: "Pending", ja: "保留", ko: "대기 중" },
+  running: { "zh-Hant": "執行中", "zh-Hans": "执行中", en: "Running", ja: "実行中", ko: "실행 중" },
+  succeeded: { "zh-Hant": "已完成", "zh-Hans": "已完成", en: "Succeeded", ja: "完了", ko: "완료" },
+  failed: { "zh-Hant": "失敗", "zh-Hans": "失败", en: "Failed", ja: "失敗", ko: "실패" },
+  open: { "zh-Hant": "未處理", "zh-Hans": "未处理", en: "Open", ja: "未対応", ko: "미처리" },
+  resolved: { "zh-Hant": "已解決", "zh-Hans": "已解决", en: "Resolved", ja: "解決済み", ko: "해결됨" },
 };
 const PROJECT_TYPE_LABELS = {
-  audiobook: "有聲書",
-  comic: "漫畫",
-  motion_comic: "動態漫畫",
-  video: "影片",
+  audiobook: { "zh-Hant": "有聲書", "zh-Hans": "有声书", en: "Audiobook", ja: "音声書籍", ko: "오디오북" },
+  comic: { "zh-Hant": "漫畫", "zh-Hans": "漫画", en: "Comic", ja: "コミック", ko: "만화" },
+  motion_comic: { "zh-Hant": "動態漫畫", "zh-Hans": "动态漫画", en: "Motion Comic", ja: "モーションコミック", ko: "모션 코믹" },
+  video: { "zh-Hant": "影片", "zh-Hans": "视频", en: "Video", ja: "動画", ko: "비디오" },
 };
 const JOB_TYPE_LABELS = {
-  generate_segment: "生成段落",
+  generate_segment: { "zh-Hant": "生成段落", "zh-Hans": "生成段落", en: "Generate Segment", ja: "段落生成", ko: "문단 생성" },
 };
 const ISSUE_TYPE_LABELS = {
-  manual_review: "人工複核",
-  pronunciation: "發音問題",
-  pacing: "節奏問題",
-  missing_words: "漏讀",
-  duration: "時長異常",
+  manual_review: { "zh-Hant": "人工複核", "zh-Hans": "人工复核", en: "Manual Review", ja: "手動レビュー", ko: "수동 검토" },
+  pronunciation: { "zh-Hant": "發音問題", "zh-Hans": "发音问题", en: "Pronunciation", ja: "発音の問題", ko: "발음 문제" },
+  pacing: { "zh-Hant": "節奏問題", "zh-Hans": "节奏问题", en: "Pacing", ja: "テンポの問題", ko: "속도 문제" },
+  missing_words: { "zh-Hant": "漏讀", "zh-Hans": "漏读", en: "Missing Words", ja: "読み落とし", ko: "누락 읽기" },
+  duration: { "zh-Hant": "時長異常", "zh-Hans": "时长异常", en: "Duration Issue", ja: "長さ異常", ko: "길이 이상" },
 };
 const SOURCE_KIND_LABELS = {
-  generated: "系統生成",
-  edited: "人工編輯",
-  uploaded: "人工上傳",
+  generated: { "zh-Hant": "系統生成", "zh-Hans": "系统生成", en: "Generated", ja: "自動生成", ko: "시스템 생성" },
+  edited: { "zh-Hant": "人工編輯", "zh-Hans": "人工编辑", en: "Edited", ja: "手動編集", ko: "수동 편집" },
+  uploaded: { "zh-Hant": "人工上傳", "zh-Hans": "人工上传", en: "Uploaded", ja: "手動アップロード", ko: "수동 업로드" },
 };
 const OPENAI_VOICE_FALLBACKS = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"];
 const OPENAI_MODEL_FALLBACKS = ["gpt-4o-mini-tts", "tts-1", "tts-1-hd"];
@@ -197,12 +795,270 @@ const CHARACTER_PRESETS = {
 };
 const CHARACTER_ROLE_OPTIONS = ["narrator", "lead", "supporting", "background", "custom"];
 const CHARACTER_ROLE_LABELS = {
-  narrator: "旁白",
-  lead: "主角",
-  supporting: "配角",
-  background: "背景",
-  custom: "自訂",
+  narrator: { "zh-Hant": "旁白", "zh-Hans": "旁白", en: "Narrator", ja: "ナレーション", ko: "내레이션" },
+  lead: { "zh-Hant": "主角", "zh-Hans": "主角", en: "Lead", ja: "主人公", ko: "주인공" },
+  supporting: { "zh-Hant": "配角", "zh-Hans": "配角", en: "Supporting", ja: "脇役", ko: "조연" },
+  background: { "zh-Hant": "背景", "zh-Hans": "背景", en: "Background", ja: "背景", ko: "배경" },
+  custom: { "zh-Hant": "自訂", "zh-Hans": "自订", en: "Custom", ja: "カスタム", ko: "사용자 지정" },
 };
+
+function normalizeLocale(value) {
+  if (!value) return DEFAULT_LOCALE;
+  const normalized = String(value).toLowerCase();
+  if (normalized.startsWith("zh-hans") || normalized.startsWith("zh-cn")) return "zh-Hans";
+  if (normalized.startsWith("zh-hant") || normalized.startsWith("zh-tw") || normalized.startsWith("zh-hk")) return "zh-Hant";
+  if (normalized.startsWith("en")) return "en";
+  if (normalized.startsWith("ja")) return "ja";
+  if (normalized.startsWith("ko")) return "ko";
+  return SUPPORTED_LOCALES.includes(value) ? value : DEFAULT_LOCALE;
+}
+
+function localeCode(value = ACTIVE_LOCALE) {
+  const normalized = normalizeLocale(value);
+  return LOCALE_FORMAT_CODES[normalized] || LOCALE_FORMAT_CODES[DEFAULT_LOCALE];
+}
+
+function template(text, params = {}) {
+  return String(text).replace(/\{(\w+)\}/g, (_, key) => params[key] ?? "");
+}
+
+function t(key, params = {}) {
+  const locale = normalizeLocale(ACTIVE_LOCALE);
+  const base = I18N[DEFAULT_LOCALE] || {};
+  const bundle = I18N[locale] || base;
+  const message = bundle[key] || base[key] || key;
+  return template(message, params);
+}
+
+function localizedLabel(labels, value, fallback = "common.notProvided") {
+  if (!value) return t(fallback);
+  const entry = labels[value];
+  if (!entry) return value;
+  const locale = normalizeLocale(ACTIVE_LOCALE);
+  return entry[locale] || entry[DEFAULT_LOCALE] || value;
+}
+
+function translatePattern(text, locale) {
+  const patterns = [
+    {
+      regex: /^(\d+) 項$/,
+      render: (_, count) => ({
+        "zh-Hant": `${count} 項`,
+        "zh-Hans": `${count} 项`,
+        en: `${count} items`,
+        ja: `${count} 件`,
+        ko: `${count}개`,
+      }),
+    },
+    {
+      regex: /^(\d+) 個專案$/,
+      render: (_, count) => ({
+        "zh-Hant": `${count} 個專案`,
+        "zh-Hans": `${count} 个项目`,
+        en: `${count} projects`,
+        ja: `${count} 件のプロジェクト`,
+        ko: `${count}개 프로젝트`,
+      }),
+    },
+    {
+      regex: /^(\d+) 人$/,
+      render: (_, count) => ({
+        "zh-Hant": `${count} 人`,
+        "zh-Hans": `${count} 人`,
+        en: `${count} people`,
+        ja: `${count} 人`,
+        ko: `${count}명`,
+      }),
+    },
+    {
+      regex: /^(\d+) 段$/,
+      render: (_, count) => ({
+        "zh-Hant": `${count} 段`,
+        "zh-Hans": `${count} 段`,
+        en: `${count} segments`,
+        ja: `${count} 段`,
+        ko: `${count}개 문단`,
+      }),
+    },
+    {
+      regex: /^每頁 (\d+) 段$/,
+      render: (_, count) => ({
+        "zh-Hant": `每頁 ${count} 段`,
+        "zh-Hans": `每页 ${count} 段`,
+        en: `${count} per page`,
+        ja: `1ページ ${count} 段`,
+        ko: `페이지당 ${count}개`,
+      }),
+    },
+    {
+      regex: /^共 (\d+) 段，第 (\d+) \/ (\d+) 頁$/,
+      render: (_, total, page, pages) => ({
+        "zh-Hant": `共 ${total} 段，第 ${page} / ${pages} 頁`,
+        "zh-Hans": `共 ${total} 段，第 ${page} / ${pages} 页`,
+        en: `${total} segments total, page ${page} / ${pages}`,
+        ja: `全 ${total} 段、${page} / ${pages} ページ`,
+        ko: `총 ${total}개 문단, ${page} / ${pages}페이지`,
+      }),
+    },
+    {
+      regex: /^段落 (\d+)$/,
+      render: (_, index) => ({
+        "zh-Hant": `段落 ${index}`,
+        "zh-Hans": `段落 ${index}`,
+        en: `Segment ${index}`,
+        ja: `段落 ${index}`,
+        ko: `문단 ${index}`,
+      }),
+    },
+    {
+      regex: /^目前段落 (\d+)$/,
+      render: (_, index) => ({
+        "zh-Hant": `目前段落 ${index}`,
+        "zh-Hans": `当前段落 ${index}`,
+        en: `Current segment ${index}`,
+        ja: `現在の段落 ${index}`,
+        ko: `현재 문단 ${index}`,
+      }),
+    },
+    {
+      regex: /^第 (\d+) 頁(?: · (.+))?$/,
+      render: (_, index, title = "") => ({
+        "zh-Hant": `第 ${index} 頁${title ? ` · ${title}` : ""}`,
+        "zh-Hans": `第 ${index} 页${title ? ` · ${title}` : ""}`,
+        en: `Page ${index}${title ? ` · ${title}` : ""}`,
+        ja: `${index} ページ${title ? ` · ${title}` : ""}`,
+        ko: `${index}페이지${title ? ` · ${title}` : ""}`,
+      }),
+    },
+    {
+      regex: /^目前：(\d+)\.\s*(.+)$/,
+      render: (_, index, title) => ({
+        "zh-Hant": `目前：${index}. ${title}`,
+        "zh-Hans": `当前：${index}. ${title}`,
+        en: `Current: ${index}. ${title}`,
+        ja: `現在: ${index}. ${title}`,
+        ko: `현재: ${index}. ${title}`,
+      }),
+    },
+    {
+      regex: /^最近任務更新：(.+)$/,
+      render: (_, value) => ({
+        "zh-Hant": `最近任務更新：${value}`,
+        "zh-Hans": `最近任务更新：${value}`,
+        en: `Last job update: ${value}`,
+        ja: `最新タスク更新: ${value}`,
+        ko: `최근 작업 업데이트: ${value}`,
+      }),
+    },
+    {
+      regex: /^綁定小說角色：(.+)$/,
+      render: (_, value) => ({
+        "zh-Hant": `綁定小說角色：${value}`,
+        "zh-Hans": `绑定小说角色：${value}`,
+        en: `Bound story character: ${value}`,
+        ja: `小説キャラクター紐付け: ${value}`,
+        ko: `소설 캐릭터 연결: ${value}`,
+      }),
+    },
+    {
+      regex: /^渲染 v(\d+)$/,
+      render: (_, value) => ({
+        "zh-Hant": `渲染 v${value}`,
+        "zh-Hans": `渲染 v${value}`,
+        en: `Render v${value}`,
+        ja: `レンダー v${value}`,
+        ko: `렌더 v${value}`,
+      }),
+    },
+    {
+      regex: /^目前檔案：(.+)$/,
+      render: (_, value) => ({
+        "zh-Hant": `目前檔案：${value}`,
+        "zh-Hans": `当前文件：${value}`,
+        en: `Current file: ${value}`,
+        ja: `現在のファイル: ${value}`,
+        ko: `현재 파일: ${value}`,
+      }),
+    },
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern.regex);
+    if (!match) continue;
+    const rendered = pattern.render(...match);
+    return rendered[locale] || rendered[DEFAULT_LOCALE] || text;
+  }
+  return text;
+}
+
+function translateLiteral(text, locale) {
+  if (!text || locale === DEFAULT_LOCALE) return text;
+  const exact = EXACT_TRANSLATIONS[locale]?.[text];
+  if (exact) return exact;
+  const trimmed = text.trim();
+  if (trimmed !== text) {
+    const translatedTrimmed = EXACT_TRANSLATIONS[locale]?.[trimmed] || translatePattern(trimmed, locale);
+    return translatedTrimmed !== trimmed ? text.replace(trimmed, translatedTrimmed) : text;
+  }
+  return translatePattern(text, locale);
+}
+
+function applyLiteralTranslations(root, locale) {
+  if (!root) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      const parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      const tag = parent.tagName;
+      if (["SCRIPT", "STYLE", "TEXTAREA"].includes(tag)) return NodeFilter.FILTER_REJECT;
+      if (parent.closest(".code")) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  let currentNode = walker.nextNode();
+  while (currentNode) {
+    const cached = TEXT_NODE_ORIGINALS.get(currentNode) || { source: currentNode.nodeValue, lastTranslated: currentNode.nodeValue };
+    if (currentNode.nodeValue !== cached.lastTranslated) {
+      cached.source = currentNode.nodeValue;
+    }
+    const translated = translateLiteral(cached.source, locale);
+    if (currentNode.nodeValue !== translated) {
+      currentNode.nodeValue = translated;
+    }
+    cached.lastTranslated = translated;
+    TEXT_NODE_ORIGINALS.set(currentNode, cached);
+    currentNode = walker.nextNode();
+  }
+
+  root.querySelectorAll("[placeholder],[title]").forEach((element) => {
+    let originalAttributes = ATTRIBUTE_ORIGINALS.get(element);
+    if (!originalAttributes) {
+      originalAttributes = {};
+      ATTRIBUTE_ORIGINALS.set(element, originalAttributes);
+    }
+    ["placeholder", "title"].forEach((attributeName) => {
+      if (!element.hasAttribute(attributeName)) return;
+      if (!Object.prototype.hasOwnProperty.call(originalAttributes, attributeName)) {
+        originalAttributes[attributeName] = {
+          source: element.getAttribute(attributeName),
+          lastTranslated: element.getAttribute(attributeName),
+        };
+      }
+      const cached = originalAttributes[attributeName];
+      const currentValue = element.getAttribute(attributeName);
+      if (currentValue !== cached.lastTranslated) {
+        cached.source = currentValue;
+      }
+      const translated = translateLiteral(cached.source, locale);
+      if (element.getAttribute(attributeName) !== translated) {
+        element.setAttribute(attributeName, translated);
+      }
+      cached.lastTranslated = translated;
+    });
+  });
+}
 
 function providerDefaults(provider, catalog = {}) {
   if (provider === "macos") {
@@ -260,52 +1116,52 @@ async function apiFetch(path, { method = "GET", token, body, formData } = {}) {
     }
   }
   if (!response.ok) {
-    throw new Error(payload.detail || response.statusText || "請求失敗");
+    throw new Error(payload.detail || response.statusText || t("error.requestFailed"));
   }
   return payload;
 }
 
 function relativeTime(value) {
-  if (!value) return "未提供";
+  if (!value) return t("common.notProvided");
   const date = new Date(value);
-  return date.toLocaleString("zh-TW", { hour12: false });
+  return date.toLocaleString(localeCode(), { hour12: false });
 }
 
 function projectRouteTitle(route) {
   const item = NAV_ITEMS.find((entry) => entry.key === route);
-  return item ? item.label : "專案列表";
+  return item ? translateLiteral(item.label, ACTIVE_LOCALE) : translateLiteral("專案列表", ACTIVE_LOCALE);
 }
 
 function statusLabel(value) {
-  return STATUS_LABELS[value] || value || "未提供";
+  return localizedLabel(STATUS_LABELS, value);
 }
 
 function projectTypeLabel(value) {
-  return PROJECT_TYPE_LABELS[value] || value || "未提供";
+  return localizedLabel(PROJECT_TYPE_LABELS, value);
 }
 
 function jobTypeLabel(value) {
-  return JOB_TYPE_LABELS[value] || value;
+  return localizedLabel(JOB_TYPE_LABELS, value, "");
 }
 
 function issueTypeLabel(value) {
-  return ISSUE_TYPE_LABELS[value] || value;
+  return localizedLabel(ISSUE_TYPE_LABELS, value, "");
 }
 
 function sourceKindLabel(value) {
-  return SOURCE_KIND_LABELS[value] || value;
+  return localizedLabel(SOURCE_KIND_LABELS, value, "");
 }
 
 function characterRoleLabel(value) {
-  return CHARACTER_ROLE_LABELS[value] || value || "未分類";
+  return localizedLabel(CHARACTER_ROLE_LABELS, value, "common.unclassified");
 }
 
 function characterBindingSummary(character) {
-  if (!character) return "未設定角色職稱";
+  if (!character) return t("character.unsetTitle");
   if (character.story_character_name) {
-    return `綁定小說角色：${character.story_character_name}`;
+    return t("character.boundStoryCharacter", { name: character.story_character_name });
   }
-  return character.display_title || character.archetype || "未設定角色職稱";
+  return character.display_title || character.archetype || t("character.unsetTitle");
 }
 
 function characterOptionLabel(character) {
@@ -386,16 +1242,30 @@ function comicPanelFormFromValue(panel) {
 }
 
 function formatComicPageTitle(page) {
-  if (!page) return "未選擇頁面";
-  return `第 ${page.page_no} 頁${page.title ? ` · ${page.title}` : ""}`;
+  if (!page) return t("common.noPageSelected");
+  return t("comic.pageTitle", { pageNo: page.page_no, suffix: page.title ? ` · ${page.title}` : "" });
 }
 
 function flattenComicPanels(comicPages = []) {
   return comicPages.flatMap((page) => (page.panels || []).map((panel) => ({ ...panel, page })));
 }
 
+function LanguagePicker({ locale, onChange, align = "left" }) {
+  return (
+    <label className="subtext" style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: align === "right" ? "flex-end" : "flex-start", flexWrap: "wrap", width: align === "right" ? "auto" : "100%" }}>
+      <span>{t("common.language")}</span>
+      <select className="select" style={{ minWidth: 132 }} value={locale} onChange={(event) => onChange(normalizeLocale(event.target.value))}>
+        {LOCALE_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>{option.nativeLabel}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem(STORAGE_KEY) || "");
+  const [locale, setLocale] = useState(() => normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY) || DEFAULT_LOCALE));
   const [user, setUser] = useState(null);
   const [route, setRoute] = useState("projects");
   const [projects, setProjects] = useState([]);
@@ -416,6 +1286,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [flash, setFlash] = useState(null);
   const [confirmState, setConfirmState] = useState(null);
+  ACTIVE_LOCALE = locale;
 
   const selectedProject = projectDetail?.project || null;
   const selectedChapter = useMemo(
@@ -601,6 +1472,18 @@ function App() {
     return () => window.clearInterval(intervalId);
   }, [token, selectedProjectId, selectedChapterId, route]);
 
+  useEffect(() => {
+    const normalized = normalizeLocale(locale);
+    ACTIVE_LOCALE = normalized;
+    localStorage.setItem(LOCALE_STORAGE_KEY, normalized);
+    document.documentElement.lang = normalized;
+    document.title = translateLiteral("AI Publisher 本機工作台", normalized);
+  }, [locale]);
+
+  useEffect(() => {
+    applyLiteralTranslations(document.getElementById("root"), locale);
+  });
+
   async function handleLogin(form) {
     const payload = await apiFetch("/api/auth/login", { method: "POST", body: form });
     localStorage.setItem(STORAGE_KEY, payload.token);
@@ -642,7 +1525,7 @@ function App() {
   }
 
   if (!token || !user) {
-    return <LoginPage onLogin={handleLogin} flash={flash} />;
+    return <LoginPage onLogin={handleLogin} flash={flash} locale={locale} onLocaleChange={setLocale} />;
   }
 
   return (
@@ -655,6 +1538,8 @@ function App() {
         onSelectProject={(id) => setSelectedProjectId(id)}
         user={user}
         onLogout={handleLogout}
+        locale={locale}
+        onLocaleChange={setLocale}
       />
       <main className="main">
         <Topbar
@@ -834,7 +1719,7 @@ function routeActions({ route, selectedProject, selectedChapter, onCreated, onIm
   return null;
 }
 
-function LoginPage({ onLogin, flash }) {
+function LoginPage({ onLogin, flash, locale, onLocaleChange }) {
   const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("admin123");
   const [submitting, setSubmitting] = useState(false);
@@ -856,26 +1741,23 @@ function LoginPage({ onLogin, flash }) {
       <div className="login-card">
         <div className="login-side">
           <div className="eyebrow">AI Publisher / Local Studio / FastAPI + SQLite</div>
-          <h1>本機版<br/>Audiobook Studio</h1>
-          <p>
-            這是一個先跑通完整業務閉環的本機版原型。它包含登入、專案管理、文本匯入、章節拆分、
-            本地 TTS 生成、審核與章節匯出。
-          </p>
+          <h1>{t("login.titleLineOne")}<br/>{t("login.titleLineTwo")}</h1>
+          <p>{t("login.description")}</p>
           <div className="login-meta">
             <div className="login-kpi">
-              <div className="eyebrow">後端</div>
+              <div className="eyebrow">{translateLiteral("後端", ACTIVE_LOCALE)}</div>
               <strong>FastAPI</strong>
             </div>
             <div className="login-kpi">
-              <div className="eyebrow">資料庫</div>
+              <div className="eyebrow">{translateLiteral("資料庫", ACTIVE_LOCALE)}</div>
               <strong>SQLite</strong>
             </div>
             <div className="login-kpi">
-              <div className="eyebrow">語音</div>
+              <div className="eyebrow">{translateLiteral("語音", ACTIVE_LOCALE)}</div>
               <strong>macOS say</strong>
             </div>
             <div className="login-kpi">
-              <div className="eyebrow">範圍</div>
+              <div className="eyebrow">{translateLiteral("範圍", ACTIVE_LOCALE)}</div>
               <strong>MVP</strong>
             </div>
           </div>
@@ -883,25 +1765,28 @@ function LoginPage({ onLogin, flash }) {
         <div className="panel">
           <div className="panel-head">
             <div>
-              <h2>登入</h2>
-              <div className="subtext">預設本地管理員帳號已建立。</div>
+              <h2>{t("login.signIn")}</h2>
+              <div className="subtext">{t("login.localAdminReady")}</div>
             </div>
-            <span className="tag brand">網頁應用</span>
+            <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
+              <span className="tag brand">{t("login.webApp")}</span>
+              <LanguagePicker locale={locale} onChange={onLocaleChange} align="right" />
+            </div>
           </div>
           {flash ? <div className={`flash ${flash.type}`}>{flash.message}</div> : null}
           <form className="form-grid" onSubmit={submit}>
             <div className="field">
-              <label>電子郵件</label>
+              <label>{t("login.email")}</label>
               <input className="input" value={email} onChange={(event) => setEmail(event.target.value)} />
             </div>
             <div className="field">
-              <label>密碼</label>
+              <label>{t("login.password")}</label>
               <input className="input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
             </div>
-            <button className="button" disabled={submitting}>{submitting ? "登入中..." : "進入 Studio"}</button>
+            <button className="button" disabled={submitting}>{submitting ? t("login.signingIn") : t("login.enterStudio")}</button>
           </form>
           <div className="footer-note">
-            預設帳號：<span className="code">admin@example.com / admin123</span>
+            {t("login.defaultAccount")} <span className="code">admin@example.com / admin123</span>
           </div>
         </div>
       </div>
@@ -909,7 +1794,7 @@ function LoginPage({ onLogin, flash }) {
   );
 }
 
-function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectProject, user, onLogout }) {
+function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectProject, user, onLogout, locale, onLocaleChange }) {
   const [openSections, setOpenSections] = useState({
     project: true,
     audiobook: true,
@@ -931,15 +1816,15 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
     <aside className="sidebar">
       <div className="brand-box">
         <div className="brand-mark">AP</div>
-        <div className="eyebrow">本機有聲書工作台</div>
+        <div className="eyebrow">{t("sidebar.brandEyebrow")}</div>
         <div className="brand-title">AI Publisher</div>
       </div>
 
       <div className={`sidebar-section ${openSections.project ? "open" : ""}`}>
         <button className="sidebar-toggle" onClick={() => toggleSection("project")}>
           <span className="sidebar-toggle-main">
-            <span className="sidebar-label">專案工作台</span>
-            <span className="sidebar-hint">{selectedProjectId ? "已選專案" : "未選專案"}</span>
+            <span className="sidebar-label">{t("sidebar.projectWorkspace")}</span>
+            <span className="sidebar-hint">{selectedProjectId ? t("sidebar.projectSelected") : t("sidebar.projectUnselected")}</span>
           </span>
           <span className="sidebar-toggle-meta">
             <span className="sidebar-meta-text">{projects.length} 項</span>
@@ -954,7 +1839,7 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
               </button>
             ) : null}
             <div className="project-pick">
-              {projects.length === 0 ? <div className="muted">目前還沒有專案</div> : null}
+              {projects.length === 0 ? <div className="muted">{translateLiteral("目前還沒有專案", ACTIVE_LOCALE)}</div> : null}
               {projects.slice(0, 6).map((project) => (
                 <button
                   key={project.id}
@@ -968,7 +1853,7 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
                     <strong>{project.title}</strong>
                     <span className="count-pill">{project.metrics?.review_required_count || 0}</span>
                   </div>
-                  <div className="subtext">{project.author || "未填作者"} · {projectTypeLabel(project.project_type)} · {project.language}</div>
+                  <div className="subtext">{project.author || t("common.unfilledAuthor")} · {projectTypeLabel(project.project_type)} · {project.language}</div>
                 </button>
               ))}
             </div>
@@ -979,8 +1864,8 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
       <div className={`sidebar-section ${openSections.audiobook ? "open" : ""}`}>
         <button className="sidebar-toggle" onClick={() => toggleSection("audiobook")}>
           <span className="sidebar-toggle-main">
-            <span className="sidebar-label">有聲書流程</span>
-            <span className="sidebar-hint">文本、角色、聲線、生成與審核</span>
+            <span className="sidebar-label">{t("sidebar.audiobookFlow")}</span>
+            <span className="sidebar-hint">{t("sidebar.audiobookHint")}</span>
           </span>
           <span className="sidebar-toggle-meta">
             <span className="sidebar-meta-text">{audiobookNavItems.length} 項</span>
@@ -1001,8 +1886,8 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
       <div className={`sidebar-section ${openSections.comic ? "open" : ""}`}>
         <button className="sidebar-toggle" onClick={() => toggleSection("comic")}>
           <span className="sidebar-toggle-main">
-            <span className="sidebar-label">漫畫流程</span>
-            <span className="sidebar-hint">腳本、分鏡、畫格與排版</span>
+            <span className="sidebar-label">{t("sidebar.comicFlow")}</span>
+            <span className="sidebar-hint">{t("sidebar.comicHint")}</span>
           </span>
           <span className="sidebar-toggle-meta">
             <span className="sidebar-meta-text">{comicNavItems.length} 項</span>
@@ -1023,8 +1908,8 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
       <div className={`sidebar-section ${openSections.system ? "open" : ""}`}>
         <button className="sidebar-toggle" onClick={() => toggleSection("system")}>
           <span className="sidebar-toggle-main">
-            <span className="sidebar-label">系統與擴展</span>
-            <span className="sidebar-hint">模型模板與系統設定</span>
+            <span className="sidebar-label">{t("sidebar.systemExtensions")}</span>
+            <span className="sidebar-hint">{t("sidebar.systemHint")}</span>
           </span>
           <span className="sidebar-toggle-meta">
             <span className="sidebar-meta-text">{systemNavItems.length} 項</span>
@@ -1045,8 +1930,8 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
       <div className={`sidebar-section ${openSections.llm ? "open" : ""}`}>
         <button className="sidebar-toggle" onClick={() => toggleSection("llm")}>
           <span className="sidebar-toggle-main">
-            <span className="sidebar-label">外部 LLM</span>
-            <span className="sidebar-hint">官方入口</span>
+            <span className="sidebar-label">{t("sidebar.externalLlm")}</span>
+            <span className="sidebar-hint">{t("sidebar.officialLinks")}</span>
           </span>
           <span className="sidebar-toggle-meta">
             <span className="sidebar-meta-text">{EXTERNAL_LLM_LINKS.length} 項</span>
@@ -1072,8 +1957,9 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
       </div>
 
       <div className="sidebar-foot">
+        <LanguagePicker locale={locale} onChange={onLocaleChange} />
         <div>{user.name} · {user.role}</div>
-        <button className="button-secondary" onClick={onLogout}>登出</button>
+        <button className="button-secondary" onClick={onLogout}>{t("common.logout")}</button>
       </div>
     </aside>
   );
@@ -1084,11 +1970,11 @@ function Topbar({ route, project, user, actions }) {
     <div className="topbar">
       <div>
         <div className="eyebrow">
-          {project ? `${project.title} / ${project.language}` : "AI Publisher / 本機 MVP"}
+          {project ? `${project.title} / ${project.language}` : t("topbar.defaultEyebrow")}
         </div>
         <h1>{projectRouteTitle(route)}</h1>
         <div className="subtext">
-          {project ? `目前專案：${project.title}，登入使用者：${user.name}` : "請先建立專案並匯入文本。"}
+          {project ? t("topbar.projectContext", { project: project.title, user: user.name }) : t("topbar.noProject")}
         </div>
       </div>
       <div className="topbar-actions">{actions}</div>
