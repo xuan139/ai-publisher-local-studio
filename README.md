@@ -162,6 +162,7 @@ cp .env.local.example .env.local
 
 ## 文檔
 
+- [更新日誌](CHANGELOG.md)
 - [一頁操作說明](docs/audiobook_one_page_guide.md)
 - [一頁操作說明 Printable HTML](docs/audiobook_one_page_guide_print.html)
 - [審核員一頁說明](docs/reviewer_one_page_guide.md)
