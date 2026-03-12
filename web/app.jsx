@@ -29,6 +29,9 @@ const I18N = {
     "common.unfilledAuthor": "未填作者",
     "common.unclassified": "未分類",
     "common.noPageSelected": "未選擇頁面",
+    "common.unauthorized": "目前帳號沒有此頁權限。請改用左側可用選單。",
+    "common.availablePages": "可用頁面：{routes}",
+    "common.currentRole": "目前角色：{role}",
     "error.requestFailed": "請求失敗",
     "login.titleLineOne": "本機版",
     "login.titleLineTwo": "Audiobook Studio",
@@ -41,6 +44,10 @@ const I18N = {
     "login.email": "電子郵件",
     "login.password": "密碼",
     "login.defaultAccount": "預設帳號：",
+    "login.demoAccounts": "預設角色帳號",
+    "login.demoDescription": "admin 保留完整權限，其他帳號依文本準備、審核、交付、設定分工。",
+    "login.fillAccount": "帶入",
+    "login.allowedPages": "可用頁面",
     "sidebar.brandEyebrow": "本機有聲書工作台",
     "sidebar.projectWorkspace": "專案工作台",
     "sidebar.projectSelected": "已選專案",
@@ -67,6 +74,9 @@ const I18N = {
     "common.unfilledAuthor": "未填作者",
     "common.unclassified": "未分类",
     "common.noPageSelected": "未选择页面",
+    "common.unauthorized": "当前账号没有此页面权限，请改用左侧可用菜单。",
+    "common.availablePages": "可用页面：{routes}",
+    "common.currentRole": "当前角色：{role}",
     "error.requestFailed": "请求失败",
     "login.titleLineOne": "本机版",
     "login.titleLineTwo": "Audiobook Studio",
@@ -79,6 +89,10 @@ const I18N = {
     "login.email": "电子邮箱",
     "login.password": "密码",
     "login.defaultAccount": "默认账号：",
+    "login.demoAccounts": "默认角色账号",
+    "login.demoDescription": "admin 保留完整权限，其他账号按文本准备、审核、交付、设置分工。",
+    "login.fillAccount": "带入",
+    "login.allowedPages": "可用页面",
     "sidebar.brandEyebrow": "本机有声书工作台",
     "sidebar.projectWorkspace": "项目工作台",
     "sidebar.projectSelected": "已选项目",
@@ -105,6 +119,9 @@ const I18N = {
     "common.unfilledAuthor": "Author missing",
     "common.unclassified": "Unclassified",
     "common.noPageSelected": "No page selected",
+    "common.unauthorized": "This account does not have access to this page. Use one of the allowed menu entries on the left.",
+    "common.availablePages": "Available pages: {routes}",
+    "common.currentRole": "Current role: {role}",
     "error.requestFailed": "Request failed",
     "login.titleLineOne": "Local",
     "login.titleLineTwo": "Audiobook Studio",
@@ -117,6 +134,10 @@ const I18N = {
     "login.email": "Email",
     "login.password": "Password",
     "login.defaultAccount": "Default account:",
+    "login.demoAccounts": "Demo role accounts",
+    "login.demoDescription": "Admin keeps full access. The other accounts are split across text prep, review, delivery, and settings.",
+    "login.fillAccount": "Use",
+    "login.allowedPages": "Available pages",
     "sidebar.brandEyebrow": "Local audiobook workspace",
     "sidebar.projectWorkspace": "Project workspace",
     "sidebar.projectSelected": "Project selected",
@@ -143,6 +164,9 @@ const I18N = {
     "common.unfilledAuthor": "作者未入力",
     "common.unclassified": "未分類",
     "common.noPageSelected": "ページ未選択",
+    "common.unauthorized": "このアカウントではこのページを開けません。左側の利用可能なメニューを使用してください。",
+    "common.availablePages": "利用可能ページ: {routes}",
+    "common.currentRole": "現在の役割: {role}",
     "error.requestFailed": "リクエストに失敗しました",
     "login.titleLineOne": "ローカル版",
     "login.titleLineTwo": "Audiobook Studio",
@@ -155,6 +179,10 @@ const I18N = {
     "login.email": "メールアドレス",
     "login.password": "パスワード",
     "login.defaultAccount": "既定アカウント：",
+    "login.demoAccounts": "既定の役割アカウント",
+    "login.demoDescription": "admin は全権限を保持し、他のアカウントはテキスト準備、レビュー、納品、設定に分かれます。",
+    "login.fillAccount": "入力",
+    "login.allowedPages": "利用可能ページ",
     "sidebar.brandEyebrow": "ローカル音声書籍ワークスペース",
     "sidebar.projectWorkspace": "プロジェクトワークスペース",
     "sidebar.projectSelected": "選択済み",
@@ -181,6 +209,9 @@ const I18N = {
     "common.unfilledAuthor": "작가 미입력",
     "common.unclassified": "미분류",
     "common.noPageSelected": "페이지 미선택",
+    "common.unauthorized": "이 계정은 이 페이지에 접근할 수 없습니다. 왼쪽의 허용된 메뉴를 사용하세요.",
+    "common.availablePages": "사용 가능한 페이지: {routes}",
+    "common.currentRole": "현재 역할: {role}",
     "error.requestFailed": "요청에 실패했습니다",
     "login.titleLineOne": "로컬 버전",
     "login.titleLineTwo": "Audiobook Studio",
@@ -193,6 +224,10 @@ const I18N = {
     "login.email": "이메일",
     "login.password": "비밀번호",
     "login.defaultAccount": "기본 계정:",
+    "login.demoAccounts": "기본 역할 계정",
+    "login.demoDescription": "admin 은 전체 권한을 유지하고, 다른 계정은 텍스트 준비, 검수, 납품, 설정으로 나뉩니다.",
+    "login.fillAccount": "사용",
+    "login.allowedPages": "사용 가능한 페이지",
     "sidebar.brandEyebrow": "로컬 오디오북 워크스페이스",
     "sidebar.projectWorkspace": "프로젝트 워크스페이스",
     "sidebar.projectSelected": "선택됨",
@@ -801,6 +836,14 @@ const CHARACTER_ROLE_LABELS = {
   background: { "zh-Hant": "背景", "zh-Hans": "背景", en: "Background", ja: "背景", ko: "배경" },
   custom: { "zh-Hant": "自訂", "zh-Hans": "自订", en: "Custom", ja: "カスタム", ko: "사용자 지정" },
 };
+const USER_ROLE_LABELS = {
+  admin: { "zh-Hant": "管理員", "zh-Hans": "管理员", en: "Admin", ja: "管理者", ko: "관리자" },
+  text_editor: { "zh-Hant": "文本編輯", "zh-Hans": "文本编辑", en: "Text Editor", ja: "テキスト編集", ko: "텍스트 편집" },
+  reviewer: { "zh-Hant": "審核員", "zh-Hans": "审核员", en: "Reviewer", ja: "レビュアー", ko: "검수 담당" },
+  delivery_manager: { "zh-Hant": "交付管理", "zh-Hans": "交付管理", en: "Delivery Manager", ja: "納品管理", ko: "납품 관리자" },
+  settings_manager: { "zh-Hant": "設定管理", "zh-Hans": "设置管理", en: "Settings Manager", ja: "設定管理", ko: "설정 관리자" },
+  unknown: { "zh-Hant": "未知角色", "zh-Hans": "未知角色", en: "Unknown Role", ja: "不明な役割", ko: "알 수 없는 역할" },
+};
 
 function normalizeLocale(value) {
   if (!value) return DEFAULT_LOCALE;
@@ -836,6 +879,27 @@ function localizedLabel(labels, value, fallback = "common.notProvided") {
   if (!entry) return value;
   const locale = normalizeLocale(ACTIVE_LOCALE);
   return entry[locale] || entry[DEFAULT_LOCALE] || value;
+}
+
+function userAllowedRoutes(user) {
+  if (Array.isArray(user?.allowed_routes) && user.allowed_routes.length) {
+    return user.allowed_routes;
+  }
+  return ["projects"];
+}
+
+function canAccessRoute(user, route) {
+  if (route === "projects") return true;
+  return userAllowedRoutes(user).includes(route);
+}
+
+function hasPermission(user, permission) {
+  return Array.isArray(user?.permissions) && user.permissions.includes(permission);
+}
+
+function firstAllowedRoute(user, candidates = []) {
+  const routes = userAllowedRoutes(user);
+  return candidates.find((route) => routes.includes(route)) || routes[0] || "projects";
 }
 
 function translatePattern(text, locale) {
@@ -1156,6 +1220,28 @@ function characterRoleLabel(value) {
   return localizedLabel(CHARACTER_ROLE_LABELS, value, "common.unclassified");
 }
 
+function userRoleLabel(value) {
+  return localizedLabel(USER_ROLE_LABELS, value, "");
+}
+
+function preferredProjectEntryRoute(user) {
+  return firstAllowedRoute(user, [
+    "text",
+    "review",
+    "export",
+    "voices",
+    "characters",
+    "settings",
+    "comic",
+    "video",
+    "comic-script",
+    "storyboard",
+    "panels",
+    "layout",
+    "projects",
+  ]);
+}
+
 function characterBindingSummary(character) {
   if (!character) return t("character.unsetTitle");
   if (character.story_character_name) {
@@ -1267,6 +1353,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem(STORAGE_KEY) || "");
   const [locale, setLocale] = useState(() => normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY) || DEFAULT_LOCALE));
   const [user, setUser] = useState(null);
+  const [demoAccounts, setDemoAccounts] = useState([]);
   const [route, setRoute] = useState("projects");
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
@@ -1340,20 +1427,27 @@ function App() {
   }
 
   async function loadProject(projectId, chapterId = null) {
-    if (!projectId || !token) return;
+    if (!projectId || !token || !user) return;
     setLoading(true);
     try {
+      const canUseTextAssets = canAccessRoute(user, "text") || canAccessRoute(user, "generate") || canAccessRoute(user, "voices") || canAccessRoute(user, "characters");
+      const canUseComicWorkflow = canAccessRoute(user, "comic-script") || canAccessRoute(user, "storyboard") || canAccessRoute(user, "panels") || canAccessRoute(user, "layout");
+      const canUseComicSettings = canAccessRoute(user, "comic");
+      const canUseVideoSettings = canAccessRoute(user, "video");
+      const canUseGenerate = canAccessRoute(user, "generate");
+      const canUseReview = canAccessRoute(user, "review");
+      const canUseExport = canAccessRoute(user, "export");
       const [projectPayload, voicePayload, characterPayload, comicScriptPayload, comicPagePayload, comicProfilePayload, videoPayload, jobsPayload, reviewPayload, exportPayload] = await Promise.all([
         apiFetch(`/api/projects/${projectId}`, { token }),
-        apiFetch(`/api/projects/${projectId}/voice-profiles`, { token }),
-        apiFetch(`/api/projects/${projectId}/character-profiles`, { token }),
-        apiFetch(`/api/projects/${projectId}/comic-scripts`, { token }),
-        apiFetch(`/api/projects/${projectId}/comic-pages`, { token }),
-        apiFetch(`/api/projects/${projectId}/comic-profiles`, { token }),
-        apiFetch(`/api/projects/${projectId}/video-profiles`, { token }),
-        apiFetch(`/api/projects/${projectId}/jobs`, { token }),
-        apiFetch(`/api/projects/${projectId}/review-queue`, { token }),
-        apiFetch(`/api/projects/${projectId}/exports`, { token }),
+        canUseTextAssets ? apiFetch(`/api/projects/${projectId}/voice-profiles`, { token }) : Promise.resolve({ items: [] }),
+        canUseTextAssets ? apiFetch(`/api/projects/${projectId}/character-profiles`, { token }) : Promise.resolve({ items: [] }),
+        canUseComicWorkflow ? apiFetch(`/api/projects/${projectId}/comic-scripts`, { token }) : Promise.resolve({ items: [] }),
+        canUseComicWorkflow ? apiFetch(`/api/projects/${projectId}/comic-pages`, { token }) : Promise.resolve({ items: [] }),
+        canUseComicSettings ? apiFetch(`/api/projects/${projectId}/comic-profiles`, { token }) : Promise.resolve({ items: [] }),
+        canUseVideoSettings ? apiFetch(`/api/projects/${projectId}/video-profiles`, { token }) : Promise.resolve({ items: [] }),
+        canUseGenerate ? apiFetch(`/api/projects/${projectId}/jobs`, { token }) : Promise.resolve({ items: [] }),
+        canUseReview ? apiFetch(`/api/projects/${projectId}/review-queue`, { token }) : Promise.resolve({ items: [] }),
+        canUseExport ? apiFetch(`/api/projects/${projectId}/exports`, { token }) : Promise.resolve({ items: [] }),
       ]);
       const project = projectPayload.project;
       setProjectDetail(projectPayload);
@@ -1412,35 +1506,53 @@ function App() {
     showFlash("success", `專案「${project.title}」已刪除。`);
   }
 
-  async function handleOpenChapterText(chapterId) {
+  async function handleOpenChapterText(chapterId, nextRoute = "text") {
     if (!chapterId) return;
     setSelectedChapterId(chapterId);
     await loadChapter(chapterId);
-    setRoute("text");
+    setRoute(nextRoute);
   }
 
-  async function handleOpenProjectText(projectId) {
+  async function handleOpenProjectText(projectId, nextRoute = "text") {
     if (!projectId) return;
     setSelectedProjectId(projectId);
     await loadProject(projectId);
-    setRoute("text");
+    setRoute(nextRoute);
   }
 
   async function loadChapter(chapterId) {
-    if (!chapterId || !token) return;
+    if (!chapterId || !token || !user) return;
     const [segmentsPayload, rendersPayload] = await Promise.all([
-      apiFetch(`/api/chapters/${chapterId}/segments`, { token }),
-      apiFetch(`/api/chapters/${chapterId}/renders`, { token }),
+      canAccessRoute(user, "text") || canAccessRoute(user, "generate")
+        ? apiFetch(`/api/chapters/${chapterId}/segments`, { token })
+        : Promise.resolve({ items: [] }),
+      canAccessRoute(user, "export")
+        ? apiFetch(`/api/chapters/${chapterId}/renders`, { token })
+        : Promise.resolve({ items: [] }),
     ]);
     setSegments(segmentsPayload.items || []);
     setRenders(rendersPayload.items || []);
   }
 
   useEffect(() => {
+    if (token) return;
+    (async () => {
+      try {
+        const payload = await apiFetch("/api/auth/demo-accounts");
+        setDemoAccounts(payload.items || []);
+      } catch {
+        setDemoAccounts([]);
+      }
+    })();
+  }, [token]);
+
+  useEffect(() => {
     if (!token) {
       setUser(null);
       setProjects([]);
       setProjectDetail(null);
+      setSelectedProjectId(null);
+      setSelectedChapterId(null);
       return;
     }
     (async () => {
@@ -1457,10 +1569,10 @@ function App() {
   }, [token]);
 
   useEffect(() => {
-    if (selectedProjectId) {
+    if (selectedProjectId && user) {
       loadProject(selectedProjectId);
     }
-  }, [selectedProjectId]);
+  }, [selectedProjectId, user?.role]);
 
   useEffect(() => {
     if (!token || !selectedProjectId || !AUTO_REFRESH_ROUTES.has(route)) {
@@ -1484,6 +1596,12 @@ function App() {
     applyLiteralTranslations(document.getElementById("root"), locale);
   });
 
+  useEffect(() => {
+    if (!user) return;
+    if (canAccessRoute(user, route)) return;
+    setRoute(firstAllowedRoute(user, ["projects", "text", "review", "export", "voices", "characters", "settings"]));
+  }, [route, user]);
+
   async function handleLogin(form) {
     const payload = await apiFetch("/api/auth/login", { method: "POST", body: form });
     localStorage.setItem(STORAGE_KEY, payload.token);
@@ -1501,9 +1619,14 @@ function App() {
     }
     localStorage.removeItem(STORAGE_KEY);
     setToken("");
+    setRoute("projects");
   }
 
   async function handleRouteChange(nextRoute) {
+    if (!canAccessRoute(user, nextRoute)) {
+      showFlash("error", t("common.unauthorized"));
+      return;
+    }
     if (nextRoute === "projects") {
       setRoute("projects");
       return;
@@ -1525,7 +1648,7 @@ function App() {
   }
 
   if (!token || !user) {
-    return <LoginPage onLogin={handleLogin} flash={flash} locale={locale} onLocaleChange={setLocale} />;
+    return <LoginPage onLogin={handleLogin} flash={flash} locale={locale} onLocaleChange={setLocale} demoAccounts={demoAccounts} />;
   }
 
   return (
@@ -1548,6 +1671,7 @@ function App() {
           user={user}
           actions={routeActions({
             route,
+            user,
             token,
             selectedProject,
             selectedChapter,
@@ -1602,6 +1726,7 @@ function App() {
             reviewQueue={reviewQueue}
             renders={renders}
             exportsList={exportsList}
+            user={user}
             refreshProject={refreshProject}
             deleteProject={handleDeleteProject}
             onOpenChapter={handleOpenChapterText}
@@ -1617,11 +1742,14 @@ function App() {
   );
 }
 
-function routeActions({ route, selectedProject, selectedChapter, onCreated, onImportDone, onGenerateDone, onRenderDone, onExportDone, token, requestConfirm, showFlash }) {
-  if (route === "text" && selectedProject) {
+function routeActions({ route, user, selectedProject, selectedChapter, onCreated, onImportDone, onGenerateDone, onRenderDone, onExportDone, token, requestConfirm, showFlash }) {
+  if (!canAccessRoute(user, route)) {
+    return null;
+  }
+  if (route === "text" && selectedProject && canAccessRoute(user, "text")) {
     return <ImportInline token={token} project={selectedProject} onDone={onImportDone} showFlash={showFlash} />;
   }
-  if (route === "generate" && selectedChapter) {
+  if (route === "generate" && selectedChapter && canAccessRoute(user, "generate")) {
     return (
       <>
         <button className="button" onClick={async () => {
@@ -1698,7 +1826,7 @@ function routeActions({ route, selectedProject, selectedChapter, onCreated, onIm
       </>
     );
   }
-  if (route === "export" && selectedChapter) {
+  if (route === "export" && selectedChapter && canAccessRoute(user, "export")) {
     return (
       <>
         <button className="button-secondary" onClick={async () => {
@@ -1719,7 +1847,20 @@ function routeActions({ route, selectedProject, selectedChapter, onCreated, onIm
   return null;
 }
 
-function LoginPage({ onLogin, flash, locale, onLocaleChange }) {
+function AccessDeniedPage({ user }) {
+  const allowedRoutes = userAllowedRoutes(user).filter((route) => route !== "projects");
+  return (
+    <div className="empty-state">
+      <div>{t("common.unauthorized")}</div>
+      <div style={{ marginTop: 10 }}>{t("common.currentRole", { role: userRoleLabel(user?.role) || user?.role || "-" })}</div>
+      {allowedRoutes.length ? (
+        <div style={{ marginTop: 10 }}>{t("common.availablePages", { routes: allowedRoutes.map((route) => projectRouteTitle(route)).join(" / ") })}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function LoginPage({ onLogin, flash, locale, onLocaleChange, demoAccounts = [] }) {
   const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("admin123");
   const [submitting, setSubmitting] = useState(false);
@@ -1785,6 +1926,45 @@ function LoginPage({ onLogin, flash, locale, onLocaleChange }) {
             </div>
             <button className="button" disabled={submitting}>{submitting ? t("login.signingIn") : t("login.enterStudio")}</button>
           </form>
+          {demoAccounts.length ? (
+            <div className="editor-card" style={{ marginTop: 16 }}>
+              <div className="title-row">
+                <strong>{t("login.demoAccounts")}</strong>
+              </div>
+              <div className="subtext" style={{ marginTop: 8 }}>{t("login.demoDescription")}</div>
+              <div className="list" style={{ marginTop: 12 }}>
+                {demoAccounts.map((account) => {
+                  const routeSummary = (account.allowed_routes || [])
+                    .filter((route) => route !== "projects")
+                    .map((route) => projectRouteTitle(route))
+                    .join(" / ");
+                  return (
+                    <div key={account.email} className="list-item">
+                      <div className="title-row">
+                        <strong>{account.email}</strong>
+                        <button
+                          type="button"
+                          className="button-secondary"
+                          onClick={() => {
+                            setEmail(account.email);
+                            setPassword(account.password);
+                          }}
+                        >
+                          {t("login.fillAccount")}
+                        </button>
+                      </div>
+                      <div className="subtext" style={{ marginTop: 8 }}>
+                        {userRoleLabel(account.role)} · {account.password}
+                      </div>
+                      <div className="subtext" style={{ marginTop: 6 }}>
+                        {t("login.allowedPages")}：{routeSummary || projectRouteTitle("projects")}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           <div className="footer-note">
             {t("login.defaultAccount")} <span className="code">admin@example.com / admin123</span>
           </div>
@@ -1804,9 +1984,9 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
   });
 
   const projectItem = NAV_ITEMS.find((item) => item.key === "projects");
-  const audiobookNavItems = NAV_ITEMS.filter((item) => ["text", "voices", "characters", "generate", "review", "export"].includes(item.key));
-  const comicNavItems = NAV_ITEMS.filter((item) => ["comic-script", "storyboard", "panels", "layout", "comic"].includes(item.key));
-  const systemNavItems = NAV_ITEMS.filter((item) => ["video", "settings"].includes(item.key));
+  const audiobookNavItems = NAV_ITEMS.filter((item) => ["text", "voices", "characters", "generate", "review", "export"].includes(item.key) && canAccessRoute(user, item.key));
+  const comicNavItems = NAV_ITEMS.filter((item) => ["comic-script", "storyboard", "panels", "layout", "comic"].includes(item.key) && canAccessRoute(user, item.key));
+  const systemNavItems = NAV_ITEMS.filter((item) => ["video", "settings"].includes(item.key) && canAccessRoute(user, item.key));
 
   function toggleSection(sectionKey) {
     setOpenSections((current) => ({ ...current, [sectionKey]: !current[sectionKey] }));
@@ -1835,7 +2015,7 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
           <div className="sidebar-section-body">
             {projectItem ? (
               <button className={`nav-button ${route === projectItem.key ? "active" : ""}`} onClick={() => onRouteChange(projectItem.key)}>
-                <span>{projectItem.label}</span>
+                <span>{projectRouteTitle(projectItem.key)}</span>
               </button>
             ) : null}
             <div className="project-pick">
@@ -1861,7 +2041,8 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
         ) : null}
       </div>
 
-      <div className={`sidebar-section ${openSections.audiobook ? "open" : ""}`}>
+      {audiobookNavItems.length ? (
+        <div className={`sidebar-section ${openSections.audiobook ? "open" : ""}`}>
         <button className="sidebar-toggle" onClick={() => toggleSection("audiobook")}>
           <span className="sidebar-toggle-main">
             <span className="sidebar-label">{t("sidebar.audiobookFlow")}</span>
@@ -1876,14 +2057,16 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
           <div className="sidebar-section-body">
             {audiobookNavItems.map((item) => (
               <button key={item.key} className={`nav-button ${route === item.key ? "active" : ""}`} onClick={() => onRouteChange(item.key)}>
-                <span>{item.label}</span>
+                <span>{projectRouteTitle(item.key)}</span>
               </button>
             ))}
           </div>
         ) : null}
-      </div>
+        </div>
+      ) : null}
 
-      <div className={`sidebar-section ${openSections.comic ? "open" : ""}`}>
+      {comicNavItems.length ? (
+        <div className={`sidebar-section ${openSections.comic ? "open" : ""}`}>
         <button className="sidebar-toggle" onClick={() => toggleSection("comic")}>
           <span className="sidebar-toggle-main">
             <span className="sidebar-label">{t("sidebar.comicFlow")}</span>
@@ -1898,14 +2081,16 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
           <div className="sidebar-section-body">
             {comicNavItems.map((item) => (
               <button key={item.key} className={`nav-button ${route === item.key ? "active" : ""}`} onClick={() => onRouteChange(item.key)}>
-                <span>{item.label}</span>
+                <span>{projectRouteTitle(item.key)}</span>
               </button>
             ))}
           </div>
         ) : null}
-      </div>
+        </div>
+      ) : null}
 
-      <div className={`sidebar-section ${openSections.system ? "open" : ""}`}>
+      {systemNavItems.length ? (
+        <div className={`sidebar-section ${openSections.system ? "open" : ""}`}>
         <button className="sidebar-toggle" onClick={() => toggleSection("system")}>
           <span className="sidebar-toggle-main">
             <span className="sidebar-label">{t("sidebar.systemExtensions")}</span>
@@ -1920,12 +2105,13 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
           <div className="sidebar-section-body">
             {systemNavItems.map((item) => (
               <button key={item.key} className={`nav-button ${route === item.key ? "active" : ""}`} onClick={() => onRouteChange(item.key)}>
-                <span>{item.label}</span>
+                <span>{projectRouteTitle(item.key)}</span>
               </button>
             ))}
           </div>
         ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <div className={`sidebar-section ${openSections.llm ? "open" : ""}`}>
         <button className="sidebar-toggle" onClick={() => toggleSection("llm")}>
@@ -1958,7 +2144,7 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
 
       <div className="sidebar-foot">
         <LanguagePicker locale={locale} onChange={onLocaleChange} />
-        <div>{user.name} · {user.role}</div>
+        <div>{user.name} · {userRoleLabel(user.role) || user.role}</div>
         <button className="button-secondary" onClick={onLogout}>{t("common.logout")}</button>
       </div>
     </aside>
@@ -1985,6 +2171,7 @@ function Topbar({ route, project, user, actions }) {
 function PageContent(props) {
   const {
     route,
+    user,
     projects,
     token,
     project,
@@ -2012,11 +2199,15 @@ function PageContent(props) {
     requestConfirm,
   } = props;
 
+  if (!canAccessRoute(user, route)) {
+    return <AccessDeniedPage user={user} />;
+  }
+
   if (route === "projects") {
-    return <ProjectsPage projects={projects} selectedProject={project} token={token} refreshProject={refreshProject} deleteProject={deleteProject} onSelectProject={onSelectProject} onOpenChapter={onOpenChapter} onOpenProjectText={onOpenProjectText} requestConfirm={requestConfirm} showFlash={showFlash} />;
+    return <ProjectsPage user={user} projects={projects} selectedProject={project} token={token} refreshProject={refreshProject} deleteProject={deleteProject} onSelectProject={onSelectProject} onOpenChapter={onOpenChapter} onOpenProjectText={onOpenProjectText} requestConfirm={requestConfirm} showFlash={showFlash} />;
   }
   if (route === "text") {
-    return <TextPrepPage token={token} project={project} selectedChapter={selectedChapter} selectedChapterId={selectedChapterId} setSelectedChapterId={setSelectedChapterId} segments={segments} voices={voices} characters={characters} jobs={jobs} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
+    return <TextPrepPage user={user} token={token} project={project} selectedChapter={selectedChapter} selectedChapterId={selectedChapterId} setSelectedChapterId={setSelectedChapterId} segments={segments} voices={voices} characters={characters} jobs={jobs} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
   }
   if (route === "voices") {
     return <VoiceSetupPage token={token} project={project} voices={voices} refreshProject={refreshProject} showFlash={showFlash} />;
@@ -2057,8 +2248,13 @@ function PageContent(props) {
   return null;
 }
 
-function ProjectsPage({ projects = [], selectedProject, token, refreshProject, deleteProject, onSelectProject, onOpenChapter, onOpenProjectText, requestConfirm, showFlash }) {
+function ProjectsPage({ user, projects = [], selectedProject, token, refreshProject, deleteProject, onSelectProject, onOpenChapter, onOpenProjectText, requestConfirm, showFlash }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const primaryRoute = preferredProjectEntryRoute(user);
+  const canCreateProject = hasPermission(user, "project_manage");
+  const canDeleteProject = hasPermission(user, "project_delete");
+  const canOpenChapter = canAccessRoute(user, "text") || canAccessRoute(user, "export");
+  const primaryRouteLabel = projectRouteTitle(primaryRoute);
 
   return (
     <>
@@ -2070,7 +2266,7 @@ function ProjectsPage({ projects = [], selectedProject, token, refreshProject, d
               <div className="subtext">在同一頁面完成專案切換、摘要查看與章節入口。</div>
             </div>
             <div className="toolbar" style={{ marginBottom: 0 }}>
-              <button className="button" onClick={() => setShowCreateModal(true)}>建立專案</button>
+              {canCreateProject ? <button className="button" onClick={() => setShowCreateModal(true)}>建立專案</button> : null}
               <span className="tag brand">{projects.length} 個專案</span>
             </div>
           </div>
@@ -2101,27 +2297,31 @@ function ProjectsPage({ projects = [], selectedProject, token, refreshProject, d
                     <td>{project.metrics?.failed_jobs || 0}</td>
                     <td>
                       <div className="toolbar" style={{ marginBottom: 0 }}>
-                        <button
-                          className="button-secondary"
-                          onClick={async () => {
-                            await onOpenProjectText(project.id);
-                          }}
-                        >
-                          文本準備
-                        </button>
-                        <button
-                          className="button-danger"
-                          onClick={() => requestConfirm({
-                            title: "刪除專案",
-                            message: `將永久刪除「${project.title}」以及底下所有章節、段落、音訊、渲染與匯出檔。此動作無法復原。`,
-                            confirmLabel: "刪除專案",
-                            onConfirm: async () => {
-                              await deleteProject(project);
-                            },
-                          })}
-                        >
-                          刪除
-                        </button>
+                        {primaryRoute !== "projects" ? (
+                          <button
+                            className="button-secondary"
+                            onClick={async () => {
+                              await onOpenProjectText(project.id, primaryRoute);
+                            }}
+                          >
+                            {primaryRouteLabel}
+                          </button>
+                        ) : null}
+                        {canDeleteProject ? (
+                          <button
+                            className="button-danger"
+                            onClick={() => requestConfirm({
+                              title: "刪除專案",
+                              message: `將永久刪除「${project.title}」以及底下所有章節、段落、音訊、渲染與匯出檔。此動作無法復原。`,
+                              confirmLabel: "刪除專案",
+                              onConfirm: async () => {
+                                await deleteProject(project);
+                              },
+                            })}
+                          >
+                            刪除
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -2174,7 +2374,13 @@ function ProjectsPage({ projects = [], selectedProject, token, refreshProject, d
                 <div className="panel-head">
                   <div>
                     <h2>章節地圖</h2>
-                    <div className="subtext">直接進入文本準備，不再切換到另一個總覽頁。</div>
+                    <div className="subtext">
+                      {canAccessRoute(user, "text")
+                        ? "直接進入文本準備，不再切換到另一個總覽頁。"
+                        : canAccessRoute(user, "export")
+                          ? "可直接切到交付頁，查看各章渲染與匯出結果。"
+                          : "目前角色以專案摘要為主，章節明細入口已交由其他流程角色處理。"}
+                    </div>
                   </div>
                 </div>
                 <div className="list">
@@ -2182,7 +2388,11 @@ function ProjectsPage({ projects = [], selectedProject, token, refreshProject, d
                     <div key={chapter.id} className="list-item">
                       <div className="title-row">
                         <strong>{chapter.order_index}. {chapter.title}</strong>
-                        <button className="button-secondary" onClick={() => onOpenChapter(chapter.id)}>文本準備</button>
+                        {canOpenChapter ? (
+                          <button className="button-secondary" onClick={() => onOpenChapter(chapter.id, canAccessRoute(user, "text") ? "text" : "export")}>
+                            {canAccessRoute(user, "text") ? "文本準備" : "匯出交付"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className="pill-row" style={{ marginTop: 10 }}>
                         <span className="tag">{chapter.segment_count} 段</span>
@@ -2199,21 +2409,23 @@ function ProjectsPage({ projects = [], selectedProject, token, refreshProject, d
           )}
         </div>
       </div>
-      <ProjectCreateModal
-        open={showCreateModal}
-        token={token}
-        onClose={() => setShowCreateModal(false)}
-        onCreated={async (createdProject) => {
-          await refreshProject({ projectId: createdProject.id });
-          setShowCreateModal(false);
-        }}
-        showFlash={showFlash}
-      />
+      {canCreateProject ? (
+        <ProjectCreateModal
+          open={showCreateModal}
+          token={token}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={async (createdProject) => {
+            await refreshProject({ projectId: createdProject.id });
+            setShowCreateModal(false);
+          }}
+          showFlash={showFlash}
+        />
+      ) : null}
     </>
   );
 }
 
-function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setSelectedChapterId, segments, voices, characters, jobs, refreshProject, requestConfirm, showFlash }) {
+function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId, setSelectedChapterId, segments, voices, characters, jobs, refreshProject, requestConfirm, showFlash }) {
   const [activeSegmentId, setActiveSegmentId] = useState(null);
   const [segmentBusyAction, setSegmentBusyAction] = useState("");
   const [voiceBusy, setVoiceBusy] = useState(false);
@@ -2232,6 +2444,8 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
   const [segmentPage, setSegmentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const narratorCharacters = useMemo(() => characters.filter((character) => character.role_type === "narrator"), [characters]);
+  const canManageProject = hasPermission(user, "project_manage");
+  const defaultVoice = voices.find((voice) => String(voice.id) === String(project?.default_voice_profile_id || ""));
 
   const totalSegmentPages = Math.max(1, Math.ceil(segments.length / pageSize));
   const currentSegmentJob = activeSegment ? jobs.find((job) => job.segment_id === activeSegment.id) || null : null;
@@ -2587,22 +2801,28 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
           </div>
         </div>
         <div className="toolbar" style={{ marginBottom: 10 }}>
-          <label className="subtext" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-            專案預設聲線
-            <select
-              className="select"
-              disabled={voiceBusy || !voices.length}
-              value={project?.default_voice_profile_id ? String(project.default_voice_profile_id) : ""}
-              onChange={(event) => updateDefaultVoice(event.target.value)}
-            >
-              {!voices.length ? <option value="">尚無可用聲線</option> : null}
-              {voices.map((voice) => (
-                <option key={voice.id} value={voice.id}>
-                  {voice.name} / {voice.provider} / {voice.model}
-                </option>
-              ))}
-            </select>
-          </label>
+          {canManageProject ? (
+            <label className="subtext" style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+              專案預設聲線
+              <select
+                className="select"
+                disabled={voiceBusy || !voices.length}
+                value={project?.default_voice_profile_id ? String(project.default_voice_profile_id) : ""}
+                onChange={(event) => updateDefaultVoice(event.target.value)}
+              >
+                {!voices.length ? <option value="">尚無可用聲線</option> : null}
+                {voices.map((voice) => (
+                  <option key={voice.id} value={voice.id}>
+                    {voice.name} / {voice.provider} / {voice.model}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div className="subtext">
+              專案預設聲線：{defaultVoice ? `${defaultVoice.name} / ${defaultVoice.provider} / ${defaultVoice.model}` : "尚未設定"}
+            </div>
+          )}
         </div>
         <div className="editor-card" style={{ marginBottom: 12 }}>
           <div className="title-row">

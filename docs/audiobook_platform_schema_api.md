@@ -73,10 +73,20 @@
 | id | uuid pk | 用户 id |
 | email | varchar unique | 登录邮箱 |
 | name | varchar | 用户名 |
-| role | varchar | admin/operator/reviewer |
+| role | varchar | admin/text_editor/reviewer/delivery_manager/settings_manager |
 | status | varchar | active/disabled |
 | created_at | timestamptz | 创建时间 |
 | updated_at | timestamptz | 更新时间 |
+
+当前本地版默认会种入 5 个角色账号：
+
+- `admin@example.com / admin123`
+- `editor@example.com / editor123`
+- `reviewer@example.com / review123`
+- `delivery@example.com / delivery123`
+- `settings@example.com / settings123`
+
+其中 `admin@example.com / admin123` 保持不变。
 
 ## 3.2 books
 

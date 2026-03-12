@@ -80,10 +80,17 @@ chmod +x run_local.sh
 
 - [http://127.0.0.1:8000](http://127.0.0.1:8000)
 
-預設登入帳號：
+預設登入帳號與角色：
 
-- 電子郵件：`admin@example.com`
-- 密碼：`admin123`
+- `admin@example.com / admin123`：管理員，完整流程與全部頁面
+- `editor@example.com / editor123`：文本編輯，負責文本準備與生成
+- `reviewer@example.com / review123`：審核員，只進入審核校對
+- `delivery@example.com / delivery123`：交付管理，只進入匯出交付
+- `settings@example.com / settings123`：設定管理，負責聲線、角色、漫畫與系統設定
+
+其中 `admin@example.com / admin123` 保持不變。完整角色說明見：
+
+- [預設角色帳號](docs/default_accounts.md)
 
 介面語言：
 
@@ -169,6 +176,7 @@ cp .env.local.example .env.local
 ## 文檔
 
 - [更新日誌](CHANGELOG.md)
+- [預設角色帳號](docs/default_accounts.md)
 - [一頁操作說明](docs/audiobook_one_page_guide.md)
 - [一頁操作說明 Printable HTML](docs/audiobook_one_page_guide_print.html)
 - [審核員一頁說明](docs/reviewer_one_page_guide.md)

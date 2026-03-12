@@ -11,8 +11,10 @@
 ## 使用前準備
 
 - 瀏覽器打開 [http://127.0.0.1:8000](http://127.0.0.1:8000)
-- 登入帳號：`admin@example.com`
-- 登入密碼：`admin123`
+- 建議登入帳號：`reviewer@example.com`
+- 建議登入密碼：`review123`
+- 若需跨流程協助，可使用 `admin@example.com / admin123`；此 admin 帳密保持不變
+- 其他預設角色帳號見 [預設角色帳號](default_accounts.md)
 - 專案內已經有生成完成的音訊段落
 
 ## 審核步驟

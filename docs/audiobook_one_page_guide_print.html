@@ -265,7 +265,7 @@
           <div class="steps">
             <h2>操作步驟</h2>
             <ol>
-              <li><strong>登入系統</strong>：打開 `http://127.0.0.1:8000`，使用 `admin@example.com / admin123` 登入。</li>
+              <li><strong>登入系統</strong>：打開 `http://127.0.0.1:8000`，完整流程建議使用 `admin@example.com / admin123` 登入；此 admin 帳密保持不變。</li>
               <li><strong>新建專案</strong>：填寫書名、作者、語言與簡短說明，建立後進入專案；若後續要擴展漫畫或 Video，可在 `系統設定` 先保存模型模板。</li>
               <li><strong>匯入文本</strong>：上傳 `txt`、`md` 或 `docx`，系統會自動拆章拆段。</li>
               <li><strong>整理朗讀稿</strong>：在 `Text Prep` 檢查每段 `tts_text`，把不適合朗讀的文字改成自然口語。</li>
@@ -285,6 +285,17 @@
                 <div class="check">以 `tts_text` 作為朗讀依據</div>
                 <div class="check">只要有問題，優先重生單段</div>
               </div>
+            </div>
+
+            <div class="card">
+              <h3>預設角色帳號</h3>
+              <ul>
+                <li><strong>Admin</strong>：`admin@example.com / admin123`</li>
+                <li><strong>Text Editor</strong>：`editor@example.com / editor123`</li>
+                <li><strong>Reviewer</strong>：`reviewer@example.com / review123`</li>
+                <li><strong>Delivery</strong>：`delivery@example.com / delivery123`</li>
+                <li><strong>Settings</strong>：`settings@example.com / settings123`</li>
+              </ul>
             </div>
 
             <div class="image-card">

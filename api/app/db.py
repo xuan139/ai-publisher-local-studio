@@ -11,6 +11,38 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 GENERATED_DIR = BASE_DIR / "generated"
 DB_PATH = DATA_DIR / "app.db"
+DEFAULT_USERS = [
+    {
+        "email": "admin@example.com",
+        "name": "Local Admin",
+        "role": "admin",
+        "password": "admin123",
+    },
+    {
+        "email": "editor@example.com",
+        "name": "Text Editor",
+        "role": "text_editor",
+        "password": "editor123",
+    },
+    {
+        "email": "reviewer@example.com",
+        "name": "Review Operator",
+        "role": "reviewer",
+        "password": "review123",
+    },
+    {
+        "email": "delivery@example.com",
+        "name": "Delivery Manager",
+        "role": "delivery_manager",
+        "password": "delivery123",
+    },
+    {
+        "email": "settings@example.com",
+        "name": "Settings Manager",
+        "role": "settings_manager",
+        "password": "settings123",
+    },
+]
 
 
 def utc_now() -> str:
@@ -313,13 +345,21 @@ def init_db() -> None:
     ensure_directories()
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        ensure_user_role_column(conn)
         ensure_project_type_column(conn)
         ensure_project_setting_columns(conn)
         ensure_segment_character_column(conn)
         ensure_character_profile_columns(conn)
-        seed_default_user(conn)
+        seed_default_users(conn)
         seed_default_voice_profiles(conn)
         seed_default_model_profiles(conn)
+
+
+def ensure_user_role_column(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "role" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'")
+    conn.execute("UPDATE users SET role = 'admin' WHERE COALESCE(TRIM(role), '') = ''")
 
 
 def ensure_project_type_column(conn: sqlite3.Connection) -> None:
@@ -380,17 +420,25 @@ def ensure_character_profile_columns(conn: sqlite3.Connection) -> None:
     )
 
 
-def seed_default_user(conn: sqlite3.Connection) -> None:
-    user = conn.execute("SELECT id FROM users WHERE email = ?", ("admin@example.com",)).fetchone()
-    if user:
-        return
-    conn.execute(
-        """
-        INSERT INTO users (email, name, role, password_hash, created_at)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        ("admin@example.com", "Local Admin", "admin", hash_password("admin123"), utc_now()),
-    )
+def seed_default_users(conn: sqlite3.Connection) -> None:
+    existing_rows = conn.execute("SELECT email FROM users").fetchall()
+    existing_emails = {row["email"] for row in existing_rows}
+    for user in DEFAULT_USERS:
+        if user["email"] in existing_emails:
+            continue
+        conn.execute(
+            """
+            INSERT INTO users (email, name, role, password_hash, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                user["email"],
+                user["name"],
+                user["role"],
+                hash_password(user["password"]),
+                utc_now(),
+            ),
+        )
 
 
 def seed_default_voice_profiles(conn: sqlite3.Connection) -> None:

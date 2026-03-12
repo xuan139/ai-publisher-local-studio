@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from .ai_providers import ProviderConfigError, ProviderRequestError, generate_speech, transcribe_audio
 from .audio_utils import concat_wavs, create_export_zip, public_file_path, slugify
 from .config import get_settings
-from .db import BASE_DIR, GENERATED_DIR, connect, get_conn, init_db, utc_now
+from .db import BASE_DIR, DEFAULT_USERS, GENERATED_DIR, connect, get_conn, init_db, utc_now
 from .model_registry import REGISTRY_PATH, get_model_registry, get_registry_defaults, get_system_catalog
 from .schemas import (
     BatchCharacterAssignRequest,
@@ -56,6 +56,45 @@ from .text_utils import detect_segment_speaker, extract_chapters_from_upload, sp
 WEB_DIR = BASE_DIR.parent / "web"
 APP_TITLE = "AI Publisher Local Studio"
 LOOK_SLOT_COUNT = 9
+ALL_ROUTE_KEYS = [
+    "projects",
+    "text",
+    "voices",
+    "characters",
+    "comic-script",
+    "storyboard",
+    "panels",
+    "layout",
+    "comic",
+    "video",
+    "generate",
+    "review",
+    "export",
+    "settings",
+]
+ROLE_ROUTE_ACCESS = {
+    "admin": ALL_ROUTE_KEYS,
+    "text_editor": ["projects", "text", "generate"],
+    "reviewer": ["projects", "review"],
+    "delivery_manager": ["projects", "export"],
+    "settings_manager": ["projects", "voices", "characters", "comic", "video", "settings"],
+}
+ROLE_PERMISSION_ACCESS = {
+    "admin": {
+        "project_manage",
+        "project_delete",
+        "text_manage",
+        "settings_manage",
+        "comic_manage",
+        "generate_manage",
+        "review_manage",
+        "delivery_manage",
+    },
+    "text_editor": {"text_manage", "generate_manage"},
+    "reviewer": {"review_manage"},
+    "delivery_manager": {"delivery_manage"},
+    "settings_manager": {"project_manage", "settings_manage"},
+}
 
 app = FastAPI(title=APP_TITLE)
 app.add_middleware(
@@ -68,6 +107,62 @@ app.add_middleware(
 
 app.mount("/generated", StaticFiles(directory=GENERATED_DIR), name="generated")
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+
+
+def normalize_role(role: str | None) -> str:
+    value = (role or "").strip().lower()
+    if not value:
+        return "admin"
+    return value if value in ROLE_ROUTE_ACCESS else "unknown"
+
+
+def allowed_routes_for_role(role: str | None) -> list[str]:
+    return list(ROLE_ROUTE_ACCESS.get(normalize_role(role), []))
+
+
+def permissions_for_role(role: str | None) -> set[str]:
+    return set(ROLE_PERMISSION_ACCESS.get(normalize_role(role), set()))
+
+
+def build_user_payload(user: sqlite3.Row | dict) -> dict:
+    role = normalize_role(user["role"])
+    return {
+        "id": user["id"],
+        "email": user["email"],
+        "name": user["name"],
+        "role": role,
+        "allowed_routes": allowed_routes_for_role(role),
+        "permissions": sorted(permissions_for_role(role)),
+    }
+
+
+def build_demo_accounts_payload() -> list[dict]:
+    items = []
+    for account in DEFAULT_USERS:
+        role = normalize_role(account["role"])
+        items.append(
+            {
+                "email": account["email"],
+                "password": account["password"],
+                "name": account["name"],
+                "role": role,
+                "allowed_routes": allowed_routes_for_role(role),
+            }
+        )
+    return items
+
+
+def require_permission(user: dict, permission: str) -> None:
+    if permission in permissions_for_role(user.get("role")):
+        return
+    raise HTTPException(status_code=403, detail="You do not have permission to perform this action")
+
+
+def require_any_permission(user: dict, *permissions: str) -> None:
+    user_permissions = permissions_for_role(user.get("role"))
+    if any(permission in user_permissions for permission in permissions):
+        return
+    raise HTTPException(status_code=403, detail="You do not have permission to perform this action")
 
 
 @app.on_event("startup")
@@ -346,7 +441,7 @@ def fetch_user_by_token(token: str) -> dict:
         ).fetchone()
     if not row:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    return dict(row)
+    return build_user_payload(row)
 
 
 def get_current_user(request: Request) -> dict:
@@ -1310,6 +1405,15 @@ def health() -> dict:
     return {"status": "ok", "app": APP_TITLE}
 
 
+@app.get("/api/auth/demo-accounts")
+def demo_accounts() -> dict:
+    accounts = build_demo_accounts_payload()
+    return {
+        "items": accounts,
+        "default_account": accounts[0] if accounts else None,
+    }
+
+
 @app.post("/api/auth/login")
 def login(payload: LoginRequest) -> dict:
     with get_conn() as conn:
@@ -1318,15 +1422,12 @@ def login(payload: LoginRequest) -> dict:
             raise HTTPException(status_code=401, detail="Invalid credentials")
         token = create_token()
         conn.execute("INSERT INTO sessions (user_id, token, created_at) VALUES (?, ?, ?)", (user["id"], token, utc_now()))
+    demo_accounts = build_demo_accounts_payload()
     return {
         "token": token,
-        "user": {
-            "id": user["id"],
-            "email": user["email"],
-            "name": user["name"],
-            "role": user["role"],
-        },
-        "demo_credentials": {"email": "admin@example.com", "password": "admin123"},
+        "user": build_user_payload(user),
+        "demo_credentials": demo_accounts[0] if demo_accounts else None,
+        "demo_accounts": demo_accounts,
     }
 
 
@@ -1361,6 +1462,7 @@ def list_projects(user: dict = Depends(get_current_user)) -> dict:
 
 @app.post("/api/projects")
 def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "project_manage")
     now = utc_now()
     project_type = (payload.project_type or "audiobook").strip().lower() or "audiobook"
     with get_conn() as conn:
@@ -1404,6 +1506,7 @@ def get_project_detail(project_id: int, user: dict = Depends(get_current_user)) 
 
 @app.patch("/api/projects/{project_id}")
 def update_project(project_id: int, payload: ProjectUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "project_manage")
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
@@ -1425,6 +1528,7 @@ def update_project(project_id: int, payload: ProjectUpdate, user: dict = Depends
 
 @app.delete("/api/projects/{project_id}")
 def delete_project(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "project_delete")
     project_dirs = [
         GENERATED_DIR / "imports" / f"project_{project_id}",
         GENERATED_DIR / "audio" / f"project_{project_id}",
@@ -1448,6 +1552,7 @@ async def import_project_text(
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user),
 ) -> dict:
+    require_permission(user, "text_manage")
     raw = await file.read()
     chapter_count = import_project_document(project_id, file.filename or "upload.txt", raw, user["id"])
     return {"success": True, "chapter_count": chapter_count}
@@ -1459,6 +1564,7 @@ def import_project_local_path(
     payload: ProjectImportLocalRequest,
     user: dict = Depends(get_current_user),
 ) -> dict:
+    require_permission(user, "text_manage")
     path = Path(payload.path).expanduser()
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=400, detail="Local file path does not exist")
@@ -1488,6 +1594,7 @@ def list_segments(chapter_id: int, user: dict = Depends(get_current_user)) -> di
 
 @app.delete("/api/chapters/{chapter_id}")
 def delete_chapter(chapter_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "text_manage")
     with get_conn() as conn:
         chapter = dict(get_chapter(conn, chapter_id))
         artifact_paths = collect_chapter_artifacts(conn, chapter_id)
@@ -1523,6 +1630,7 @@ def delete_chapter(chapter_id: int, user: dict = Depends(get_current_user)) -> d
 
 @app.patch("/api/segments/{segment_id}")
 def update_segment(segment_id: int, payload: SegmentUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "text_manage")
     with get_conn() as conn:
         segment = get_segment(conn, segment_id)
         updates = {
@@ -1546,6 +1654,7 @@ def update_segment(segment_id: int, payload: SegmentUpdate, user: dict = Depends
 
 @app.delete("/api/segments/{segment_id}")
 def delete_segment(segment_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "text_manage")
     with get_conn() as conn:
         segment = dict(get_segment(conn, segment_id))
         artifact_paths = collect_segment_artifacts(conn, segment_id)
@@ -1571,6 +1680,7 @@ def delete_segment(segment_id: int, user: dict = Depends(get_current_user)) -> d
 
 @app.post("/api/segments/merge")
 def merge_segments(payload: MergeSegmentsRequest, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "text_manage")
     segment_ids = list(dict.fromkeys(payload.segment_ids))
     if len(segment_ids) < 2:
         raise HTTPException(status_code=400, detail="Please select at least two segments to merge")
@@ -1689,6 +1799,7 @@ def merge_segments(payload: MergeSegmentsRequest, user: dict = Depends(get_curre
 
 @app.get("/api/projects/{project_id}/voice-profiles")
 def list_voice_profiles(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_any_permission(user, "text_manage", "settings_manage")
     with get_conn() as conn:
         get_project(conn, project_id)
         rows = conn.execute(
@@ -1704,6 +1815,7 @@ def list_voice_profiles(project_id: int, user: dict = Depends(get_current_user))
 
 @app.get("/api/projects/{project_id}/character-profiles")
 def list_character_profiles(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_any_permission(user, "text_manage", "settings_manage")
     with get_conn() as conn:
         get_project(conn, project_id)
         rows = conn.execute(
@@ -1719,6 +1831,7 @@ def list_character_profiles(project_id: int, user: dict = Depends(get_current_us
 
 @app.post("/api/projects/{project_id}/character-profiles")
 def create_character_profile(project_id: int, payload: CharacterProfileCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     now = utc_now()
     with get_conn() as conn:
         get_project(conn, project_id)
@@ -1778,6 +1891,7 @@ def create_character_profile(project_id: int, payload: CharacterProfileCreate, u
 
 @app.patch("/api/character-profiles/{character_profile_id}")
 def update_character_profile(character_profile_id: int, payload: CharacterProfileUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     provided_fields = payload.model_fields_set
     updates = {key: value for key, value in payload.model_dump().items() if key in provided_fields}
     if not updates:
@@ -1811,6 +1925,7 @@ def update_character_profile(character_profile_id: int, payload: CharacterProfil
 
 @app.delete("/api/character-profiles/{character_profile_id}")
 def delete_character_profile(character_profile_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     with get_conn() as conn:
         character = dict(get_character_profile(conn, character_profile_id))
         look_rows = conn.execute("SELECT image_path FROM character_looks WHERE character_profile_id = ?", (character_profile_id,)).fetchall()
@@ -1825,6 +1940,7 @@ def delete_character_profile(character_profile_id: int, user: dict = Depends(get
 
 @app.post("/api/character-profiles/{character_profile_id}/avatar")
 async def upload_character_avatar(character_profile_id: int, file: UploadFile = File(...), user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
@@ -1854,6 +1970,7 @@ async def upload_character_avatar(character_profile_id: int, file: UploadFile = 
 
 @app.patch("/api/character-profiles/{character_profile_id}/looks/{slot_index}")
 def update_character_look(character_profile_id: int, slot_index: int, payload: CharacterLookUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     with get_conn() as conn:
         character = dict(get_character_profile(conn, character_profile_id))
         row = upsert_character_look(
@@ -1875,6 +1992,7 @@ async def upload_character_look(
     label: str = Form(""),
     user: dict = Depends(get_current_user),
 ) -> dict:
+    require_permission(user, "settings_manage")
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
@@ -1903,6 +2021,7 @@ def import_character_look_from_drive(
     payload: CharacterLookImportRequest,
     user: dict = Depends(get_current_user),
 ) -> dict:
+    require_permission(user, "settings_manage")
     image_bytes, suffix, source_type, source_ref = download_remote_image(payload.url)
     with get_conn() as conn:
         character = dict(get_character_profile(conn, character_profile_id))
@@ -1921,6 +2040,7 @@ def import_character_look_from_drive(
 
 @app.delete("/api/character-profiles/{character_profile_id}/looks/{slot_index}")
 def delete_character_look(character_profile_id: int, slot_index: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     with get_conn() as conn:
         get_character_profile(conn, character_profile_id)
         existing = conn.execute(
@@ -1935,6 +2055,7 @@ def delete_character_look(character_profile_id: int, slot_index: int, user: dict
 
 @app.post("/api/segments/batch-assign-character")
 def batch_assign_character(payload: BatchCharacterAssignRequest, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "text_manage")
     if not payload.segment_ids:
         raise HTTPException(status_code=400, detail="No segments selected")
     with get_conn() as conn:
@@ -1962,6 +2083,7 @@ def batch_assign_character(payload: BatchCharacterAssignRequest, user: dict = De
 
 @app.post("/api/chapters/{chapter_id}/assign-character")
 def assign_chapter_character(chapter_id: int, payload: BatchCharacterAssignRequest, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "text_manage")
     with get_conn() as conn:
         chapter = get_chapter(conn, chapter_id)
         if payload.character_profile_id is not None:
@@ -1977,6 +2099,7 @@ def assign_chapter_character(chapter_id: int, payload: BatchCharacterAssignReque
 
 @app.get("/api/chapters/{chapter_id}/character-detection")
 def get_chapter_character_detection(chapter_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "text_manage")
     with get_conn() as conn:
         get_chapter(conn, chapter_id)
         return chapter_character_detection(conn, chapter_id)
@@ -1988,6 +2111,7 @@ def auto_bind_chapter_characters(
     payload: ChapterCharacterAutoBindRequest,
     user: dict = Depends(get_current_user),
 ) -> dict:
+    require_permission(user, "text_manage")
     with get_conn() as conn:
         chapter = get_chapter(conn, chapter_id)
         detection = chapter_character_detection(conn, chapter_id)
@@ -2096,6 +2220,7 @@ def auto_bind_chapter_characters(
 
 @app.get("/api/projects/{project_id}/comic-profiles")
 def list_comic_profiles(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     with get_conn() as conn:
         get_project(conn, project_id)
         rows = conn.execute(
@@ -2111,6 +2236,7 @@ def list_comic_profiles(project_id: int, user: dict = Depends(get_current_user))
 
 @app.post("/api/projects/{project_id}/comic-profiles")
 def create_comic_profile(project_id: int, payload: ModelProfileCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     now = utc_now()
     settings = merge_settings(payload.settings, comic_settings_defaults())
     with get_conn() as conn:
@@ -2128,6 +2254,7 @@ def create_comic_profile(project_id: int, payload: ModelProfileCreate, user: dic
 
 @app.get("/api/projects/{project_id}/video-profiles")
 def list_video_profiles(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     with get_conn() as conn:
         get_project(conn, project_id)
         rows = conn.execute(
@@ -2143,6 +2270,7 @@ def list_video_profiles(project_id: int, user: dict = Depends(get_current_user))
 
 @app.post("/api/projects/{project_id}/video-profiles")
 def create_video_profile(project_id: int, payload: ModelProfileCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     now = utc_now()
     settings = merge_settings(payload.settings, video_settings_defaults())
     with get_conn() as conn:
@@ -2160,6 +2288,7 @@ def create_video_profile(project_id: int, payload: ModelProfileCreate, user: dic
 
 @app.get("/api/projects/{project_id}/comic-scripts")
 def list_comic_scripts(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     with get_conn() as conn:
         get_project(conn, project_id)
         rows = conn.execute(
@@ -2175,6 +2304,7 @@ def list_comic_scripts(project_id: int, user: dict = Depends(get_current_user)) 
 
 @app.post("/api/projects/{project_id}/comic-scripts")
 def create_comic_script(project_id: int, payload: ComicScriptCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     now = utc_now()
     with get_conn() as conn:
         get_project(conn, project_id)
@@ -2208,6 +2338,7 @@ def create_comic_script(project_id: int, payload: ComicScriptCreate, user: dict 
 
 @app.patch("/api/comic-scripts/{comic_script_id}")
 def update_comic_script(comic_script_id: int, payload: ComicScriptUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     provided_fields = payload.model_fields_set
     updates = {key: value for key, value in payload.model_dump().items() if key in provided_fields}
     if not updates:
@@ -2235,6 +2366,7 @@ def update_comic_script(comic_script_id: int, payload: ComicScriptUpdate, user: 
 
 @app.delete("/api/comic-scripts/{comic_script_id}")
 def delete_comic_script(comic_script_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     with get_conn() as conn:
         script = dict(get_comic_script(conn, comic_script_id))
         conn.execute("UPDATE comic_pages SET comic_script_id = NULL, updated_at = ? WHERE comic_script_id = ?", (utc_now(), comic_script_id))
@@ -2245,6 +2377,7 @@ def delete_comic_script(comic_script_id: int, user: dict = Depends(get_current_u
 
 @app.get("/api/projects/{project_id}/comic-pages")
 def list_comic_pages(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     with get_conn() as conn:
         get_project(conn, project_id)
         rows = conn.execute(
@@ -2260,6 +2393,7 @@ def list_comic_pages(project_id: int, user: dict = Depends(get_current_user)) ->
 
 @app.post("/api/projects/{project_id}/comic-pages")
 def create_comic_page(project_id: int, payload: ComicPageCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     now = utc_now()
     with get_conn() as conn:
         get_project(conn, project_id)
@@ -2305,6 +2439,7 @@ def create_comic_page(project_id: int, payload: ComicPageCreate, user: dict = De
 
 @app.patch("/api/comic-pages/{comic_page_id}")
 def update_comic_page(comic_page_id: int, payload: ComicPageUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     provided_fields = payload.model_fields_set
     updates = {key: value for key, value in payload.model_dump().items() if key in provided_fields}
     if not updates:
@@ -2338,6 +2473,7 @@ def update_comic_page(comic_page_id: int, payload: ComicPageUpdate, user: dict =
 
 @app.delete("/api/comic-pages/{comic_page_id}")
 def delete_comic_page(comic_page_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     with get_conn() as conn:
         page = dict(get_comic_page(conn, comic_page_id))
         artifact_paths = collect_comic_page_artifacts(conn, comic_page_id)
@@ -2352,6 +2488,7 @@ def delete_comic_page(comic_page_id: int, user: dict = Depends(get_current_user)
 
 @app.post("/api/comic-pages/{comic_page_id}/panels")
 def create_comic_panel(comic_page_id: int, payload: ComicPanelCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     now = utc_now()
     with get_conn() as conn:
         page = get_comic_page(conn, comic_page_id)
@@ -2407,6 +2544,7 @@ def create_comic_panel(comic_page_id: int, payload: ComicPanelCreate, user: dict
 
 @app.patch("/api/comic-panels/{comic_panel_id}")
 def update_comic_panel(comic_panel_id: int, payload: ComicPanelUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     provided_fields = payload.model_fields_set
     updates = {key: value for key, value in payload.model_dump().items() if key in provided_fields}
     if not updates:
@@ -2443,6 +2581,7 @@ def update_comic_panel(comic_panel_id: int, payload: ComicPanelUpdate, user: dic
 
 @app.delete("/api/comic-panels/{comic_panel_id}")
 def delete_comic_panel(comic_panel_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     with get_conn() as conn:
         panel = dict(get_comic_panel(conn, comic_panel_id))
         conn.execute("DELETE FROM comic_panels WHERE id = ?", (comic_panel_id,))
@@ -2455,6 +2594,7 @@ def delete_comic_panel(comic_panel_id: int, user: dict = Depends(get_current_use
 
 @app.post("/api/comic-panels/{comic_panel_id}/image/mock-generate")
 def mock_generate_comic_panel_image(comic_panel_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     with get_conn() as conn:
         panel = dict(get_comic_panel(conn, comic_panel_id))
         page = dict(get_comic_page(conn, panel["comic_page_id"]))
@@ -2479,6 +2619,7 @@ def mock_generate_comic_panel_image(comic_panel_id: int, user: dict = Depends(ge
 
 @app.post("/api/comic-panels/{comic_panel_id}/image/upload")
 async def upload_comic_panel_image(comic_panel_id: int, file: UploadFile = File(...), user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
@@ -2510,6 +2651,7 @@ async def upload_comic_panel_image(comic_panel_id: int, file: UploadFile = File(
 
 @app.post("/api/comic-panels/{comic_panel_id}/image/import")
 def import_comic_panel_image(comic_panel_id: int, payload: ComicPanelImageImportRequest, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     image_bytes, suffix, _, _ = download_remote_image(payload.url)
     with get_conn() as conn:
         panel = dict(get_comic_panel(conn, comic_panel_id))
@@ -2536,6 +2678,7 @@ def import_comic_panel_image(comic_panel_id: int, payload: ComicPanelImageImport
 
 @app.delete("/api/comic-panels/{comic_panel_id}/image")
 def delete_comic_panel_image(comic_panel_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "comic_manage")
     with get_conn() as conn:
         panel = dict(get_comic_panel(conn, comic_panel_id))
         conn.execute(
@@ -2555,6 +2698,7 @@ def delete_comic_panel_image(comic_panel_id: int, user: dict = Depends(get_curre
 
 @app.get("/api/system/providers")
 def system_providers(user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     settings = get_settings()
     registry = get_model_registry()
     catalog = get_system_catalog()
@@ -2611,6 +2755,7 @@ def system_providers(user: dict = Depends(get_current_user)) -> dict:
 
 @app.post("/api/projects/{project_id}/voice-profiles")
 def create_voice_profile(project_id: int, payload: VoiceProfileCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     now = utc_now()
     with get_conn() as conn:
         get_project(conn, project_id)
@@ -2640,6 +2785,7 @@ def create_voice_profile(project_id: int, payload: VoiceProfileCreate, user: dic
 
 @app.patch("/api/voice-profiles/{voice_profile_id}")
 def update_voice_profile(voice_profile_id: int, payload: VoiceProfileUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "settings_manage")
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
@@ -2660,6 +2806,7 @@ def update_voice_profile(voice_profile_id: int, payload: VoiceProfileUpdate, use
 
 @app.post("/api/segments/{segment_id}/generate")
 def generate_segment(segment_id: int, background: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "generate_manage")
     with get_conn() as conn:
         segment = get_segment(conn, segment_id)
         voice = voice_for_project(conn, segment["project_id"], segment["voice_profile_id"], segment["character_profile_id"])
@@ -2677,6 +2824,7 @@ def generate_segment(segment_id: int, background: BackgroundTasks, user: dict = 
 
 @app.post("/api/chapters/{chapter_id}/generate")
 def generate_chapter(chapter_id: int, background: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "generate_manage")
     with get_conn() as conn:
         chapter = get_chapter(conn, chapter_id)
         job_ids, _ = queue_chapter_generation_jobs(conn, chapter)
@@ -2687,12 +2835,14 @@ def generate_chapter(chapter_id: int, background: BackgroundTasks, user: dict = 
 
 @app.get("/api/chapters/{chapter_id}/generate-with-default-voice/preview")
 def preview_generate_chapter_with_default_voice(chapter_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "generate_manage")
     with get_conn() as conn:
         return generation_preview_for_chapter(conn, chapter_id)
 
 
 @app.post("/api/chapters/{chapter_id}/generate-with-default-voice")
 def generate_chapter_with_default_voice(chapter_id: int, background: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "generate_manage")
     with get_conn() as conn:
         chapter = get_chapter(conn, chapter_id)
         job_ids, cleared_override_count = queue_chapter_generation_jobs(conn, chapter, force_project_default_voice=True)
@@ -2703,12 +2853,14 @@ def generate_chapter_with_default_voice(chapter_id: int, background: BackgroundT
 
 @app.get("/api/projects/{project_id}/generate-with-default-voice/preview")
 def preview_generate_project_with_default_voice(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "generate_manage")
     with get_conn() as conn:
         return generation_preview_for_project(conn, project_id)
 
 
 @app.post("/api/projects/{project_id}/generate-with-default-voice")
 def generate_project_with_default_voice(project_id: int, background: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "generate_manage")
     with get_conn() as conn:
         job_ids, cleared_override_count, chapter_count = queue_project_generation_jobs(
             conn,
@@ -2726,6 +2878,7 @@ def generate_project_with_default_voice(project_id: int, background: BackgroundT
 
 @app.get("/api/projects/{project_id}/jobs")
 def list_jobs(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "generate_manage")
     with get_conn() as conn:
         get_project(conn, project_id)
         rows = conn.execute(
@@ -2742,6 +2895,7 @@ def list_jobs(project_id: int, user: dict = Depends(get_current_user)) -> dict:
 
 @app.get("/api/segments/{segment_id}/takes")
 def list_takes(segment_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "review_manage")
     with get_conn() as conn:
         get_segment(conn, segment_id)
         rows = conn.execute("SELECT * FROM audio_takes WHERE segment_id = ? ORDER BY version_no DESC", (segment_id,)).fetchall()
@@ -2750,6 +2904,7 @@ def list_takes(segment_id: int, user: dict = Depends(get_current_user)) -> dict:
 
 @app.get("/api/segments/{segment_id}/issues")
 def list_issues(segment_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "review_manage")
     with get_conn() as conn:
         get_segment(conn, segment_id)
         rows = conn.execute("SELECT * FROM review_issues WHERE segment_id = ? ORDER BY created_at DESC", (segment_id,)).fetchall()
@@ -2758,6 +2913,7 @@ def list_issues(segment_id: int, user: dict = Depends(get_current_user)) -> dict
 
 @app.post("/api/segments/{segment_id}/issues")
 def create_issue(segment_id: int, payload: IssueCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "review_manage")
     with get_conn() as conn:
         segment = get_segment(conn, segment_id)
         issue_id = conn.execute(
@@ -2774,6 +2930,7 @@ def create_issue(segment_id: int, payload: IssueCreate, user: dict = Depends(get
 
 @app.patch("/api/issues/{issue_id}")
 def update_issue(issue_id: int, payload: IssueUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "review_manage")
     with get_conn() as conn:
         issue = conn.execute("SELECT * FROM review_issues WHERE id = ?", (issue_id,)).fetchone()
         if not issue:
@@ -2786,6 +2943,7 @@ def update_issue(issue_id: int, payload: IssueUpdate, user: dict = Depends(get_c
 
 @app.post("/api/segments/{segment_id}/approve")
 def approve_segment(segment_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "review_manage")
     with get_conn() as conn:
         get_segment(conn, segment_id)
         conn.execute("UPDATE segments SET status = 'approved', updated_at = ? WHERE id = ?", (utc_now(), segment_id))
@@ -2797,6 +2955,7 @@ def approve_segment(segment_id: int, user: dict = Depends(get_current_user)) -> 
 
 @app.post("/api/segments/{segment_id}/reject")
 def reject_segment(segment_id: int, payload: RejectRequest, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "review_manage")
     with get_conn() as conn:
         segment = get_segment(conn, segment_id)
         conn.execute("UPDATE segments SET status = 'rejected', updated_at = ? WHERE id = ?", (utc_now(), segment_id))
@@ -2815,6 +2974,7 @@ def reject_segment(segment_id: int, payload: RejectRequest, user: dict = Depends
 
 @app.get("/api/projects/{project_id}/review-queue")
 def review_queue(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "review_manage")
     with get_conn() as conn:
         get_project(conn, project_id)
         rows = conn.execute(
@@ -2832,6 +2992,7 @@ def review_queue(project_id: int, user: dict = Depends(get_current_user)) -> dic
 
 @app.post("/api/chapters/{chapter_id}/render")
 def render_chapter(chapter_id: int, background: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "delivery_manage")
     with get_conn() as conn:
         get_chapter(conn, chapter_id)
         next_version = (
@@ -2850,6 +3011,7 @@ def render_chapter(chapter_id: int, background: BackgroundTasks, user: dict = De
 
 @app.get("/api/chapters/{chapter_id}/renders")
 def list_renders(chapter_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "delivery_manage")
     with get_conn() as conn:
         get_chapter(conn, chapter_id)
         rows = conn.execute(
@@ -2866,6 +3028,7 @@ def list_renders(chapter_id: int, user: dict = Depends(get_current_user)) -> dic
 
 @app.post("/api/projects/{project_id}/export")
 def export_project(project_id: int, background: BackgroundTasks, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "delivery_manage")
     with get_conn() as conn:
         get_project(conn, project_id)
         export_id = conn.execute(
@@ -2881,6 +3044,7 @@ def export_project(project_id: int, background: BackgroundTasks, user: dict = De
 
 @app.get("/api/projects/{project_id}/exports")
 def list_exports(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "delivery_manage")
     with get_conn() as conn:
         get_project(conn, project_id)
         rows = conn.execute(

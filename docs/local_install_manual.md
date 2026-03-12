@@ -155,10 +155,15 @@ curl http://127.0.0.1:8000/api/health
 
 ## 7. 登入與基本驗證
 
-開啟瀏覽器後，使用預設帳號登入：
+開啟瀏覽器後，可使用以下預設角色帳號登入：
 
-- 帳號：`admin@example.com`
-- 密碼：`admin123`
+- `admin@example.com / admin123`：管理員，完整流程；此帳號密碼保持不變
+- `editor@example.com / editor123`：文本準備與生成
+- `reviewer@example.com / review123`：審核校對
+- `delivery@example.com / delivery123`：匯出交付
+- `settings@example.com / settings123`：聲線、角色、漫畫與系統設定
+
+完整列表見 [預設角色帳號](default_accounts.md)。
 
 介面預設會以 `繁體中文` 顯示；如果要切換語言，可在：
 
@@ -166,6 +171,8 @@ curl http://127.0.0.1:8000/api/health
 - 登入後左側欄底部
 
 切換成 `简体中文 / English / 日本語 / 한국어`。
+
+若要做完整端到端驗證，建議使用 `admin@example.com / admin123` 登入。
 
 登入後建議先做一次最小驗證：
 

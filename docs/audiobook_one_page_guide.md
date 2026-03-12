@@ -11,8 +11,12 @@
 ## 使用前準備
 
 - 瀏覽器打開 [http://127.0.0.1:8000](http://127.0.0.1:8000)
-- 登入帳號：`admin@example.com`
-- 登入密碼：`admin123`
+- 建議完整流程使用：`admin@example.com / admin123`
+- 文本編輯帳號：`editor@example.com / editor123`
+- 審核員帳號：`reviewer@example.com / review123`
+- 交付管理帳號：`delivery@example.com / delivery123`
+- 設定管理帳號：`settings@example.com / settings123`
+- `admin@example.com / admin123` 保持不變；完整角色說明見 [預設角色帳號](default_accounts.md)
 - 介面預設為 `繁體中文`，可在登入頁右上角切換成 `简体中文 / English / 日本語 / 한국어`
 - 準備一份文本檔：`txt`、`md` 或 `docx`
 

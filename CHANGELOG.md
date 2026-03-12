@@ -25,7 +25,9 @@ This changelog starts on March 12, 2026. Earlier history is available in git com
 - Added chapter-level character detection and automatic batch binding.
 - Added multi-select segment merge for contiguous segments in the same chapter.
 - Added UI language switching for `繁體中文`, `简体中文`, `English`, `日本語`, and `한국어`.
+- Added multi-role local sign-in with seeded accounts for `admin`, `text_editor`, `reviewer`, `delivery_manager`, and `settings_manager`.
 - Added `docs/comic_workflow_plan.md`.
+- Added `docs/default_accounts.md`.
 
 ### Changed
 
@@ -33,6 +35,7 @@ This changelog starts on March 12, 2026. Earlier history is available in git com
 - Updated text preparation so segments can bind to a novel character or narrator role and can clear role binding or voice overrides.
 - Updated project summaries to show project type and comic page/panel metrics.
 - Updated the login page and sidebar so language selection is available before and after sign-in.
+- Updated sign-in, navigation, and API access so text prep, review, delivery, and settings are separated by role while keeping `admin@example.com / admin123` unchanged.
 - Updated documentation to reflect the current local implementation instead of only the original design intent.
 
 ### Fixed
