@@ -6,6 +6,10 @@ const NAV_ITEMS = [
   { key: "text", label: "文本準備" },
   { key: "voices", label: "聲線設定" },
   { key: "characters", label: "角色設定" },
+  { key: "comic-script", label: "漫畫腳本" },
+  { key: "storyboard", label: "分鏡工作台" },
+  { key: "panels", label: "畫格生成" },
+  { key: "layout", label: "頁面排版" },
   { key: "comic", label: "漫畫設定" },
   { key: "video", label: "Video 設定" },
   { key: "generate", label: "生成任務" },
@@ -45,6 +49,12 @@ const STATUS_LABELS = {
   open: "未處理",
   resolved: "已解決",
 };
+const PROJECT_TYPE_LABELS = {
+  audiobook: "有聲書",
+  comic: "漫畫",
+  motion_comic: "動態漫畫",
+  video: "影片",
+};
 const JOB_TYPE_LABELS = {
   generate_segment: "生成段落",
 };
@@ -64,6 +74,17 @@ const OPENAI_VOICE_FALLBACKS = ["alloy", "ash", "ballad", "coral", "echo", "fabl
 const OPENAI_MODEL_FALLBACKS = ["gpt-4o-mini-tts", "tts-1", "tts-1-hd"];
 const ELEVENLABS_MODEL_FALLBACKS = ["eleven_multilingual_v2", "eleven_v3", "eleven_flash_v2_5", "eleven_turbo_v2_5"];
 const SEGMENT_PAGE_SIZES = [10, 20, 50];
+const PROJECT_TYPE_OPTIONS = ["audiobook", "comic", "motion_comic", "video"];
+const COMIC_LAYOUT_PRESETS = [
+  { value: "splash", label: "Splash 全頁" },
+  { value: "two-column", label: "雙欄分割" },
+  { value: "three-stack", label: "三段堆疊" },
+  { value: "four-grid", label: "四格網格" },
+  { value: "freeform", label: "自由拼版" },
+];
+const COMIC_SHOT_TYPES = ["遠景", "全景", "中景", "近景", "特寫", "俯視", "仰視", "背影"];
+const COMIC_CAMERA_ANGLES = ["平視", "低機位", "高機位", "Dutch angle", "過肩", "主觀鏡頭", "長焦壓縮", "廣角透視"];
+const AUTO_REFRESH_ROUTES = new Set(["generate", "review", "export"]);
 const COMIC_SETTINGS_DEFAULT = {
   enabled: false,
   script_model: "openai:gpt-4.1",
@@ -90,6 +111,7 @@ const VIDEO_SETTINGS_DEFAULT = {
 const CHARACTER_PRESETS = {
   narrator: {
     label: "旁白",
+    role_type: "narrator",
     display_title: "敘事者",
     archetype: "Narrator",
     summary: "穩定、清晰、可信任的敘述聲線。",
@@ -106,6 +128,7 @@ const CHARACTER_PRESETS = {
   },
   hero: {
     label: "主角",
+    role_type: "lead",
     display_title: "冒險主角",
     archetype: "Hero",
     summary: "有目標感、推動情節向前的核心人物。",
@@ -122,6 +145,7 @@ const CHARACTER_PRESETS = {
   },
   trickster: {
     label: "機靈派",
+    role_type: "supporting",
     display_title: "機智角色",
     archetype: "Trickster",
     summary: "反應快、節奏活、帶有玩笑與靈氣。",
@@ -138,6 +162,7 @@ const CHARACTER_PRESETS = {
   },
   mentor: {
     label: "導師",
+    role_type: "supporting",
     display_title: "沉穩導師",
     archetype: "Mentor",
     summary: "穩重、有份量、帶有指引感的角色。",
@@ -152,6 +177,31 @@ const CHARACTER_PRESETS = {
     bravery: 75,
     discipline: 95,
   },
+  background: {
+    label: "背景角色",
+    role_type: "background",
+    display_title: "場景群像",
+    archetype: "Background",
+    summary: "用來承接環境對白、群像反應與場景氛圍的輔助角色。",
+    personality: "存在感不搶主角，但能補足世界真實感與場面層次。",
+    backstory: "常用於路人、群眾、侍者、士兵、村民等背景角色聲線模板。",
+    catchphrase: "收到。 / 大家快看。 / 這邊請。",
+    default_mood: "自然",
+    warmth: 45,
+    intensity: 40,
+    humor: 20,
+    mystery: 25,
+    bravery: 35,
+    discipline: 60,
+  },
+};
+const CHARACTER_ROLE_OPTIONS = ["narrator", "lead", "supporting", "background", "custom"];
+const CHARACTER_ROLE_LABELS = {
+  narrator: "旁白",
+  lead: "主角",
+  supporting: "配角",
+  background: "背景",
+  custom: "自訂",
 };
 
 function providerDefaults(provider, catalog = {}) {
@@ -230,6 +280,10 @@ function statusLabel(value) {
   return STATUS_LABELS[value] || value || "未提供";
 }
 
+function projectTypeLabel(value) {
+  return PROJECT_TYPE_LABELS[value] || value || "未提供";
+}
+
 function jobTypeLabel(value) {
   return JOB_TYPE_LABELS[value] || value;
 }
@@ -240,6 +294,104 @@ function issueTypeLabel(value) {
 
 function sourceKindLabel(value) {
   return SOURCE_KIND_LABELS[value] || value;
+}
+
+function characterRoleLabel(value) {
+  return CHARACTER_ROLE_LABELS[value] || value || "未分類";
+}
+
+function characterBindingSummary(character) {
+  if (!character) return "未設定角色職稱";
+  if (character.story_character_name) {
+    return `綁定小說角色：${character.story_character_name}`;
+  }
+  return character.display_title || character.archetype || "未設定角色職稱";
+}
+
+function characterOptionLabel(character) {
+  if (!character) return "";
+  const primaryName = character.story_character_name
+    ? `${character.story_character_name} (${character.name})`
+    : character.name;
+  return `${primaryName} · ${characterRoleLabel(character.role_type)} · ${character.voice_profile_name}`;
+}
+
+function defaultComicScriptForm(chapterId = "") {
+  return {
+    title: "",
+    chapter_id: chapterId,
+    premise: "",
+    outline_text: "",
+    script_text: "",
+    target_page_count: 8,
+    status: "draft",
+  };
+}
+
+function comicScriptFormFromValue(script) {
+  return {
+    title: script?.title || "",
+    chapter_id: script?.chapter_id || "",
+    premise: script?.premise || "",
+    outline_text: script?.outline_text || "",
+    script_text: script?.script_text || "",
+    target_page_count: script?.target_page_count || 8,
+    status: script?.status || "draft",
+  };
+}
+
+function defaultComicPageForm() {
+  return {
+    title: "",
+    chapter_id: "",
+    comic_script_id: "",
+    page_no: "",
+    layout_preset: COMIC_LAYOUT_PRESETS[1].value,
+    summary: "",
+    notes: "",
+    status: "draft",
+  };
+}
+
+function comicPageFormFromValue(page) {
+  return {
+    title: page?.title || "",
+    chapter_id: page?.chapter_id || "",
+    comic_script_id: page?.comic_script_id || "",
+    page_no: page?.page_no || "",
+    layout_preset: page?.layout_preset || COMIC_LAYOUT_PRESETS[1].value,
+    summary: page?.summary || "",
+    notes: page?.notes || "",
+    status: page?.status || "draft",
+  };
+}
+
+function comicPanelFormFromValue(panel) {
+  return {
+    title: panel?.title || "",
+    panel_no: panel?.panel_no || "",
+    script_text: panel?.script_text || "",
+    dialogue_text: panel?.dialogue_text || "",
+    caption_text: panel?.caption_text || "",
+    sfx_text: panel?.sfx_text || "",
+    shot_type: panel?.shot_type || "",
+    camera_angle: panel?.camera_angle || "",
+    composition_notes: panel?.composition_notes || "",
+    character_ids: panel?.character_ids || [],
+    prompt_text: panel?.prompt_text || "",
+    negative_prompt: panel?.negative_prompt || "",
+    image_status: panel?.image_status || "pending",
+    layout_notes: panel?.layout_notes || "",
+  };
+}
+
+function formatComicPageTitle(page) {
+  if (!page) return "未選擇頁面";
+  return `第 ${page.page_no} 頁${page.title ? ` · ${page.title}` : ""}`;
+}
+
+function flattenComicPanels(comicPages = []) {
+  return comicPages.flatMap((page) => (page.panels || []).map((panel) => ({ ...panel, page })));
 }
 
 function App() {
@@ -253,6 +405,8 @@ function App() {
   const [segments, setSegments] = useState([]);
   const [voices, setVoices] = useState([]);
   const [characters, setCharacters] = useState([]);
+  const [comicScripts, setComicScripts] = useState([]);
+  const [comicPages, setComicPages] = useState([]);
   const [comicProfiles, setComicProfiles] = useState([]);
   const [videoProfiles, setVideoProfiles] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -281,6 +435,8 @@ function App() {
     setSegments([]);
     setVoices([]);
     setCharacters([]);
+    setComicScripts([]);
+    setComicPages([]);
     setComicProfiles([]);
     setVideoProfiles([]);
     setJobs([]);
@@ -316,10 +472,12 @@ function App() {
     if (!projectId || !token) return;
     setLoading(true);
     try {
-      const [projectPayload, voicePayload, characterPayload, comicPayload, videoPayload, jobsPayload, reviewPayload, exportPayload] = await Promise.all([
+      const [projectPayload, voicePayload, characterPayload, comicScriptPayload, comicPagePayload, comicProfilePayload, videoPayload, jobsPayload, reviewPayload, exportPayload] = await Promise.all([
         apiFetch(`/api/projects/${projectId}`, { token }),
         apiFetch(`/api/projects/${projectId}/voice-profiles`, { token }),
         apiFetch(`/api/projects/${projectId}/character-profiles`, { token }),
+        apiFetch(`/api/projects/${projectId}/comic-scripts`, { token }),
+        apiFetch(`/api/projects/${projectId}/comic-pages`, { token }),
         apiFetch(`/api/projects/${projectId}/comic-profiles`, { token }),
         apiFetch(`/api/projects/${projectId}/video-profiles`, { token }),
         apiFetch(`/api/projects/${projectId}/jobs`, { token }),
@@ -330,7 +488,9 @@ function App() {
       setProjectDetail(projectPayload);
       setVoices(voicePayload.items || []);
       setCharacters(characterPayload.items || []);
-      setComicProfiles(comicPayload.items || []);
+      setComicScripts(comicScriptPayload.items || []);
+      setComicPages(comicPagePayload.items || []);
+      setComicProfiles(comicProfilePayload.items || []);
       setVideoProfiles(videoPayload.items || []);
       setJobs(jobsPayload.items || []);
       setReviewQueue(reviewPayload.items || []);
@@ -432,7 +592,7 @@ function App() {
   }, [selectedProjectId]);
 
   useEffect(() => {
-    if (!token || !selectedProjectId || route === "projects") {
+    if (!token || !selectedProjectId || !AUTO_REFRESH_ROUTES.has(route)) {
       return undefined;
     }
     const intervalId = window.setInterval(() => {
@@ -549,6 +709,8 @@ function App() {
             segments={segments}
             voices={voices}
             characters={characters}
+            comicScripts={comicScripts}
+            comicPages={comicPages}
             comicProfiles={comicProfiles}
             videoProfiles={videoProfiles}
             jobs={jobs}
@@ -750,12 +912,16 @@ function LoginPage({ onLogin, flash }) {
 function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectProject, user, onLogout }) {
   const [openSections, setOpenSections] = useState({
     project: true,
-    nav: false,
+    audiobook: true,
+    comic: true,
+    system: false,
     llm: false,
   });
 
   const projectItem = NAV_ITEMS.find((item) => item.key === "projects");
-  const secondaryNavItems = NAV_ITEMS.filter((item) => item.key !== "projects");
+  const audiobookNavItems = NAV_ITEMS.filter((item) => ["text", "voices", "characters", "generate", "review", "export"].includes(item.key));
+  const comicNavItems = NAV_ITEMS.filter((item) => ["comic-script", "storyboard", "panels", "layout", "comic"].includes(item.key));
+  const systemNavItems = NAV_ITEMS.filter((item) => ["video", "settings"].includes(item.key));
 
   function toggleSection(sectionKey) {
     setOpenSections((current) => ({ ...current, [sectionKey]: !current[sectionKey] }));
@@ -802,7 +968,7 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
                     <strong>{project.title}</strong>
                     <span className="count-pill">{project.metrics?.review_required_count || 0}</span>
                   </div>
-                  <div className="subtext">{project.author || "未填作者"} · {project.language}</div>
+                  <div className="subtext">{project.author || "未填作者"} · {projectTypeLabel(project.project_type)} · {project.language}</div>
                 </button>
               ))}
             </div>
@@ -810,20 +976,64 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
         ) : null}
       </div>
 
-      <div className={`sidebar-section ${openSections.nav ? "open" : ""}`}>
-        <button className="sidebar-toggle" onClick={() => toggleSection("nav")}>
+      <div className={`sidebar-section ${openSections.audiobook ? "open" : ""}`}>
+        <button className="sidebar-toggle" onClick={() => toggleSection("audiobook")}>
           <span className="sidebar-toggle-main">
-            <span className="sidebar-label">導覽</span>
-            <span className="sidebar-hint">系統頁面</span>
+            <span className="sidebar-label">有聲書流程</span>
+            <span className="sidebar-hint">文本、角色、聲線、生成與審核</span>
           </span>
           <span className="sidebar-toggle-meta">
-            <span className="sidebar-meta-text">{secondaryNavItems.length} 項</span>
-            <span className={`sidebar-chevron ${openSections.nav ? "open" : ""}`}>▾</span>
+            <span className="sidebar-meta-text">{audiobookNavItems.length} 項</span>
+            <span className={`sidebar-chevron ${openSections.audiobook ? "open" : ""}`}>▾</span>
           </span>
         </button>
-        {openSections.nav ? (
+        {openSections.audiobook ? (
           <div className="sidebar-section-body">
-            {secondaryNavItems.map((item) => (
+            {audiobookNavItems.map((item) => (
+              <button key={item.key} className={`nav-button ${route === item.key ? "active" : ""}`} onClick={() => onRouteChange(item.key)}>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className={`sidebar-section ${openSections.comic ? "open" : ""}`}>
+        <button className="sidebar-toggle" onClick={() => toggleSection("comic")}>
+          <span className="sidebar-toggle-main">
+            <span className="sidebar-label">漫畫流程</span>
+            <span className="sidebar-hint">腳本、分鏡、畫格與排版</span>
+          </span>
+          <span className="sidebar-toggle-meta">
+            <span className="sidebar-meta-text">{comicNavItems.length} 項</span>
+            <span className={`sidebar-chevron ${openSections.comic ? "open" : ""}`}>▾</span>
+          </span>
+        </button>
+        {openSections.comic ? (
+          <div className="sidebar-section-body">
+            {comicNavItems.map((item) => (
+              <button key={item.key} className={`nav-button ${route === item.key ? "active" : ""}`} onClick={() => onRouteChange(item.key)}>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className={`sidebar-section ${openSections.system ? "open" : ""}`}>
+        <button className="sidebar-toggle" onClick={() => toggleSection("system")}>
+          <span className="sidebar-toggle-main">
+            <span className="sidebar-label">系統與擴展</span>
+            <span className="sidebar-hint">模型模板與系統設定</span>
+          </span>
+          <span className="sidebar-toggle-meta">
+            <span className="sidebar-meta-text">{systemNavItems.length} 項</span>
+            <span className={`sidebar-chevron ${openSections.system ? "open" : ""}`}>▾</span>
+          </span>
+        </button>
+        {openSections.system ? (
+          <div className="sidebar-section-body">
+            {systemNavItems.map((item) => (
               <button key={item.key} className={`nav-button ${route === item.key ? "active" : ""}`} onClick={() => onRouteChange(item.key)}>
                 <span>{item.label}</span>
               </button>
@@ -899,6 +1109,8 @@ function PageContent(props) {
     segments,
     voices,
     characters,
+    comicScripts,
+    comicPages,
     comicProfiles,
     videoProfiles,
     jobs,
@@ -925,6 +1137,18 @@ function PageContent(props) {
   }
   if (route === "characters") {
     return <CharacterSetupPage token={token} project={project} voices={voices} characters={characters} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
+  }
+  if (route === "comic-script") {
+    return <ComicScriptPage token={token} project={project} comicScripts={comicScripts} chapters={project?.chapters || []} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
+  }
+  if (route === "storyboard") {
+    return <ComicStoryboardPage token={token} project={project} comicScripts={comicScripts} comicPages={comicPages} chapters={project?.chapters || []} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
+  }
+  if (route === "panels") {
+    return <ComicPanelsPage token={token} project={project} comicPages={comicPages} characters={characters} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
+  }
+  if (route === "layout") {
+    return <ComicLayoutPage token={token} project={project} comicPages={comicPages} refreshProject={refreshProject} showFlash={showFlash} />;
   }
   if (route === "comic") {
     return <ComicSettingsPage token={token} project={project} comicProfiles={comicProfiles} refreshProject={refreshProject} showFlash={showFlash} />;
@@ -983,7 +1207,7 @@ function ProjectsPage({ projects = [], selectedProject, token, refreshProject, d
                       <button className="text-action" onClick={() => onSelectProject(project.id)}>
                         {project.title}
                       </button>
-                      <div className="subtext">{project.author || "未填作者"}</div>
+                      <div className="subtext">{project.author || "未填作者"} · {projectTypeLabel(project.project_type)}</div>
                     </td>
                     <td>{project.language}</td>
                     <td>{project.metrics?.chapter_count || 0}</td>
@@ -1049,6 +1273,14 @@ function ProjectsPage({ projects = [], selectedProject, token, refreshProject, d
                     <div className="eyebrow">待審核</div>
                     <strong>{selectedProject.metrics?.review_required_count || 0}</strong>
                   </div>
+                  <div className="metric">
+                    <div className="eyebrow">漫畫頁</div>
+                    <strong>{selectedProject.metrics?.comic_page_count || 0}</strong>
+                  </div>
+                  <div className="metric">
+                    <div className="eyebrow">畫格</div>
+                    <strong>{selectedProject.metrics?.comic_panel_count || 0}</strong>
+                  </div>
                 </div>
               </section>
 
@@ -1099,17 +1331,32 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
   const [activeSegmentId, setActiveSegmentId] = useState(null);
   const [segmentBusyAction, setSegmentBusyAction] = useState("");
   const [voiceBusy, setVoiceBusy] = useState(false);
+  const [detectionBusy, setDetectionBusy] = useState(false);
+  const [autoBindBusy, setAutoBindBusy] = useState(false);
   const activeSegment = segments.find((segment) => segment.id === activeSegmentId) || segments[0] || null;
   const [draftText, setDraftText] = useState("");
   const [voiceId, setVoiceId] = useState("");
   const [characterId, setCharacterId] = useState("");
   const [selectedSegmentIds, setSelectedSegmentIds] = useState([]);
   const [batchCharacterId, setBatchCharacterId] = useState("");
+  const [detectedCharacters, setDetectedCharacters] = useState([]);
+  const [detectionSummary, setDetectionSummary] = useState(null);
+  const [autoBindVoiceId, setAutoBindVoiceId] = useState("");
+  const [autoBindNarratorId, setAutoBindNarratorId] = useState("");
   const [segmentPage, setSegmentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const narratorCharacters = useMemo(() => characters.filter((character) => character.role_type === "narrator"), [characters]);
 
   const totalSegmentPages = Math.max(1, Math.ceil(segments.length / pageSize));
   const currentSegmentJob = activeSegment ? jobs.find((job) => job.segment_id === activeSegment.id) || null : null;
+  const isSegmentFormDirty = Boolean(
+    activeSegment
+    && (
+      draftText !== (activeSegment.tts_text || "")
+      || String(voiceId || "") !== String(activeSegment.voice_profile_id || "")
+      || String(characterId || "") !== String(activeSegment.character_profile_id || "")
+    )
+  );
   const pagedSegments = useMemo(() => {
     const start = (segmentPage - 1) * pageSize;
     return segments.slice(start, start + pageSize);
@@ -1136,7 +1383,27 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
     setSegmentPage(1);
     setSelectedSegmentIds([]);
     setBatchCharacterId("");
+    setDetectedCharacters([]);
+    setDetectionSummary(null);
   }, [selectedChapterId]);
+
+  useEffect(() => {
+    if (autoBindVoiceId) return;
+    if (project?.default_voice_profile_id) {
+      setAutoBindVoiceId(String(project.default_voice_profile_id));
+      return;
+    }
+    if (voices[0]) {
+      setAutoBindVoiceId(String(voices[0].id));
+    }
+  }, [autoBindVoiceId, project?.default_voice_profile_id, voices]);
+
+  useEffect(() => {
+    if (autoBindNarratorId) return;
+    if (narratorCharacters[0]) {
+      setAutoBindNarratorId(String(narratorCharacters[0].id));
+    }
+  }, [autoBindNarratorId, narratorCharacters]);
 
   useEffect(() => {
     if (segmentPage > totalSegmentPages) {
@@ -1153,6 +1420,29 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
       setSegmentPage(nextPage);
     }
   }, [activeSegment?.id, pageSize, segmentPage, segments]);
+
+  useEffect(() => {
+    if (!selectedChapterId || !activeSegment || isSegmentFormDirty) {
+      return undefined;
+    }
+    const hasActiveJob = currentSegmentJob && ["pending", "running"].includes(currentSegmentJob.status);
+    const hasGeneratingStatus = activeSegment.status === "generating";
+    if (!hasActiveJob && !hasGeneratingStatus) {
+      return undefined;
+    }
+    const intervalId = window.setInterval(() => {
+      refreshProject({ chapterId: selectedChapterId });
+    }, 3000);
+    return () => window.clearInterval(intervalId);
+  }, [
+    activeSegment?.id,
+    activeSegment?.status,
+    currentSegmentJob?.id,
+    currentSegmentJob?.status,
+    isSegmentFormDirty,
+    refreshProject,
+    selectedChapterId,
+  ]);
 
   function goToSegmentPage(nextPage) {
     const targetPage = Math.max(1, Math.min(totalSegmentPages, nextPage));
@@ -1210,6 +1500,39 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
     });
     await refreshProject({ chapterId: selectedChapterId });
     showFlash("success", "已更新整章段落的角色指派。");
+  }
+
+  function requestMergeSelectedSegments() {
+    if (selectedSegmentIds.length < 2) {
+      showFlash("error", "請先勾選至少 2 個連續段落，再進行合併。");
+      return;
+    }
+    const activeSelectedJobs = jobs.filter((job) => selectedSegmentIds.includes(job.segment_id) && ["pending", "running"].includes(job.status));
+    if (activeSelectedJobs.length) {
+      showFlash("error", "勾選的段落仍有生成任務執行中，請先等待完成或刷新狀態後再合併。");
+      return;
+    }
+    requestConfirm({
+      title: "合併段落",
+      message: `會把目前勾選的 ${selectedSegmentIds.length} 個段落合併成 1 個段落，原有音訊、任務與審核記錄會一併清空。`,
+      confirmLabel: "合併為一段",
+      onConfirm: async () => {
+        try {
+          const payload = await apiFetch("/api/segments/merge", {
+            method: "POST",
+            token,
+            body: { segment_ids: selectedSegmentIds },
+          });
+          setSelectedSegmentIds([]);
+          setActiveSegmentId(payload.merged_segment_id);
+          await refreshProject({ chapterId: selectedChapterId });
+          showFlash("success", `已合併為段落 ${payload.segment.order_index}。`);
+        } catch (error) {
+          showFlash("error", error.message || "合併段落失敗。");
+          throw error;
+        }
+      },
+    });
   }
 
   async function persistActiveSegment() {
@@ -1294,6 +1617,59 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
     });
   }
 
+  async function detectChapterCharacters() {
+    if (!selectedChapterId) return;
+    setDetectionBusy(true);
+    try {
+      const payload = await apiFetch(`/api/chapters/${selectedChapterId}/character-detection`, { token });
+      setDetectedCharacters(payload.items || []);
+      setDetectionSummary(payload);
+      if ((payload.items || []).length) {
+        showFlash("success", `已識別 ${payload.items.length} 個人物線索，覆蓋 ${payload.detected_segment_count || 0} 段。`);
+      } else {
+        showFlash("success", "本章暫未識別出明確人物，可繼續手動綁定。");
+      }
+    } catch (error) {
+      showFlash("error", error.message || "人物識別失敗。");
+    } finally {
+      setDetectionBusy(false);
+    }
+  }
+
+  async function autoBindChapterCharacters() {
+    if (!selectedChapterId) return;
+    setAutoBindBusy(true);
+    try {
+      const payload = await apiFetch(`/api/chapters/${selectedChapterId}/auto-bind-characters`, {
+        method: "POST",
+        token,
+        body: {
+          fallback_voice_profile_id: autoBindVoiceId ? Number(autoBindVoiceId) : null,
+          narrator_character_profile_id: autoBindNarratorId ? Number(autoBindNarratorId) : null,
+          assign_unmatched_to_narrator: Boolean(autoBindNarratorId),
+        },
+      });
+      await refreshProject({ projectId: project.id, chapterId: selectedChapterId });
+      setDetectedCharacters([]);
+      setDetectionSummary(null);
+      const summaryParts = [];
+      if (payload.created_character_count) {
+        summaryParts.push(`新建 ${payload.created_character_count} 個角色`);
+      }
+      if (payload.bound_segment_count) {
+        summaryParts.push(`綁定 ${payload.bound_segment_count} 段對話`);
+      }
+      if (payload.narrator_bound_segment_count) {
+        summaryParts.push(`補綁 ${payload.narrator_bound_segment_count} 段旁白`);
+      }
+      showFlash("success", summaryParts.length ? `自動綁定完成：${summaryParts.join("，")}。` : "本章沒有可自動綁定的人物。");
+    } catch (error) {
+      showFlash("error", error.message || "自動綁定失敗。");
+    } finally {
+      setAutoBindBusy(false);
+    }
+  }
+
   if (!project) {
     return <div className="empty-state">請先在專案頁選取一個專案，再進入文本準備。</div>;
   }
@@ -1342,6 +1718,75 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
             </select>
           </label>
         </div>
+        <div className="editor-card" style={{ marginBottom: 12 }}>
+          <div className="title-row">
+            <div>
+              <div className="eyebrow">人物識別</div>
+              <strong>自動識別小說人物並批量綁定聲線</strong>
+            </div>
+            {detectionSummary ? <span className="tag brand">{detectedCharacters.length} 人</span> : null}
+          </div>
+          <div className="subtext" style={{ marginTop: 8 }}>
+            會根據「張三說」「旁白：」「……，李四問道」這類文本線索做本章識別；已存在角色會優先復用，沒有匹配時會用下方聲線自動建立角色。
+          </div>
+          <div className="grid two compact-grid" style={{ marginTop: 12 }}>
+            <div className="field">
+              <label>新角色預設聲線</label>
+              <select className="select" value={autoBindVoiceId} onChange={(event) => setAutoBindVoiceId(event.target.value)}>
+                <option value="">使用專案預設聲線</option>
+                {voices.map((voice) => (
+                  <option key={voice.id} value={voice.id}>{voice.name} · {voice.voice_name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>未識別段落綁定到</label>
+              <select className="select" value={autoBindNarratorId} onChange={(event) => setAutoBindNarratorId(event.target.value)}>
+                <option value="">不自動補綁旁白</option>
+                {characters.map((character) => (
+                  <option key={character.id} value={character.id}>{characterOptionLabel(character)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="toolbar">
+            <button className="button-secondary" disabled={detectionBusy || !selectedChapterId} onClick={detectChapterCharacters}>
+              {detectionBusy ? "分析中..." : "分析本章人物"}
+            </button>
+            <button className="button" disabled={autoBindBusy || !selectedChapterId} onClick={autoBindChapterCharacters}>
+              {autoBindBusy ? "綁定中..." : "自動建立並綁定"}
+            </button>
+          </div>
+          {detectionSummary ? (
+            <div className="pill-row" style={{ marginTop: 10 }}>
+              <span className="tag">{detectionSummary.detected_segment_count || 0} 段識別到人物</span>
+              <span className="tag">{detectionSummary.unmatched_segment_count || 0} 段未識別</span>
+              <span className="tag">{detectionSummary.segment_count || 0} 段總計</span>
+            </div>
+          ) : null}
+          <div className="list" style={{ marginTop: 12 }}>
+            {detectedCharacters.map((item) => (
+              <div key={item.speaker_name} className="list-item">
+                <div className="title-row">
+                  <strong>{item.speaker_name}</strong>
+                  <div className="pill-row">
+                    <span className="tag">{characterRoleLabel(item.role_type)}</span>
+                    <span className="tag">{item.segment_count} 段</span>
+                    {item.matched_character_profile_id ? (
+                      <span className="tag success">復用 {item.matched_story_character_name || item.matched_character_name}</span>
+                    ) : (
+                      <span className="tag brand">將自動建立</span>
+                    )}
+                  </div>
+                </div>
+                <div className="subtext" style={{ marginTop: 8 }}>{item.sample_text}</div>
+              </div>
+            ))}
+            {!detectedCharacters.length ? (
+              <div className="empty-state">點「分析本章人物」後，這裡會顯示可批量綁定的角色線索與匹配結果。</div>
+            ) : null}
+          </div>
+        </div>
         {!selectedChapter ? (
           <div className="empty-state">請先匯入文本，再選擇章節。</div>
         ) : (
@@ -1367,9 +1812,9 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
               </div>
               <div className="toolbar">
                 <select className="select" value={batchCharacterId} onChange={(event) => setBatchCharacterId(event.target.value)}>
-                  <option value="">清空角色 / 使用預設</option>
+                  <option value="">解除角色綁定 / 使用預設</option>
                   {characters.map((character) => (
-                    <option key={character.id} value={character.id}>{character.name}</option>
+                    <option key={character.id} value={character.id}>{characterOptionLabel(character)}</option>
                   ))}
                 </select>
                 <button className="button-secondary" onClick={toggleCurrentPageSelection}>
@@ -1377,6 +1822,7 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
                 </button>
                 <button className="button-secondary" onClick={applyBatchToSelection}>套用到勾選段落</button>
                 <button className="button-secondary" onClick={applyBatchToChapter}>套用到整章</button>
+                <button className="button-secondary" disabled={selectedSegmentIds.length < 2} onClick={requestMergeSelectedSegments}>合併為一段</button>
               </div>
               {pagedSegments.map((segment) => (
                 <div key={segment.id} className={`list-item ${activeSegment?.id === segment.id ? "active" : ""}`}>
@@ -1386,7 +1832,8 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
                       <strong>段落 {segment.order_index}</strong>
                     </label>
                     <div className="pill-row">
-                      {segment.character_profile?.name ? <span className="tag brand">{segment.character_profile.name}</span> : null}
+                      {segment.character_profile?.name ? <span className="tag brand">{segment.character_profile.story_character_name || segment.character_profile.name}</span> : null}
+                      {segment.character_profile?.role_type ? <span className="tag">{characterRoleLabel(segment.character_profile.role_type)}</span> : null}
                       <span className="tag">{statusLabel(segment.status)}</span>
                     </div>
                   </div>
@@ -1414,11 +1861,11 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
                     <textarea className="textarea" value={draftText} onChange={(event) => setDraftText(event.target.value)} />
                   </div>
                   <div className="field">
-                    <label>說話角色</label>
+                    <label>小說角色 / 旁白角色</label>
                     <select className="select" value={characterId} onChange={(event) => setCharacterId(event.target.value)}>
-                      <option value="">不指定角色</option>
+                      <option value="">不綁定角色</option>
                       {characters.map((character) => (
-                        <option key={character.id} value={character.id}>{character.name} · {character.voice_profile_name}</option>
+                        <option key={character.id} value={character.id}>{characterOptionLabel(character)}</option>
                       ))}
                     </select>
                   </div>
@@ -1430,6 +1877,10 @@ function TextPrepPage({ token, project, selectedChapter, selectedChapterId, setS
                         <option key={voice.id} value={voice.id}>{voice.name} · {voice.voice_name}</option>
                       ))}
                     </select>
+                  </div>
+                  <div className="toolbar" style={{ marginTop: -4 }}>
+                    <button type="button" className="button-secondary" onClick={() => setCharacterId("")}>解除角色綁定</button>
+                    <button type="button" className="button-secondary" onClick={() => setVoiceId("")}>解除聲線覆寫</button>
                   </div>
                   <div className="toolbar">
                     <button className="button-flat" disabled={segmentBusyAction !== ""} onClick={saveSegment}>
@@ -1566,7 +2017,7 @@ function VoiceSetupPage({ token, project, voices, refreshProject, showFlash }) {
           <div className="panel-head">
             <div>
               <h2>聲線設定</h2>
-              <div className="subtext">第一期先只支援 narrator 單聲線。</div>
+              <div className="subtext">可為旁白、主角、背景角色等建立多組聲線，再到文本頁綁定或解除綁定。</div>
             </div>
           </div>
           {providerInfo ? (
@@ -1698,6 +2149,8 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
   const [form, setForm] = useState({
     name: "",
     voice_profile_id: "",
+    role_type: "supporting",
+    story_character_name: "",
     display_title: "",
     archetype: "",
     summary: "",
@@ -1761,6 +2214,7 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
     setForm((current) => ({
       ...current,
       preset_key: key,
+      role_type: preset.role_type || current.role_type,
       display_title: preset.display_title,
       archetype: preset.archetype,
       summary: preset.summary,
@@ -1784,6 +2238,8 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
     setForm({
       name: character.name,
       voice_profile_id: String(character.voice_profile_id),
+      role_type: character.role_type || "supporting",
+      story_character_name: character.story_character_name || "",
       display_title: character.display_title || "",
       archetype: character.archetype || "",
       summary: character.summary || "",
@@ -1812,6 +2268,8 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
     setForm({
       name: "",
       voice_profile_id: voices[0] ? String(voices[0].id) : "",
+      role_type: "supporting",
+      story_character_name: "",
       display_title: "",
       archetype: "",
       summary: "",
@@ -1848,6 +2306,8 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
     const body = {
       name: form.name.trim(),
       voice_profile_id: Number(form.voice_profile_id),
+      role_type: form.role_type,
+      story_character_name: form.story_character_name.trim(),
       display_title: form.display_title,
       archetype: form.archetype,
       summary: form.summary,
@@ -2091,7 +2551,7 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
           <div className="panel-head">
             <div>
               <h2>角色設定</h2>
-              <div className="subtext">{project ? `目前專案：${project.title}` : "請先選取專案"}</div>
+              <div className="subtext">{project ? `目前專案：${project.title}，可建立旁白、主角、背景角色等聲線角色。` : "請先選取專案"}</div>
             </div>
           <span className="tag">{characters.length} 個角色</span>
         </div>
@@ -2104,6 +2564,7 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
                 <div className="title-row">
                   <strong>{character.name}</strong>
                   <div className="pill-row">
+                    <span className="tag brand">{characterRoleLabel(character.role_type)}</span>
                     <span className="tag">{character.voice_profile_name}</span>
                     <span className="tag">{character.looks_count || 0} 張圖片</span>
                   </div>
@@ -2111,7 +2572,7 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
                 <div className="title-row" style={{ alignItems: "flex-start", marginTop: 10 }}>
                   {character.avatar_url ? <img src={character.avatar_url} alt={character.name} style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", border: "1px solid var(--line)" }} /> : <div className="editor-card" style={{ width: 56, height: 56, display: "grid", placeItems: "center", padding: 0 }}>{character.name.slice(0, 1)}</div>}
                   <div style={{ flex: 1 }}>
-                    <div className="subtext">{character.display_title || character.archetype || "未設定角色職稱"}</div>
+                    <div className="subtext">{characterBindingSummary(character)}</div>
                     <div className="subtext">{character.voice_name || "未提供聲線名稱"}</div>
                     <div className="subtext">{character.summary || "尚未填寫角色摘要。"}</div>
                   </div>
@@ -2127,7 +2588,7 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
                 </div>
               </div>
             ))}
-            {!characters.length ? <div className="empty-state">先建立旁白或人物角色，再回到文本準備頁指派段落。</div> : null}
+            {!characters.length ? <div className="empty-state">先建立旁白、主角或背景角色，再回到文本準備頁把具體段落綁定到小說角色。</div> : null}
           </div>
         )}
         </section>
@@ -2136,7 +2597,7 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
           <div className="panel-head">
             <div>
               <h2>{editingId ? "編輯角色" : "建立角色"}</h2>
-            <div className="subtext">先為角色綁定一個聲線，再把段落指派給角色。</div>
+            <div className="subtext">可新增、刪除、修改角色設定，並把它綁到小說中的具體人物或解除綁定。</div>
           </div>
         </div>
         {!project ? (
@@ -2156,6 +2617,18 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
             <div className="field">
               <label>角色名稱</label>
               <input className="input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>角色類型</label>
+              <select className="select" value={form.role_type} onChange={(event) => setForm({ ...form, role_type: event.target.value })}>
+                {CHARACTER_ROLE_OPTIONS.map((roleType) => (
+                  <option key={roleType} value={roleType}>{characterRoleLabel(roleType)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>綁定小說角色</label>
+              <input className="input" placeholder="例如：孫悟空 / 系統旁白 / 群眾甲" value={form.story_character_name} onChange={(event) => setForm({ ...form, story_character_name: event.target.value })} />
             </div>
             <div className="field">
               <label>角色職稱</label>
@@ -2321,6 +2794,1019 @@ function CharacterSetupPage({ token, project, voices, characters, refreshProject
               })}
             </div>
           </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ComicWorkflowProjectRequired({ message = "請先回到專案頁選取一個漫畫專案。" }) {
+  return <div className="empty-state">{message}</div>;
+}
+
+function ComicScriptPage({ token, project, comicScripts, chapters, refreshProject, requestConfirm, showFlash }) {
+  const [selectedScriptId, setSelectedScriptId] = useState(null);
+  const [createForm, setCreateForm] = useState(defaultComicScriptForm(chapters[0]?.id || ""));
+  const [form, setForm] = useState(defaultComicScriptForm());
+  const [busyKey, setBusyKey] = useState("");
+
+  const selectedScript = comicScripts.find((item) => item.id === selectedScriptId) || comicScripts[0] || null;
+
+  useEffect(() => {
+    if (!comicScripts.length) {
+      setSelectedScriptId(null);
+      return;
+    }
+    if (!selectedScriptId || !comicScripts.some((item) => item.id === selectedScriptId)) {
+      setSelectedScriptId(comicScripts[0].id);
+    }
+  }, [comicScripts, selectedScriptId]);
+
+  useEffect(() => {
+    setForm(comicScriptFormFromValue(selectedScript));
+  }, [selectedScript?.id, selectedScript?.updated_at]);
+
+  useEffect(() => {
+    setCreateForm(defaultComicScriptForm(chapters[0]?.id || ""));
+  }, [project?.id, chapters.length]);
+
+  if (!project) {
+    return <ComicWorkflowProjectRequired />;
+  }
+
+  async function createScript() {
+    if (!createForm.title.trim()) {
+      showFlash("error", "請先輸入腳本名稱。");
+      return;
+    }
+    setBusyKey("create-script");
+    try {
+      await apiFetch(`/api/projects/${project.id}/comic-scripts`, {
+        method: "POST",
+        token,
+        body: {
+          ...createForm,
+          chapter_id: createForm.chapter_id ? Number(createForm.chapter_id) : null,
+          target_page_count: Number(createForm.target_page_count) || 8,
+        },
+      });
+      await refreshProject({ projectId: project.id });
+      setCreateForm(defaultComicScriptForm(chapters[0]?.id || ""));
+      showFlash("success", "漫畫腳本已建立。");
+    } catch (error) {
+      showFlash("error", error.message || "建立漫畫腳本失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function saveScript() {
+    if (!selectedScript) return;
+    if (!form.title.trim()) {
+      showFlash("error", "腳本名稱不能為空。");
+      return;
+    }
+    setBusyKey(`save-script:${selectedScript.id}`);
+    try {
+      await apiFetch(`/api/comic-scripts/${selectedScript.id}`, {
+        method: "PATCH",
+        token,
+        body: {
+          ...form,
+          chapter_id: form.chapter_id ? Number(form.chapter_id) : null,
+          target_page_count: Number(form.target_page_count) || 1,
+        },
+      });
+      await refreshProject({ projectId: project.id });
+      showFlash("success", "漫畫腳本已更新。");
+    } catch (error) {
+      showFlash("error", error.message || "更新漫畫腳本失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  return (
+    <div className="grid two">
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>漫畫腳本清單</h2>
+            <div className="subtext">先整理章節級故事目標，再寫成可進入分鏡的漫畫腳本。</div>
+          </div>
+          <span className="tag brand">{comicScripts.length} 份</span>
+        </div>
+        <div className="list" style={{ marginBottom: 14 }}>
+          {comicScripts.map((script) => (
+            <button
+              key={script.id}
+              className={`project-button ${selectedScript?.id === script.id ? "active" : ""}`}
+              onClick={() => setSelectedScriptId(script.id)}
+            >
+              <div className="title-row">
+                <strong>{script.title}</strong>
+                <span className="tag">{script.page_count || 0} 頁</span>
+              </div>
+              <div className="subtext">{script.chapter_title || "未綁定章節"} · 目標 {script.target_page_count} 頁 · {statusLabel(script.status)}</div>
+            </button>
+          ))}
+          {!comicScripts.length ? <div className="empty-state">先建立第一份漫畫腳本。</div> : null}
+        </div>
+        <div className="field">
+          <label>新的腳本名稱</label>
+          <input className="input" value={createForm.title} onChange={(event) => setCreateForm({ ...createForm, title: event.target.value })} placeholder="例如：第 1 章 漫畫腳本" />
+        </div>
+        <div className="toolbar">
+          <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+            <label>對應章節</label>
+            <select className="select" value={createForm.chapter_id} onChange={(event) => setCreateForm({ ...createForm, chapter_id: event.target.value })}>
+              <option value="">不綁定章節</option>
+              {chapters.map((chapter) => (
+                <option key={chapter.id} value={chapter.id}>{chapter.order_index}. {chapter.title}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ width: 120, marginBottom: 0 }}>
+            <label>目標頁數</label>
+            <input className="input" type="number" min="1" value={createForm.target_page_count} onChange={(event) => setCreateForm({ ...createForm, target_page_count: event.target.value })} />
+          </div>
+        </div>
+        <button className="button" disabled={busyKey === "create-script"} onClick={createScript}>
+          {busyKey === "create-script" ? "建立中..." : "建立漫畫腳本"}
+        </button>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>腳本編輯</h2>
+            <div className="subtext">{selectedScript ? `目前編輯：${selectedScript.title}` : "請先選取腳本"}</div>
+          </div>
+          {selectedScript ? <span className="tag">{selectedScript.page_count || 0} 已拆頁</span> : null}
+        </div>
+        {!selectedScript ? (
+          <div className="empty-state">先在左側建立或選取一份腳本，再開始整理 premise、outline 與 page beat。</div>
+        ) : (
+          <form className="form-grid" onSubmit={async (event) => {
+            event.preventDefault();
+            await saveScript();
+          }}>
+            <div className="field">
+              <label>腳本名稱</label>
+              <input className="input" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>對應章節</label>
+              <select className="select" value={form.chapter_id} onChange={(event) => setForm({ ...form, chapter_id: event.target.value })}>
+                <option value="">不綁定章節</option>
+                {chapters.map((chapter) => (
+                  <option key={chapter.id} value={chapter.id}>{chapter.order_index}. {chapter.title}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>目標頁數</label>
+              <input className="input" type="number" min="1" value={form.target_page_count} onChange={(event) => setForm({ ...form, target_page_count: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>狀態</label>
+              <select className="select" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
+                <option value="draft">草稿</option>
+                <option value="active">進行中</option>
+                <option value="approved">已確認</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Premise / 章節目標</label>
+              <textarea className="textarea small" value={form.premise} onChange={(event) => setForm({ ...form, premise: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>故事大綱</label>
+              <textarea className="textarea" value={form.outline_text} onChange={(event) => setForm({ ...form, outline_text: event.target.value })} />
+            </div>
+            <div className="field">
+              <label>漫畫腳本</label>
+              <textarea className="textarea xl" value={form.script_text} onChange={(event) => setForm({ ...form, script_text: event.target.value })} placeholder="建議寫成：Page 1 / Panel 1 / 對白 / 旁白 / 動作描述..." />
+            </div>
+            <div className="toolbar">
+              <button className="button" disabled={busyKey === `save-script:${selectedScript.id}`}>{busyKey === `save-script:${selectedScript.id}` ? "儲存中..." : "儲存腳本"}</button>
+              <button
+                type="button"
+                className="button-danger"
+                onClick={() => requestConfirm({
+                  title: "刪除漫畫腳本",
+                  message: `會刪除「${selectedScript.title}」，已建立的頁面會保留，但會解除綁定。`,
+                  confirmLabel: "刪除腳本",
+                  onConfirm: async () => {
+                    await apiFetch(`/api/comic-scripts/${selectedScript.id}`, { method: "DELETE", token });
+                    await refreshProject({ projectId: project.id });
+                    showFlash("success", "漫畫腳本已刪除。");
+                  },
+                })}
+              >
+                刪除腳本
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ComicStoryboardPage({ token, project, comicScripts, comicPages, chapters, refreshProject, requestConfirm, showFlash }) {
+  const [selectedPageId, setSelectedPageId] = useState(null);
+  const [createForm, setCreateForm] = useState(defaultComicPageForm());
+  const [pageForm, setPageForm] = useState(defaultComicPageForm());
+  const [panelDrafts, setPanelDrafts] = useState({});
+  const [busyKey, setBusyKey] = useState("");
+
+  const selectedPage = comicPages.find((item) => item.id === selectedPageId) || comicPages[0] || null;
+
+  useEffect(() => {
+    if (!comicPages.length) {
+      setSelectedPageId(null);
+      return;
+    }
+    if (!selectedPageId || !comicPages.some((item) => item.id === selectedPageId)) {
+      setSelectedPageId(comicPages[0].id);
+    }
+  }, [comicPages, selectedPageId]);
+
+  useEffect(() => {
+    setPageForm(comicPageFormFromValue(selectedPage));
+  }, [selectedPage?.id, selectedPage?.updated_at]);
+
+  useEffect(() => {
+    const nextDrafts = {};
+    comicPages.forEach((page) => {
+      (page.panels || []).forEach((panel) => {
+        nextDrafts[panel.id] = comicPanelFormFromValue(panel);
+      });
+    });
+    setPanelDrafts(nextDrafts);
+  }, [comicPages]);
+
+  useEffect(() => {
+    setCreateForm(defaultComicPageForm());
+  }, [project?.id]);
+
+  if (!project) {
+    return <ComicWorkflowProjectRequired />;
+  }
+
+  async function createPage() {
+    setBusyKey("create-page");
+    try {
+      await apiFetch(`/api/projects/${project.id}/comic-pages`, {
+        method: "POST",
+        token,
+        body: {
+          ...createForm,
+          title: createForm.title.trim() || `第 ${comicPages.length + 1} 頁`,
+          chapter_id: createForm.chapter_id ? Number(createForm.chapter_id) : null,
+          comic_script_id: createForm.comic_script_id ? Number(createForm.comic_script_id) : null,
+          page_no: createForm.page_no ? Number(createForm.page_no) : null,
+        },
+      });
+      await refreshProject({ projectId: project.id });
+      setCreateForm(defaultComicPageForm());
+      showFlash("success", "漫畫頁面已建立。");
+    } catch (error) {
+      showFlash("error", error.message || "建立頁面失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function savePage() {
+    if (!selectedPage) return;
+    setBusyKey(`save-page:${selectedPage.id}`);
+    try {
+      await apiFetch(`/api/comic-pages/${selectedPage.id}`, {
+        method: "PATCH",
+        token,
+        body: {
+          ...pageForm,
+          chapter_id: pageForm.chapter_id ? Number(pageForm.chapter_id) : null,
+          comic_script_id: pageForm.comic_script_id ? Number(pageForm.comic_script_id) : null,
+          page_no: pageForm.page_no ? Number(pageForm.page_no) : null,
+        },
+      });
+      await refreshProject({ projectId: project.id });
+      showFlash("success", "頁面分鏡設定已更新。");
+    } catch (error) {
+      showFlash("error", error.message || "更新頁面失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function createPanel() {
+    if (!selectedPage) return;
+    setBusyKey(`create-panel:${selectedPage.id}`);
+    try {
+      await apiFetch(`/api/comic-pages/${selectedPage.id}/panels`, {
+        method: "POST",
+        token,
+        body: {
+          title: `畫格 ${(selectedPage.panels || []).length + 1}`,
+          image_status: "pending",
+        },
+      });
+      await refreshProject({ projectId: project.id });
+      showFlash("success", "新畫格已加入分鏡。");
+    } catch (error) {
+      showFlash("error", error.message || "新增畫格失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function savePanel(panelId) {
+    const draft = panelDrafts[panelId];
+    setBusyKey(`save-panel:${panelId}`);
+    try {
+      await apiFetch(`/api/comic-panels/${panelId}`, {
+        method: "PATCH",
+        token,
+        body: {
+          ...draft,
+          panel_no: draft.panel_no ? Number(draft.panel_no) : null,
+        },
+      });
+      await refreshProject({ projectId: project.id });
+      showFlash("success", "畫格分鏡已更新。");
+    } catch (error) {
+      showFlash("error", error.message || "更新畫格分鏡失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  return (
+    <div className="grid two">
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>分鏡頁面</h2>
+            <div className="subtext">先建頁，再把頁面拆成各個 panel。</div>
+          </div>
+          <span className="tag brand">{comicPages.length} 頁</span>
+        </div>
+        <div className="list" style={{ marginBottom: 14 }}>
+          {comicPages.map((page) => (
+            <button key={page.id} className={`project-button ${selectedPage?.id === page.id ? "active" : ""}`} onClick={() => setSelectedPageId(page.id)}>
+              <div className="title-row">
+                <strong>{formatComicPageTitle(page)}</strong>
+                <span className="tag">{page.panel_count || 0} 格</span>
+              </div>
+              <div className="subtext">{page.comic_script_title || "未綁定腳本"} · {page.chapter_title || "未綁定章節"} · {page.layout_preset}</div>
+            </button>
+          ))}
+          {!comicPages.length ? <div className="empty-state">先建立第一頁，再開始做分鏡。</div> : null}
+        </div>
+        <div className="field">
+          <label>新頁標題</label>
+          <input className="input" value={createForm.title} onChange={(event) => setCreateForm({ ...createForm, title: event.target.value })} placeholder="例如：進城初見" />
+        </div>
+        <div className="toolbar">
+          <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+            <label>綁定腳本</label>
+            <select className="select" value={createForm.comic_script_id} onChange={(event) => setCreateForm({ ...createForm, comic_script_id: event.target.value })}>
+              <option value="">不綁定腳本</option>
+              {comicScripts.map((script) => (
+                <option key={script.id} value={script.id}>{script.title}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+            <label>綁定章節</label>
+            <select className="select" value={createForm.chapter_id} onChange={(event) => setCreateForm({ ...createForm, chapter_id: event.target.value })}>
+              <option value="">不綁定章節</option>
+              {chapters.map((chapter) => (
+                <option key={chapter.id} value={chapter.id}>{chapter.order_index}. {chapter.title}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ width: 120, marginBottom: 0 }}>
+            <label>頁碼</label>
+            <input className="input" type="number" min="1" value={createForm.page_no} onChange={(event) => setCreateForm({ ...createForm, page_no: event.target.value })} />
+          </div>
+        </div>
+        <button className="button" disabled={busyKey === "create-page"} onClick={createPage}>
+          {busyKey === "create-page" ? "建立中..." : "建立頁面"}
+        </button>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>頁面分鏡</h2>
+            <div className="subtext">{selectedPage ? formatComicPageTitle(selectedPage) : "請先選取頁面"}</div>
+          </div>
+          {selectedPage ? <span className="tag">{selectedPage.panel_count || 0} 格</span> : null}
+        </div>
+        {!selectedPage ? (
+          <div className="empty-state">左側建立頁面後，這裡就可以維護每一格的 shot、camera 與 beat。</div>
+        ) : (
+          <>
+            <form className="form-grid" onSubmit={async (event) => {
+              event.preventDefault();
+              await savePage();
+            }}>
+              <div className="field">
+                <label>頁面標題</label>
+                <input className="input" value={pageForm.title} onChange={(event) => setPageForm({ ...pageForm, title: event.target.value })} />
+              </div>
+              <div className="field">
+                <label>頁碼</label>
+                <input className="input" type="number" min="1" value={pageForm.page_no} onChange={(event) => setPageForm({ ...pageForm, page_no: event.target.value })} />
+              </div>
+              <div className="field">
+                <label>腳本</label>
+                <select className="select" value={pageForm.comic_script_id} onChange={(event) => setPageForm({ ...pageForm, comic_script_id: event.target.value })}>
+                  <option value="">不綁定腳本</option>
+                  {comicScripts.map((script) => (
+                    <option key={script.id} value={script.id}>{script.title}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>章節</label>
+                <select className="select" value={pageForm.chapter_id} onChange={(event) => setPageForm({ ...pageForm, chapter_id: event.target.value })}>
+                  <option value="">不綁定章節</option>
+                  {chapters.map((chapter) => (
+                    <option key={chapter.id} value={chapter.id}>{chapter.order_index}. {chapter.title}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>頁面布局</label>
+                <select className="select" value={pageForm.layout_preset} onChange={(event) => setPageForm({ ...pageForm, layout_preset: event.target.value })}>
+                  {COMIC_LAYOUT_PRESETS.map((preset) => (
+                    <option key={preset.value} value={preset.value}>{preset.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>狀態</label>
+                <select className="select" value={pageForm.status} onChange={(event) => setPageForm({ ...pageForm, status: event.target.value })}>
+                  <option value="draft">草稿</option>
+                  <option value="active">進行中</option>
+                  <option value="approved">已確認</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>頁面摘要</label>
+                <textarea className="textarea small" value={pageForm.summary} onChange={(event) => setPageForm({ ...pageForm, summary: event.target.value })} />
+              </div>
+              <div className="field">
+                <label>導演備註</label>
+                <textarea className="textarea small" value={pageForm.notes} onChange={(event) => setPageForm({ ...pageForm, notes: event.target.value })} />
+              </div>
+              <div className="toolbar">
+                <button className="button" disabled={busyKey === `save-page:${selectedPage.id}`}>{busyKey === `save-page:${selectedPage.id}` ? "儲存中..." : "儲存頁面"}</button>
+                <button className="button-secondary" type="button" disabled={busyKey === `create-panel:${selectedPage.id}`} onClick={createPanel}>
+                  {busyKey === `create-panel:${selectedPage.id}` ? "新增中..." : "新增畫格"}
+                </button>
+                <button
+                  type="button"
+                  className="button-danger"
+                  onClick={() => requestConfirm({
+                    title: "刪除頁面",
+                    message: `會刪除 ${formatComicPageTitle(selectedPage)}，連同其下所有畫格與圖片。`,
+                    confirmLabel: "刪除頁面",
+                    onConfirm: async () => {
+                      await apiFetch(`/api/comic-pages/${selectedPage.id}`, { method: "DELETE", token });
+                      await refreshProject({ projectId: project.id });
+                      showFlash("success", "頁面已刪除。");
+                    },
+                  })}
+                >
+                  刪除頁面
+                </button>
+              </div>
+            </form>
+
+            <div className="list" style={{ marginTop: 18 }}>
+              {(selectedPage.panels || []).map((panel) => {
+                const draft = panelDrafts[panel.id] || comicPanelFormFromValue(panel);
+                return (
+                  <div key={panel.id} className="list-item">
+                    <div className="title-row">
+                      <strong>Panel {panel.panel_no}{panel.title ? ` · ${panel.title}` : ""}</strong>
+                      <span className="tag">{panel.image_status || "pending"}</span>
+                    </div>
+                    <div className="grid two compact-grid">
+                      <div className="field">
+                        <label>標題</label>
+                        <input className="input" value={draft.title} onChange={(event) => setPanelDrafts({ ...panelDrafts, [panel.id]: { ...draft, title: event.target.value } })} />
+                      </div>
+                      <div className="field">
+                        <label>格號</label>
+                        <input className="input" type="number" min="1" value={draft.panel_no} onChange={(event) => setPanelDrafts({ ...panelDrafts, [panel.id]: { ...draft, panel_no: event.target.value } })} />
+                      </div>
+                      <div className="field">
+                        <label>景別</label>
+                        <select className="select" value={draft.shot_type} onChange={(event) => setPanelDrafts({ ...panelDrafts, [panel.id]: { ...draft, shot_type: event.target.value } })}>
+                          <option value="">未設定</option>
+                          {COMIC_SHOT_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label>機位</label>
+                        <select className="select" value={draft.camera_angle} onChange={(event) => setPanelDrafts({ ...panelDrafts, [panel.id]: { ...draft, camera_angle: event.target.value } })}>
+                          <option value="">未設定</option>
+                          {COMIC_CAMERA_ANGLES.map((item) => <option key={item} value={item}>{item}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="field">
+                      <label>畫格事件 / beat</label>
+                      <textarea className="textarea small" value={draft.script_text} onChange={(event) => setPanelDrafts({ ...panelDrafts, [panel.id]: { ...draft, script_text: event.target.value } })} />
+                    </div>
+                    <div className="field">
+                      <label>對白 / 旁白</label>
+                      <textarea className="textarea small" value={draft.dialogue_text} onChange={(event) => setPanelDrafts({ ...panelDrafts, [panel.id]: { ...draft, dialogue_text: event.target.value } })} />
+                    </div>
+                    <div className="field">
+                      <label>構圖備註</label>
+                      <textarea className="textarea small" value={draft.composition_notes} onChange={(event) => setPanelDrafts({ ...panelDrafts, [panel.id]: { ...draft, composition_notes: event.target.value } })} />
+                    </div>
+                    <div className="toolbar" style={{ marginBottom: 0 }}>
+                      <button className="button-secondary" onClick={() => savePanel(panel.id)} disabled={busyKey === `save-panel:${panel.id}`}>
+                        {busyKey === `save-panel:${panel.id}` ? "儲存中..." : "儲存畫格"}
+                      </button>
+                      <button
+                        className="button-danger"
+                        onClick={() => requestConfirm({
+                          title: "刪除畫格",
+                          message: `會刪除 Panel ${panel.panel_no}，並重排本頁其他畫格。`,
+                          confirmLabel: "刪除畫格",
+                          onConfirm: async () => {
+                            await apiFetch(`/api/comic-panels/${panel.id}`, { method: "DELETE", token });
+                            await refreshProject({ projectId: project.id });
+                            showFlash("success", "畫格已刪除。");
+                          },
+                        })}
+                      >
+                        刪除畫格
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {!(selectedPage.panels || []).length ? <div className="empty-state">此頁還沒有畫格，先按上方的「新增畫格」。</div> : null}
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ComicPanelsPage({ token, project, comicPages, characters, refreshProject, requestConfirm, showFlash }) {
+  const flattenedPanels = useMemo(() => flattenComicPanels(comicPages), [comicPages]);
+  const [selectedPanelId, setSelectedPanelId] = useState(null);
+  const [form, setForm] = useState(comicPanelFormFromValue(null));
+  const [busyKey, setBusyKey] = useState("");
+  const [importUrl, setImportUrl] = useState("");
+  const [uploadFile, setUploadFile] = useState(null);
+
+  const selectedEntry = flattenedPanels.find((item) => item.id === selectedPanelId) || flattenedPanels[0] || null;
+  const selectedPanel = selectedEntry || null;
+
+  useEffect(() => {
+    if (!flattenedPanels.length) {
+      setSelectedPanelId(null);
+      return;
+    }
+    if (!selectedPanelId || !flattenedPanels.some((item) => item.id === selectedPanelId)) {
+      setSelectedPanelId(flattenedPanels[0].id);
+    }
+  }, [flattenedPanels, selectedPanelId]);
+
+  useEffect(() => {
+    setForm(comicPanelFormFromValue(selectedPanel));
+    setImportUrl("");
+    setUploadFile(null);
+  }, [selectedPanel?.id, selectedPanel?.updated_at]);
+
+  if (!project) {
+    return <ComicWorkflowProjectRequired />;
+  }
+
+  async function savePanel() {
+    if (!selectedPanel) return;
+    setBusyKey(`save:${selectedPanel.id}`);
+    try {
+      await apiFetch(`/api/comic-panels/${selectedPanel.id}`, {
+        method: "PATCH",
+        token,
+        body: {
+          ...form,
+          panel_no: form.panel_no ? Number(form.panel_no) : null,
+        },
+      });
+      await refreshProject({ projectId: project.id });
+      showFlash("success", "畫格生成設定已更新。");
+    } catch (error) {
+      showFlash("error", error.message || "更新畫格生成設定失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function generateMockImage() {
+    if (!selectedPanel) return;
+    setBusyKey(`mock:${selectedPanel.id}`);
+    try {
+      await apiFetch(`/api/comic-panels/${selectedPanel.id}/image/mock-generate`, { method: "POST", token });
+      await refreshProject({ projectId: project.id });
+      showFlash("success", "已產生本地占位圖，可先審視畫面節奏與版面。");
+    } catch (error) {
+      showFlash("error", error.message || "生成占位圖失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function uploadImage() {
+    if (!selectedPanel || !uploadFile) return;
+    setBusyKey(`upload:${selectedPanel.id}`);
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadFile);
+      await apiFetch(`/api/comic-panels/${selectedPanel.id}/image/upload`, {
+        method: "POST",
+        token,
+        formData,
+      });
+      await refreshProject({ projectId: project.id });
+      setUploadFile(null);
+      showFlash("success", "畫格圖片已上傳。");
+    } catch (error) {
+      showFlash("error", error.message || "上傳圖片失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function importImage() {
+    if (!selectedPanel || !importUrl.trim()) return;
+    setBusyKey(`import:${selectedPanel.id}`);
+    try {
+      await apiFetch(`/api/comic-panels/${selectedPanel.id}/image/import`, {
+        method: "POST",
+        token,
+        body: { url: importUrl.trim() },
+      });
+      await refreshProject({ projectId: project.id });
+      setImportUrl("");
+      showFlash("success", "遠端圖片已導入畫格。");
+    } catch (error) {
+      showFlash("error", error.message || "導入圖片失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  function toggleCharacter(characterId) {
+    const exists = form.character_ids.includes(characterId);
+    setForm({
+      ...form,
+      character_ids: exists ? form.character_ids.filter((id) => id !== characterId) : [...form.character_ids, characterId],
+    });
+  }
+
+  return (
+    <div className="grid two">
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>畫格佇列</h2>
+            <div className="subtext">集中檢查 prompt、角色引用與圖片生成結果。</div>
+          </div>
+          <span className="tag brand">{flattenedPanels.length} 格</span>
+        </div>
+        <div className="list">
+          {flattenedPanels.map((entry) => (
+            <button key={entry.id} className={`project-button ${selectedPanel?.id === entry.id ? "active" : ""}`} onClick={() => setSelectedPanelId(entry.id)}>
+              <div className="title-row">
+                <strong>第 {entry.page.page_no} 頁 · Panel {entry.panel_no}</strong>
+                <span className="tag">{entry.image_status || "pending"}</span>
+              </div>
+              <div className="subtext">{entry.title || entry.prompt_text || entry.script_text || "尚未填寫 prompt"} </div>
+            </button>
+          ))}
+          {!flattenedPanels.length ? <div className="empty-state">先到「分鏡工作台」建立頁面與畫格，再回來做圖像生成。</div> : null}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>畫格生成控制台</h2>
+            <div className="subtext">{selectedPanel ? `第 ${selectedPanel.page.page_no} 頁 / Panel ${selectedPanel.panel_no}` : "請先選取畫格"}</div>
+          </div>
+          {selectedPanel ? <span className="tag">{selectedPanel.image_status || "pending"}</span> : null}
+        </div>
+        {!selectedPanel ? (
+          <div className="empty-state">選取畫格後，可以設定 prompt、綁定角色並生成本地占位圖或上傳正式圖片。</div>
+        ) : (
+          <>
+            <div className="comic-artboard">
+              {selectedPanel.image_url ? (
+                <img src={selectedPanel.image_url} alt={selectedPanel.title || `panel-${selectedPanel.id}`} className="comic-panel-image" />
+              ) : (
+                <div className="comic-panel-placeholder">
+                  <strong>尚未生成圖像</strong>
+                  <span>可先用「生成占位圖」檢查節奏與構圖，再替換成正式畫格。</span>
+                </div>
+              )}
+            </div>
+
+            <form className="form-grid" onSubmit={async (event) => {
+              event.preventDefault();
+              await savePanel();
+            }}>
+              <div className="field">
+                <label>標題</label>
+                <input className="input" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
+              </div>
+              <div className="field">
+                <label>狀態</label>
+                <select className="select" value={form.image_status} onChange={(event) => setForm({ ...form, image_status: event.target.value })}>
+                  <option value="pending">pending</option>
+                  <option value="generated">generated</option>
+                  <option value="uploaded">uploaded</option>
+                  <option value="imported">imported</option>
+                  <option value="approved">approved</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>Prompt</label>
+                <textarea className="textarea" value={form.prompt_text} onChange={(event) => setForm({ ...form, prompt_text: event.target.value })} />
+              </div>
+              <div className="field">
+                <label>Negative Prompt</label>
+                <textarea className="textarea small" value={form.negative_prompt} onChange={(event) => setForm({ ...form, negative_prompt: event.target.value })} />
+              </div>
+              <div className="field">
+                <label>腳本片段</label>
+                <textarea className="textarea small" value={form.script_text} onChange={(event) => setForm({ ...form, script_text: event.target.value })} />
+              </div>
+              <div className="field">
+                <label>對白 / 旁白</label>
+                <textarea className="textarea small" value={form.dialogue_text} onChange={(event) => setForm({ ...form, dialogue_text: event.target.value })} />
+              </div>
+              <div className="field">
+                <label>引用角色</label>
+                <div className="checkbox-wall">
+                  {characters.map((character) => (
+                    <label key={character.id} className={`check-chip ${form.character_ids.includes(character.id) ? "active" : ""}`}>
+                      <input type="checkbox" checked={form.character_ids.includes(character.id)} onChange={() => toggleCharacter(character.id)} />
+                      <span>{character.name}</span>
+                    </label>
+                  ))}
+                  {!characters.length ? <div className="subtext">目前沒有角色資料，可先到「角色設定」建立人物。</div> : null}
+                </div>
+              </div>
+              <div className="toolbar">
+                <button className="button" disabled={busyKey === `save:${selectedPanel.id}`}>{busyKey === `save:${selectedPanel.id}` ? "儲存中..." : "儲存設定"}</button>
+                <button type="button" className="button-secondary" disabled={busyKey === `mock:${selectedPanel.id}`} onClick={generateMockImage}>
+                  {busyKey === `mock:${selectedPanel.id}` ? "生成中..." : "生成占位圖"}
+                </button>
+                <button
+                  type="button"
+                  className="button-danger"
+                  onClick={() => requestConfirm({
+                    title: "清空畫格圖片",
+                    message: `會清空第 ${selectedPanel.page.page_no} 頁 Panel ${selectedPanel.panel_no} 目前的圖片檔。`,
+                    confirmLabel: "清空圖片",
+                    onConfirm: async () => {
+                      await apiFetch(`/api/comic-panels/${selectedPanel.id}/image`, { method: "DELETE", token });
+                      await refreshProject({ projectId: project.id });
+                      showFlash("success", "畫格圖片已清空。");
+                    },
+                  })}
+                >
+                  清空圖片
+                </button>
+              </div>
+            </form>
+
+            <div className="toolbar">
+              <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+                <label>上傳本地圖片</label>
+                <input className="input" type="file" accept=".png,.jpg,.jpeg,.webp,.svg" onChange={(event) => setUploadFile(event.target.files?.[0] || null)} />
+              </div>
+              <button className="button-secondary" disabled={!uploadFile || busyKey === `upload:${selectedPanel.id}`} onClick={uploadImage}>
+                {busyKey === `upload:${selectedPanel.id}` ? "上傳中..." : "上傳圖片"}
+              </button>
+            </div>
+            <div className="toolbar">
+              <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+                <label>遠端圖片 URL</label>
+                <input className="input" placeholder="https://..." value={importUrl} onChange={(event) => setImportUrl(event.target.value)} />
+              </div>
+              <button className="button-secondary" disabled={!importUrl.trim() || busyKey === `import:${selectedPanel.id}`} onClick={importImage}>
+                {busyKey === `import:${selectedPanel.id}` ? "導入中..." : "導入圖片"}
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ComicPagePreview({ page }) {
+  const panels = page?.panels || [];
+  return (
+    <div className={`page-preview-grid layout-${page?.layout_preset || "freeform"}`}>
+      {panels.map((panel) => (
+        <div key={panel.id} className="page-preview-card">
+          {panel.image_url ? (
+            <img src={panel.image_url} alt={panel.title || `panel-${panel.id}`} className="page-preview-image" />
+          ) : (
+            <div className="page-preview-empty">
+              <strong>Panel {panel.panel_no}</strong>
+              <span>{panel.title || panel.prompt_text || "待生成圖片"}</span>
+            </div>
+          )}
+          <div className="page-preview-meta">
+            <strong>Panel {panel.panel_no}</strong>
+            <span>{panel.layout_notes || panel.dialogue_text || panel.script_text || "尚未填寫內容"}</span>
+          </div>
+        </div>
+      ))}
+      {!panels.length ? <div className="empty-state">本頁還沒有畫格。</div> : null}
+    </div>
+  );
+}
+
+function ComicLayoutPage({ token, project, comicPages, refreshProject, showFlash }) {
+  const [selectedPageId, setSelectedPageId] = useState(null);
+  const [pageForm, setPageForm] = useState(defaultComicPageForm());
+  const [panelDrafts, setPanelDrafts] = useState({});
+  const [busyKey, setBusyKey] = useState("");
+
+  const selectedPage = comicPages.find((item) => item.id === selectedPageId) || comicPages[0] || null;
+
+  useEffect(() => {
+    if (!comicPages.length) {
+      setSelectedPageId(null);
+      return;
+    }
+    if (!selectedPageId || !comicPages.some((item) => item.id === selectedPageId)) {
+      setSelectedPageId(comicPages[0].id);
+    }
+  }, [comicPages, selectedPageId]);
+
+  useEffect(() => {
+    setPageForm(comicPageFormFromValue(selectedPage));
+    const nextDrafts = {};
+    (selectedPage?.panels || []).forEach((panel) => {
+      nextDrafts[panel.id] = comicPanelFormFromValue(panel);
+    });
+    setPanelDrafts(nextDrafts);
+  }, [selectedPage?.id, selectedPage?.updated_at]);
+
+  if (!project) {
+    return <ComicWorkflowProjectRequired />;
+  }
+
+  async function savePageLayout() {
+    if (!selectedPage) return;
+    setBusyKey(`save-layout:${selectedPage.id}`);
+    try {
+      await apiFetch(`/api/comic-pages/${selectedPage.id}`, {
+        method: "PATCH",
+        token,
+        body: {
+          layout_preset: pageForm.layout_preset,
+          summary: pageForm.summary,
+          notes: pageForm.notes,
+        },
+      });
+      await refreshProject({ projectId: project.id });
+      showFlash("success", "頁面排版設定已更新。");
+    } catch (error) {
+      showFlash("error", error.message || "更新頁面排版失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function savePanelLayout(panelId) {
+    const draft = panelDrafts[panelId];
+    setBusyKey(`save-layout-panel:${panelId}`);
+    try {
+      await apiFetch(`/api/comic-panels/${panelId}`, {
+        method: "PATCH",
+        token,
+        body: {
+          panel_no: draft.panel_no ? Number(draft.panel_no) : null,
+          layout_notes: draft.layout_notes,
+        },
+      });
+      await refreshProject({ projectId: project.id });
+      showFlash("success", "畫格版位已更新。");
+    } catch (error) {
+      showFlash("error", error.message || "更新畫格版位失敗。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  return (
+    <div className="grid two">
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>頁面預覽</h2>
+            <div className="subtext">用當前 layout preset 檢查閱讀動線與頁面節奏。</div>
+          </div>
+          <span className="tag brand">{comicPages.length} 頁</span>
+        </div>
+        <div className="list" style={{ marginBottom: 14 }}>
+          {comicPages.map((page) => (
+            <button key={page.id} className={`project-button ${selectedPage?.id === page.id ? "active" : ""}`} onClick={() => setSelectedPageId(page.id)}>
+              <div className="title-row">
+                <strong>{formatComicPageTitle(page)}</strong>
+                <span className="tag">{page.layout_preset}</span>
+              </div>
+              <div className="subtext">{page.image_count || 0} / {page.panel_count || 0} 格已有圖片</div>
+            </button>
+          ))}
+          {!comicPages.length ? <div className="empty-state">先到「分鏡工作台」建立頁面，或到「畫格生成」補圖。</div> : null}
+        </div>
+        {selectedPage ? <ComicPagePreview page={selectedPage} /> : null}
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>排版控制</h2>
+            <div className="subtext">{selectedPage ? formatComicPageTitle(selectedPage) : "請先選取頁面"}</div>
+          </div>
+        </div>
+        {!selectedPage ? (
+          <div className="empty-state">選一頁之後，可以調整 layout preset 與每格的版位說明。</div>
+        ) : (
+          <>
+            <form className="form-grid" onSubmit={async (event) => {
+              event.preventDefault();
+              await savePageLayout();
+            }}>
+              <div className="field">
+                <label>Layout Preset</label>
+                <select className="select" value={pageForm.layout_preset} onChange={(event) => setPageForm({ ...pageForm, layout_preset: event.target.value })}>
+                  {COMIC_LAYOUT_PRESETS.map((preset) => (
+                    <option key={preset.value} value={preset.value}>{preset.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>頁面摘要</label>
+                <textarea className="textarea small" value={pageForm.summary} onChange={(event) => setPageForm({ ...pageForm, summary: event.target.value })} />
+              </div>
+              <div className="field">
+                <label>排版備註</label>
+                <textarea className="textarea small" value={pageForm.notes} onChange={(event) => setPageForm({ ...pageForm, notes: event.target.value })} />
+              </div>
+              <button className="button" disabled={busyKey === `save-layout:${selectedPage.id}`}>{busyKey === `save-layout:${selectedPage.id}` ? "儲存中..." : "儲存頁面排版"}</button>
+            </form>
+
+            <div className="list" style={{ marginTop: 16 }}>
+              {(selectedPage.panels || []).map((panel) => {
+                const draft = panelDrafts[panel.id] || comicPanelFormFromValue(panel);
+                return (
+                  <div key={panel.id} className="list-item">
+                    <div className="title-row">
+                      <strong>Panel {panel.panel_no}</strong>
+                      <span className="tag">{panel.image_status || "pending"}</span>
+                    </div>
+                    <div className="grid two compact-grid">
+                      <div className="field">
+                        <label>排序</label>
+                        <input className="input" type="number" min="1" value={draft.panel_no} onChange={(event) => setPanelDrafts({ ...panelDrafts, [panel.id]: { ...draft, panel_no: event.target.value } })} />
+                      </div>
+                      <div className="field">
+                        <label>版位註記</label>
+                        <input className="input" value={draft.layout_notes} onChange={(event) => setPanelDrafts({ ...panelDrafts, [panel.id]: { ...draft, layout_notes: event.target.value } })} placeholder="例如：左上大框 / 右下留白" />
+                      </div>
+                    </div>
+                    <button className="button-secondary" onClick={() => savePanelLayout(panel.id)} disabled={busyKey === `save-layout-panel:${panel.id}`}>
+                      {busyKey === `save-layout-panel:${panel.id}` ? "儲存中..." : "儲存畫格版位"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </section>
     </div>
@@ -3453,13 +4939,13 @@ function ConfirmModal({ state, onClose }) {
 }
 
 function ProjectCreateModal({ open, token, onClose, onCreated, showFlash }) {
-  const [form, setForm] = useState({ title: "", author: "", language: "zh-CN", description: "" });
+  const [form, setForm] = useState({ title: "", author: "", language: "zh-CN", description: "", project_type: "audiobook" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setForm({ title: "", author: "", language: "zh-CN", description: "" });
+    setForm({ title: "", author: "", language: "zh-CN", description: "", project_type: "audiobook" });
     setBusy(false);
     setError("");
   }, [open]);
@@ -3510,6 +4996,14 @@ function ProjectCreateModal({ open, token, onClose, onCreated, showFlash }) {
               <option value="zh-CN">zh-CN</option>
               <option value="en-US">en-US</option>
               <option value="en-GB">en-GB</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>專案類型</label>
+            <select className="select" value={form.project_type} onChange={(event) => setForm({ ...form, project_type: event.target.value })}>
+              {PROJECT_TYPE_OPTIONS.map((item) => (
+                <option key={item} value={item}>{projectTypeLabel(item)}</option>
+              ))}
             </select>
           </div>
           <div className="field">

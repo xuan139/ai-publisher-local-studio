@@ -9,6 +9,43 @@
 - 生成任务异步化
 - 审核和导出可审计
 
+## 1.1 Local Studio 当前实现补充
+
+当前仓库中的本地版 `AI Publisher Local Studio` 已经在原始 audiobook 设计稿基础上落地了几项实际能力。为了避免“设计稿”和“当前代码状态”混淆，先补充如下：
+
+- 项目支持 `project_type`
+  - `audiobook`
+  - `comic`
+  - `motion_comic`
+  - `video`
+- `character_profiles` 已支持
+  - `role_type`
+  - `story_character_name`
+  - 用于区分 `旁白 / 主角 / 配角 / 背景 / 自订`
+- `segments` 已支持
+  - `character_profile_id`
+  - `voice_profile_id`
+  - 分别对应“绑定角色声线”和“临时覆写声线”
+- 文本准备页已支持
+  - 按章人物自动识别
+  - 批量自动创建角色并绑定段落
+  - 多选连续段落后合并为一个段落
+- 漫画 Phase 1 已补齐数据对象
+  - `comic_scripts`
+  - `comic_pages`
+  - `comic_panels`
+
+当前代码对应接口补充：
+
+- `GET /api/chapters/{chapter_id}/character-detection`
+- `POST /api/chapters/{chapter_id}/auto-bind-characters`
+- `POST /api/segments/merge`
+
+说明：
+
+- 本文档后续章节仍保留平台级设计视角
+- 若以当前本地实现为准，应优先参考 `api/app/db.py`、`api/app/schemas.py`、`api/app/main.py`
+
 ## 2. 数据模型总览
 
 核心实体：
@@ -105,6 +142,12 @@
 - `(voice_profile_id)`
 - `(text_hash)`
 
+Local Studio 当前实现补充：
+
+- 当前实现使用 `character_profile_id` 与 `voice_profile_id` 两级绑定
+- 已支持 `POST /api/segments/merge` 合并多选连续段落
+- 合并后会清理旧音频、旧生成任务与旧审校记录，并重排 `order_index`
+
 ## 3.5 voice_profiles
 
 | 字段 | 类型 | 说明 |
@@ -135,6 +178,13 @@
 | pronunciation | varchar | 名字发音 |
 | notes | text | 备注 |
 | created_at | timestamptz | 创建时间 |
+
+Local Studio 当前实现补充：
+
+- 当前本地版用表名 `character_profiles`
+- 已支持 `role_type` 与 `story_character_name`
+- 已支持头像与最多 9 张角色参考图
+- 已支持从章节文本中自动识别人物名并自动创建角色
 
 ## 3.7 pronunciation_rules
 
@@ -367,6 +417,17 @@ Base URL 示例：
 }
 ```
 
+### POST `/segments/merge`
+
+将当前多选的连续段落合并为一个段落。
+
+本地版补充行为：
+
+- 仅允许同一章节内的连续段落
+- 若仍有 `pending / running` 任务，则禁止合并
+- 合并后会清理原音频、任务与审校记录
+- 新段落状态会回到 `ready`
+
 ### POST `/segments/:segmentId/merge-next`
 
 与下一段合并。
@@ -416,6 +477,24 @@ Base URL 示例：
 ### POST `/chapters/:chapterId/generate`
 
 为整章可用 Segment 批量生成。
+
+### GET `/chapters/:chapterId/character-detection`
+
+分析章节文本中的人物线索，返回：
+
+- 识别到的人物名
+- 推测角色类型
+- 覆盖到的 segment ids
+- 是否已匹配现有角色
+
+### POST `/chapters/:chapterId/auto-bind-characters`
+
+按识别结果批量执行：
+
+- 复用现有角色
+- 自动创建缺失角色
+- 将段落绑定到角色
+- 可选把未识别段落补绑到旁白角色
 
 ### GET `/jobs`
 

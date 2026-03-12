@@ -20,7 +20,7 @@ def utc_now() -> str:
 def ensure_directories() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-    for folder in ("imports", "audio", "renders", "exports", "characters"):
+    for folder in ("imports", "audio", "renders", "exports", "characters", "comic"):
         (GENERATED_DIR / folder).mkdir(parents=True, exist_ok=True)
 
 
@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS projects (
   author TEXT NOT NULL DEFAULT '',
   language TEXT NOT NULL DEFAULT 'zh-CN',
   description TEXT NOT NULL DEFAULT '',
+  project_type TEXT NOT NULL DEFAULT 'audiobook',
   comic_settings TEXT NOT NULL DEFAULT '{}',
   video_settings TEXT NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'draft',
@@ -122,6 +123,8 @@ CREATE TABLE IF NOT EXISTS character_profiles (
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   voice_profile_id INTEGER NOT NULL REFERENCES voice_profiles(id) ON DELETE RESTRICT,
+  role_type TEXT NOT NULL DEFAULT 'supporting',
+  story_character_name TEXT NOT NULL DEFAULT '',
   display_title TEXT NOT NULL DEFAULT '',
   archetype TEXT NOT NULL DEFAULT '',
   summary TEXT NOT NULL DEFAULT '',
@@ -162,6 +165,60 @@ CREATE TABLE IF NOT EXISTS comic_profiles (
   name TEXT NOT NULL,
   settings TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS comic_scripts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  chapter_id INTEGER REFERENCES chapters(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  premise TEXT NOT NULL DEFAULT '',
+  outline_text TEXT NOT NULL DEFAULT '',
+  script_text TEXT NOT NULL DEFAULT '',
+  target_page_count INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS comic_pages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  chapter_id INTEGER REFERENCES chapters(id) ON DELETE SET NULL,
+  comic_script_id INTEGER REFERENCES comic_scripts(id) ON DELETE SET NULL,
+  page_no INTEGER NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  layout_preset TEXT NOT NULL DEFAULT 'two-column',
+  summary TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(project_id, page_no)
+);
+
+CREATE TABLE IF NOT EXISTS comic_panels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  comic_page_id INTEGER NOT NULL REFERENCES comic_pages(id) ON DELETE CASCADE,
+  panel_no INTEGER NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  script_text TEXT NOT NULL DEFAULT '',
+  dialogue_text TEXT NOT NULL DEFAULT '',
+  caption_text TEXT NOT NULL DEFAULT '',
+  sfx_text TEXT NOT NULL DEFAULT '',
+  shot_type TEXT NOT NULL DEFAULT '',
+  camera_angle TEXT NOT NULL DEFAULT '',
+  composition_notes TEXT NOT NULL DEFAULT '',
+  character_refs TEXT NOT NULL DEFAULT '[]',
+  prompt_text TEXT NOT NULL DEFAULT '',
+  negative_prompt TEXT NOT NULL DEFAULT '',
+  image_path TEXT NOT NULL DEFAULT '',
+  image_status TEXT NOT NULL DEFAULT 'pending',
+  layout_notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(comic_page_id, panel_no)
 );
 
 CREATE TABLE IF NOT EXISTS video_profiles (
@@ -246,6 +303,9 @@ CREATE INDEX IF NOT EXISTS idx_segments_chapter_order ON segments(chapter_id, or
 CREATE INDEX IF NOT EXISTS idx_jobs_project_status ON generation_jobs(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_issues_segment_status ON review_issues(segment_id, status);
 CREATE INDEX IF NOT EXISTS idx_character_looks_slot ON character_looks(character_profile_id, slot_index);
+CREATE INDEX IF NOT EXISTS idx_comic_scripts_project ON comic_scripts(project_id, id);
+CREATE INDEX IF NOT EXISTS idx_comic_pages_project_page ON comic_pages(project_id, page_no);
+CREATE INDEX IF NOT EXISTS idx_comic_panels_page_panel ON comic_panels(comic_page_id, panel_no);
 """
 
 
@@ -253,12 +313,19 @@ def init_db() -> None:
     ensure_directories()
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        ensure_project_type_column(conn)
         ensure_project_setting_columns(conn)
         ensure_segment_character_column(conn)
         ensure_character_profile_columns(conn)
         seed_default_user(conn)
         seed_default_voice_profiles(conn)
         seed_default_model_profiles(conn)
+
+
+def ensure_project_type_column(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(projects)").fetchall()}
+    if "project_type" not in columns:
+        conn.execute("ALTER TABLE projects ADD COLUMN project_type TEXT NOT NULL DEFAULT 'audiobook'")
 
 
 def ensure_project_setting_columns(conn: sqlite3.Connection) -> None:
@@ -278,6 +345,8 @@ def ensure_segment_character_column(conn: sqlite3.Connection) -> None:
 def ensure_character_profile_columns(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(character_profiles)").fetchall()}
     additions = {
+        "role_type": "TEXT NOT NULL DEFAULT 'supporting'",
+        "story_character_name": "TEXT NOT NULL DEFAULT ''",
         "display_title": "TEXT NOT NULL DEFAULT ''",
         "archetype": "TEXT NOT NULL DEFAULT ''",
         "summary": "TEXT NOT NULL DEFAULT ''",
@@ -297,6 +366,18 @@ def ensure_character_profile_columns(conn: sqlite3.Connection) -> None:
     for name, definition in additions.items():
         if name not in columns:
             conn.execute(f"ALTER TABLE character_profiles ADD COLUMN {name} {definition}")
+    conn.execute(
+        """
+        UPDATE character_profiles
+        SET role_type = CASE
+            WHEN role_type NOT IN ('', 'supporting') THEN role_type
+            WHEN preset_key = 'narrator' THEN 'narrator'
+            WHEN preset_key = 'background' THEN 'background'
+            WHEN preset_key = 'hero' THEN 'lead'
+            ELSE 'supporting'
+        END
+        """
+    )
 
 
 def seed_default_user(conn: sqlite3.Connection) -> None:

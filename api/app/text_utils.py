@@ -308,3 +308,120 @@ def normalize_text(text: str) -> str:
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+SPEAKER_VERBS = [
+    "轻声说",
+    "低声说",
+    "喃喃道",
+    "嘀咕道",
+    "沉声道",
+    "冷声道",
+    "提醒道",
+    "解释道",
+    "回过头说",
+    "开口说道",
+    "回答",
+    "回道",
+    "应道",
+    "问道",
+    "说道",
+    "笑道",
+    "喊道",
+    "叫道",
+    "答道",
+    "大喊",
+    "怒吼",
+    "宣布",
+    "开口",
+    "说道",
+    "说",
+    "问",
+    "道",
+    "喊",
+    "叫",
+    "答",
+]
+SPEAKER_VERB_PATTERN = "|".join(sorted(set(SPEAKER_VERBS), key=len, reverse=True))
+SPEAKER_NAME_PATTERN = r"(?:[A-Za-z][A-Za-z0-9_ -]{0,18}|[一-龥][一-龥0-9·]{0,7})"
+SPEAKER_LABEL_PATTERN = re.compile(
+    rf"^\s*[【\[\(（「『“\"]?(?P<speaker>{SPEAKER_NAME_PATTERN})[】\]\)）」』”\"]?\s*[：:]\s*"
+)
+SPEAKER_TRAILING_PATTERN = re.compile(
+    rf"[“\"「『][^”\"」』]{{1,120}}[”\"」』][，、,\s]*(?P<speaker>{SPEAKER_NAME_PATTERN})[，、,\s]*(?:{SPEAKER_VERB_PATTERN})"
+)
+SPEAKER_LEADING_PATTERN = re.compile(
+    rf"(?:^|[。！？!?；;]\s*)(?P<speaker>{SPEAKER_NAME_PATTERN})[，、,\s]*(?:{SPEAKER_VERB_PATTERN})[：:\s，、,]*[“\"「『]"
+)
+SPEAKER_BLOCKLIST = {
+    "他",
+    "她",
+    "它",
+    "他们",
+    "她们",
+    "它们",
+    "自己",
+    "对方",
+    "某人",
+    "有人",
+    "那人",
+    "这人",
+    "一个人",
+}
+NARRATOR_HINTS = {"旁白", "叙述者", "敘事者", "系统旁白", "系統旁白"}
+BACKGROUND_HINT_KEYWORDS = ("系统", "系統", "广播", "廣播", "提示", "男声", "男聲", "女声", "女聲", "路人", "众人", "眾人", "村民", "店员", "店員", "服务员", "服務員", "主持人", "观众", "觀眾", "群众", "群眾", "士兵", "同学", "同學", "老师", "老師")
+SPEAKER_SUFFIXES = ("说道", "說道", "问道", "問道", "笑道", "喊道", "叫道", "答道", "说", "說", "问", "問", "笑", "喊", "叫", "答", "道")
+
+
+def normalize_detected_speaker(value: str) -> str:
+    candidate = normalize_inline_text(value)
+    candidate = candidate.strip("[]【】()（）「」『』\"'“”‘’：:，,。！？!?、;； ")
+    if not candidate:
+        return ""
+    for suffix in SPEAKER_SUFFIXES:
+        compact_candidate = candidate.replace(" ", "")
+        if compact_candidate.endswith(suffix) and len(compact_candidate) > len(suffix):
+            candidate = compact_candidate[: -len(suffix)]
+            break
+    compact = candidate.replace(" ", "")
+    if compact in SPEAKER_BLOCKLIST:
+        return ""
+    if compact.isdigit() or len(compact) > 12:
+        return ""
+    if re.fullmatch(r"[一-龥][一-龥0-9·]{0,7}", compact):
+        return compact
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_ -]{0,18}", candidate):
+        return re.sub(r"\s+", " ", candidate).strip()
+    return ""
+
+
+def suggest_role_type_for_speaker(name: str) -> str:
+    compact = (name or "").replace(" ", "")
+    if compact in NARRATOR_HINTS or "旁白" in compact:
+        return "narrator"
+    if any(keyword in compact for keyword in BACKGROUND_HINT_KEYWORDS):
+        return "background"
+    return "supporting"
+
+
+def detect_segment_speaker(text: str) -> dict[str, str] | None:
+    normalized = normalize_inline_text(text)
+    if not normalized:
+        return None
+    for pattern, source in (
+        (SPEAKER_LABEL_PATTERN, "label"),
+        (SPEAKER_TRAILING_PATTERN, "trailing"),
+        (SPEAKER_LEADING_PATTERN, "leading"),
+    ):
+        match = pattern.search(normalized)
+        if not match:
+            continue
+        speaker_name = normalize_detected_speaker(match.group("speaker"))
+        if not speaker_name:
+            continue
+        return {
+            "speaker_name": speaker_name,
+            "detection_source": source,
+            "role_type": suggest_role_type_for_speaker(speaker_name),
+        }
+    return None

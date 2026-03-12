@@ -10,6 +10,7 @@ import urllib.parse
 import urllib.request
 from difflib import SequenceMatcher
 from datetime import datetime, timezone
+from html import escape
 from pathlib import Path
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -24,13 +25,22 @@ from .db import BASE_DIR, GENERATED_DIR, connect, get_conn, init_db, utc_now
 from .model_registry import REGISTRY_PATH, get_model_registry, get_registry_defaults, get_system_catalog
 from .schemas import (
     BatchCharacterAssignRequest,
+    ChapterCharacterAutoBindRequest,
     CharacterLookImportRequest,
     CharacterLookUpdate,
     CharacterProfileCreate,
     CharacterProfileUpdate,
+    ComicPageCreate,
+    ComicPageUpdate,
+    ComicPanelCreate,
+    ComicPanelImageImportRequest,
+    ComicPanelUpdate,
+    ComicScriptCreate,
+    ComicScriptUpdate,
     IssueCreate,
     IssueUpdate,
     LoginRequest,
+    MergeSegmentsRequest,
     ModelProfileCreate,
     ProjectCreate,
     ProjectImportLocalRequest,
@@ -41,7 +51,7 @@ from .schemas import (
     VoiceProfileUpdate,
 )
 from .security import create_token, verify_password
-from .text_utils import extract_chapters_from_upload, split_into_segments
+from .text_utils import detect_segment_speaker, extract_chapters_from_upload, split_into_segments
 
 WEB_DIR = BASE_DIR.parent / "web"
 APP_TITLE = "AI Publisher Local Studio"
@@ -156,6 +166,71 @@ def attach_character_looks(conn: sqlite3.Connection, payload: dict | None) -> di
     looks = list_character_looks(conn, payload["id"])
     payload["looks"] = looks
     payload["looks_count"] = sum(1 for look in looks if look["image_path"])
+    return payload
+
+
+def decode_json_list(raw_value: str | list | None) -> list:
+    if isinstance(raw_value, list):
+        return raw_value
+    if isinstance(raw_value, str) and raw_value.strip():
+        try:
+            parsed = json.loads(raw_value)
+        except json.JSONDecodeError:
+            return []
+        return parsed if isinstance(parsed, list) else []
+    return []
+
+
+def comic_script_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+    payload = dict(row)
+    payload["chapter_title"] = ""
+    if payload.get("chapter_id"):
+        chapter = conn.execute("SELECT title FROM chapters WHERE id = ?", (payload["chapter_id"],)).fetchone()
+        payload["chapter_title"] = chapter["title"] if chapter else ""
+    payload["page_count"] = conn.execute(
+        "SELECT COUNT(*) AS count FROM comic_pages WHERE comic_script_id = ?",
+        (payload["id"],),
+    ).fetchone()["count"]
+    return payload
+
+
+def comic_panel_payload(row: sqlite3.Row) -> dict:
+    payload = dict(row)
+    payload["character_ids"] = decode_json_list(payload.get("character_refs"))
+    payload["image_url"] = public_file_path(payload["image_path"]) if payload.get("image_path") else ""
+    return payload
+
+
+def list_comic_panels(conn: sqlite3.Connection, comic_page_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM comic_panels WHERE comic_page_id = ? ORDER BY panel_no, id",
+        (comic_page_id,),
+    ).fetchall()
+    return [comic_panel_payload(row) for row in rows]
+
+
+def comic_page_payload(conn: sqlite3.Connection, row: sqlite3.Row, *, include_panels: bool = True) -> dict:
+    payload = dict(row)
+    payload["chapter_title"] = ""
+    payload["comic_script_title"] = ""
+    if payload.get("chapter_id"):
+        chapter = conn.execute("SELECT title FROM chapters WHERE id = ?", (payload["chapter_id"],)).fetchone()
+        payload["chapter_title"] = chapter["title"] if chapter else ""
+    if payload.get("comic_script_id"):
+        script = conn.execute("SELECT title FROM comic_scripts WHERE id = ?", (payload["comic_script_id"],)).fetchone()
+        payload["comic_script_title"] = script["title"] if script else ""
+    stats = conn.execute(
+        """
+        SELECT COUNT(*) AS panel_count,
+               SUM(CASE WHEN COALESCE(image_path, '') <> '' THEN 1 ELSE 0 END) AS image_count
+        FROM comic_panels
+        WHERE comic_page_id = ?
+        """,
+        (payload["id"],),
+    ).fetchone()
+    payload["panel_count"] = stats["panel_count"] or 0
+    payload["image_count"] = stats["image_count"] or 0
+    payload["panels"] = list_comic_panels(conn, payload["id"]) if include_panels else []
     return payload
 
 
@@ -310,12 +385,152 @@ def get_character_profile(conn: sqlite3.Connection, character_profile_id: int) -
     return row
 
 
+def get_comic_script(conn: sqlite3.Connection, comic_script_id: int) -> sqlite3.Row:
+    row = conn.execute("SELECT * FROM comic_scripts WHERE id = ?", (comic_script_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Comic script not found")
+    return row
+
+
+def get_comic_page(conn: sqlite3.Connection, comic_page_id: int) -> sqlite3.Row:
+    row = conn.execute("SELECT * FROM comic_pages WHERE id = ?", (comic_page_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Comic page not found")
+    return row
+
+
+def get_comic_panel(conn: sqlite3.Connection, comic_panel_id: int) -> sqlite3.Row:
+    row = conn.execute("SELECT * FROM comic_panels WHERE id = ?", (comic_panel_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Comic panel not found")
+    return row
+
+
 def character_query() -> str:
     return """
         SELECT character_profiles.*, voice_profiles.name AS voice_profile_name, voice_profiles.voice_name AS voice_name
         FROM character_profiles
         JOIN voice_profiles ON voice_profiles.id = character_profiles.voice_profile_id
     """
+
+
+def normalize_character_lookup_value(value: str | None) -> str:
+    return "".join((value or "").split()).strip().casefold()
+
+
+def match_character_row_for_speaker(character_rows: list[sqlite3.Row], speaker_name: str) -> sqlite3.Row | None:
+    target = normalize_character_lookup_value(speaker_name)
+    if not target:
+        return None
+
+    exact_match = None
+    scored_matches: list[tuple[float, sqlite3.Row]] = []
+    seen_ids: set[int] = set()
+
+    for row in character_rows:
+        fields = [row["story_character_name"], row["name"], row["display_title"]]
+        best_ratio = 0.0
+        for field in fields:
+            normalized = normalize_character_lookup_value(field)
+            if not normalized:
+                continue
+            if normalized == target:
+                exact_match = row
+                break
+            ratio = SequenceMatcher(None, target, normalized).ratio()
+            if target in normalized or normalized in target:
+                ratio = min(1.0, ratio + 0.08)
+            best_ratio = max(best_ratio, ratio)
+        if exact_match is not None:
+            break
+        if best_ratio > 0 and row["id"] not in seen_ids:
+            seen_ids.add(row["id"])
+            scored_matches.append((best_ratio, row))
+
+    if exact_match is not None:
+        return exact_match
+
+    scored_matches.sort(key=lambda item: item[0], reverse=True)
+    if not scored_matches:
+        return None
+    top_ratio, top_row = scored_matches[0]
+    next_ratio = scored_matches[1][0] if len(scored_matches) > 1 else 0.0
+    if top_ratio >= 0.9 and top_ratio - next_ratio >= 0.06:
+        return top_row
+    return None
+
+
+def chapter_character_detection(conn: sqlite3.Connection, chapter_id: int) -> dict:
+    chapter = get_chapter(conn, chapter_id)
+    project = get_project(conn, chapter["project_id"])
+    segment_rows = conn.execute("SELECT * FROM segments WHERE chapter_id = ? ORDER BY order_index", (chapter_id,)).fetchall()
+    character_rows = conn.execute(
+        f"""
+        {character_query()}
+        WHERE character_profiles.project_id = ?
+        ORDER BY character_profiles.id ASC
+        """,
+        (project["id"],),
+    ).fetchall()
+
+    grouped: dict[str, dict] = {}
+    unmatched_segment_ids: list[int] = []
+
+    for row in segment_rows:
+        text = (row["source_text"] or row["tts_text"] or "").strip()
+        detection = detect_segment_speaker(text)
+        if not detection:
+            unmatched_segment_ids.append(row["id"])
+            continue
+        speaker_name = detection["speaker_name"]
+        entry = grouped.setdefault(
+            speaker_name,
+            {
+                "speaker_name": speaker_name,
+                "role_type": detection["role_type"],
+                "detection_source": detection["detection_source"],
+                "segment_ids": [],
+                "segment_count": 0,
+                "sample_text": text[:160],
+            },
+        )
+        entry["segment_ids"].append(row["id"])
+        entry["segment_count"] += 1
+
+    items: list[dict] = []
+    for entry in grouped.values():
+        matched_row = match_character_row_for_speaker(character_rows, entry["speaker_name"])
+        payload = {
+            **entry,
+            "matched_character_profile_id": matched_row["id"] if matched_row else None,
+            "matched_character_name": matched_row["name"] if matched_row else "",
+            "matched_story_character_name": matched_row["story_character_name"] if matched_row else "",
+        }
+        items.append(payload)
+
+    items.sort(key=lambda item: (-item["segment_count"], item["speaker_name"]))
+    return {
+        "project_id": project["id"],
+        "chapter_id": chapter_id,
+        "chapter_title": chapter["title"],
+        "segment_count": len(segment_rows),
+        "detected_segment_count": sum(item["segment_count"] for item in items),
+        "unmatched_segment_ids": unmatched_segment_ids,
+        "unmatched_segment_count": len(unmatched_segment_ids),
+        "items": items,
+    }
+
+
+def resolve_voice_for_character_creation(conn: sqlite3.Connection, project_id: int, fallback_voice_profile_id: int | None) -> sqlite3.Row | None:
+    voice_id = fallback_voice_profile_id or get_project(conn, project_id)["default_voice_profile_id"]
+    if not voice_id:
+        return None
+    voice = conn.execute("SELECT * FROM voice_profiles WHERE id = ?", (voice_id,)).fetchone()
+    if not voice:
+        return None
+    if voice["project_id"] is not None and voice["project_id"] != project_id:
+        raise HTTPException(status_code=400, detail="Fallback voice does not belong to this project")
+    return voice
 
 
 def voice_for_project(conn: sqlite3.Connection, project_id: int, segment_voice_id: int | None = None, character_profile_id: int | None = None) -> dict:
@@ -348,28 +563,31 @@ def voice_for_project(conn: sqlite3.Connection, project_id: int, segment_voice_i
 
 
 def project_metrics(conn: sqlite3.Connection, project_id: int) -> dict:
-    counts = conn.execute(
+    chapter_count = conn.execute("SELECT COUNT(*) AS count FROM chapters WHERE project_id = ?", (project_id,)).fetchone()["count"]
+    segment_stats = conn.execute(
         """
-        SELECT
-          COUNT(DISTINCT chapters.id) AS chapter_count,
-          COUNT(DISTINCT segments.id) AS segment_count,
-          SUM(CASE WHEN segments.status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
-          SUM(CASE WHEN segments.status = 'review_required' THEN 1 ELSE 0 END) AS review_required_count,
-          SUM(CASE WHEN generation_jobs.status = 'failed' THEN 1 ELSE 0 END) AS failed_jobs
-        FROM projects
-        LEFT JOIN chapters ON chapters.project_id = projects.id
-        LEFT JOIN segments ON segments.project_id = projects.id
-        LEFT JOIN generation_jobs ON generation_jobs.project_id = projects.id
-        WHERE projects.id = ?
+        SELECT COUNT(*) AS segment_count,
+               SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
+               SUM(CASE WHEN status = 'review_required' THEN 1 ELSE 0 END) AS review_required_count
+        FROM segments
+        WHERE project_id = ?
         """,
         (project_id,),
     ).fetchone()
+    failed_jobs = conn.execute(
+        "SELECT COUNT(*) AS count FROM generation_jobs WHERE project_id = ? AND status = 'failed'",
+        (project_id,),
+    ).fetchone()["count"]
+    comic_page_count = conn.execute("SELECT COUNT(*) AS count FROM comic_pages WHERE project_id = ?", (project_id,)).fetchone()["count"]
+    comic_panel_count = conn.execute("SELECT COUNT(*) AS count FROM comic_panels WHERE project_id = ?", (project_id,)).fetchone()["count"]
     return {
-        "chapter_count": counts["chapter_count"] or 0,
-        "segment_count": counts["segment_count"] or 0,
-        "approved_count": counts["approved_count"] or 0,
-        "review_required_count": counts["review_required_count"] or 0,
-        "failed_jobs": counts["failed_jobs"] or 0,
+        "chapter_count": chapter_count or 0,
+        "segment_count": segment_stats["segment_count"] or 0,
+        "approved_count": segment_stats["approved_count"] or 0,
+        "review_required_count": segment_stats["review_required_count"] or 0,
+        "failed_jobs": failed_jobs or 0,
+        "comic_page_count": comic_page_count or 0,
+        "comic_panel_count": comic_panel_count or 0,
     }
 
 
@@ -664,6 +882,14 @@ def collect_chapter_artifacts(conn: sqlite3.Connection, chapter_id: int) -> set[
     )
 
 
+def collect_comic_page_artifacts(conn: sqlite3.Connection, comic_page_id: int) -> set[Path]:
+    return artifact_paths_from_query(
+        conn,
+        "SELECT image_path FROM comic_panels WHERE comic_page_id = ? AND image_path <> ''",
+        (comic_page_id,),
+    )
+
+
 def reindex_chapters(conn: sqlite3.Connection, project_id: int) -> None:
     rows = conn.execute("SELECT id FROM chapters WHERE project_id = ? ORDER BY order_index, id", (project_id,)).fetchall()
     for index, row in enumerate(rows, start=1):
@@ -674,6 +900,90 @@ def reindex_segments(conn: sqlite3.Connection, chapter_id: int) -> None:
     rows = conn.execute("SELECT id FROM segments WHERE chapter_id = ? ORDER BY order_index, id", (chapter_id,)).fetchall()
     for index, row in enumerate(rows, start=1):
         conn.execute("UPDATE segments SET order_index = ?, updated_at = ? WHERE id = ?", (index, utc_now(), row["id"]))
+
+
+def next_comic_page_no(conn: sqlite3.Connection, project_id: int) -> int:
+    row = conn.execute("SELECT COALESCE(MAX(page_no), 0) AS value FROM comic_pages WHERE project_id = ?", (project_id,)).fetchone()
+    return (row["value"] or 0) + 1
+
+
+def next_comic_panel_no(conn: sqlite3.Connection, comic_page_id: int) -> int:
+    row = conn.execute("SELECT COALESCE(MAX(panel_no), 0) AS value FROM comic_panels WHERE comic_page_id = ?", (comic_page_id,)).fetchone()
+    return (row["value"] or 0) + 1
+
+
+def reindex_comic_pages(conn: sqlite3.Connection, project_id: int) -> None:
+    rows = conn.execute("SELECT id FROM comic_pages WHERE project_id = ? ORDER BY page_no, id", (project_id,)).fetchall()
+    for index, row in enumerate(rows, start=1):
+        conn.execute("UPDATE comic_pages SET page_no = ?, updated_at = ? WHERE id = ?", (index, utc_now(), row["id"]))
+
+
+def reindex_comic_panels(conn: sqlite3.Connection, comic_page_id: int) -> None:
+    rows = conn.execute("SELECT id FROM comic_panels WHERE comic_page_id = ? ORDER BY panel_no, id", (comic_page_id,)).fetchall()
+    for index, row in enumerate(rows, start=1):
+        conn.execute("UPDATE comic_panels SET panel_no = ?, updated_at = ? WHERE id = ?", (index, utc_now(), row["id"]))
+
+
+def wrap_mock_text(value: str, *, width: int = 22, limit: int = 5) -> list[str]:
+    normalized = " ".join((value or "").split())
+    if not normalized:
+        return []
+    chunks: list[str] = []
+    current = ""
+    for char in normalized:
+        next_value = f"{current}{char}"
+        if len(next_value) > width:
+            chunks.append(current)
+            current = char
+            if len(chunks) >= limit:
+                break
+        else:
+            current = next_value
+    if current and len(chunks) < limit:
+        chunks.append(current)
+    return chunks
+
+
+def create_mock_panel_image(project: dict, page: dict, panel: dict) -> Path:
+    out_dir = GENERATED_DIR / "comic" / f"project_{project['id']}" / f"page_{page['id']}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_path = out_dir / f"panel_{panel['id']}.svg"
+    prompt_lines = wrap_mock_text(panel.get("prompt_text") or panel.get("script_text") or panel.get("dialogue_text") or "Pending prompt")
+    dialogue_lines = wrap_mock_text(panel.get("dialogue_text") or panel.get("caption_text") or "No dialogue yet", width=24, limit=3)
+    prompt_svg = "".join(
+        f'<text x="32" y="{164 + index * 22}" font-size="18" fill="#11423d">{escape(line)}</text>'
+        for index, line in enumerate(prompt_lines)
+    )
+    dialogue_svg = "".join(
+        f'<text x="36" y="{438 + index * 20}" font-size="16" fill="#ffffff">{escape(line)}</text>'
+        for index, line in enumerate(dialogue_lines)
+    )
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1280" viewBox="0 0 900 1280">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#f7ede2" />
+    <stop offset="52%" stop-color="#d6e7e3" />
+    <stop offset="100%" stop-color="#b7d3d0" />
+  </linearGradient>
+</defs>
+<rect width="900" height="1280" rx="32" fill="url(#bg)" />
+<rect x="28" y="28" width="844" height="1224" rx="28" fill="rgba(255,255,255,0.56)" stroke="#1f2937" stroke-opacity="0.12" />
+<text x="42" y="72" font-size="24" fill="#0f766e">AI Publisher Comic Mock</text>
+<text x="42" y="106" font-size="36" fill="#1f2937">{escape(project["title"])}</text>
+<text x="42" y="138" font-size="22" fill="#5b6777">Page {page["page_no"]} / Panel {panel["panel_no"]}</text>
+<rect x="32" y="188" width="836" height="620" rx="24" fill="#f7fbfb" stroke="#0f766e" stroke-opacity="0.18" stroke-dasharray="10 10" />
+<text x="56" y="244" font-size="20" fill="#0f766e">Prompt</text>
+{prompt_svg}
+<text x="56" y="884" font-size="18" fill="#0f766e">Shot: {escape(panel.get("shot_type") or "pending")} / Camera: {escape(panel.get("camera_angle") or "pending")}</text>
+<text x="56" y="914" font-size="18" fill="#5b6777">Layout: {escape(page.get("layout_preset") or "freeform")}</text>
+<rect x="32" y="968" width="836" height="212" rx="26" fill="#163b39" />
+<text x="56" y="1018" font-size="20" fill="#9ed9d2">Dialogue</text>
+{dialogue_svg}
+<text x="56" y="1196" font-size="16" fill="#dce9e7">This is a local placeholder panel so the workflow can be reviewed before AI image generation is wired in.</text>
+</svg>
+"""
+    output_path.write_text(svg, encoding="utf-8")
+    return output_path
 
 
 def run_segment_generation(job_id: int) -> None:
@@ -710,6 +1020,11 @@ def run_segment_generation(job_id: int) -> None:
         asr_text, qc_score, issues = run_qc(segment["tts_text"] or segment["source_text"], transcription.text if transcription else None, generation.duration_seconds)
 
         with get_conn() as conn:
+            current_job = conn.execute("SELECT * FROM generation_jobs WHERE id = ?", (job_id,)).fetchone()
+            current_segment = conn.execute("SELECT * FROM segments WHERE id = ?", (segment["id"],)).fetchone()
+            if not current_job or not current_segment or current_job["segment_id"] != segment["id"]:
+                remove_generated_file(generation.file_path)
+                return
             version_no = (
                 conn.execute("SELECT COALESCE(MAX(version_no), 0) AS value FROM audio_takes WHERE segment_id = ?", (segment["id"],)).fetchone()["value"] + 1
             )
@@ -749,6 +1064,10 @@ def run_segment_generation(job_id: int) -> None:
             log_activity(conn, None, "segment", segment["id"], "generate", f"take:{take_id}")
     except (ProviderConfigError, ProviderRequestError, Exception) as exc:  # pragma: no cover - network/runtime dependent
         with get_conn() as conn:
+            current_job = conn.execute("SELECT id FROM generation_jobs WHERE id = ?", (job_id,)).fetchone()
+            current_segment = conn.execute("SELECT id FROM segments WHERE id = ?", (segment["id"],)).fetchone()
+            if not current_job or not current_segment:
+                return
             conn.execute(
                 "UPDATE generation_jobs SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?",
                 (str(exc), utc_now(), job_id),
@@ -1043,20 +1362,22 @@ def list_projects(user: dict = Depends(get_current_user)) -> dict:
 @app.post("/api/projects")
 def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user)) -> dict:
     now = utc_now()
+    project_type = (payload.project_type or "audiobook").strip().lower() or "audiobook"
     with get_conn() as conn:
         default_voice = conn.execute("SELECT id FROM voice_profiles WHERE is_default = 1 ORDER BY id LIMIT 1").fetchone()
         comic_settings = json.dumps(merge_settings(payload.comic_settings, comic_settings_defaults()), ensure_ascii=False)
         video_settings = json.dumps(merge_settings(payload.video_settings, video_settings_defaults()), ensure_ascii=False)
         project_id = conn.execute(
             """
-            INSERT INTO projects (title, author, language, description, comic_settings, video_settings, status, default_voice_profile_id, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)
+            INSERT INTO projects (title, author, language, description, project_type, comic_settings, video_settings, status, default_voice_profile_id, created_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)
             """,
             (
                 payload.title,
                 payload.author,
                 payload.language,
                 payload.description,
+                project_type,
                 comic_settings,
                 video_settings,
                 default_voice["id"] if default_voice else None,
@@ -1086,6 +1407,8 @@ def update_project(project_id: int, payload: ProjectUpdate, user: dict = Depends
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
+    if "project_type" in updates:
+        updates["project_type"] = (updates["project_type"] or "audiobook").strip().lower() or "audiobook"
     if "comic_settings" in updates:
         updates["comic_settings"] = json.dumps(merge_settings(updates["comic_settings"], comic_settings_defaults()), ensure_ascii=False)
     if "video_settings" in updates:
@@ -1108,6 +1431,7 @@ def delete_project(project_id: int, user: dict = Depends(get_current_user)) -> d
         GENERATED_DIR / "renders" / f"project_{project_id}",
         GENERATED_DIR / "exports" / f"project_{project_id}",
         GENERATED_DIR / "characters" / f"project_{project_id}",
+        GENERATED_DIR / "comic" / f"project_{project_id}",
     ]
     with get_conn() as conn:
         project = dict(get_project(conn, project_id))
@@ -1245,6 +1569,124 @@ def delete_segment(segment_id: int, user: dict = Depends(get_current_user)) -> d
     }
 
 
+@app.post("/api/segments/merge")
+def merge_segments(payload: MergeSegmentsRequest, user: dict = Depends(get_current_user)) -> dict:
+    segment_ids = list(dict.fromkeys(payload.segment_ids))
+    if len(segment_ids) < 2:
+        raise HTTPException(status_code=400, detail="Please select at least two segments to merge")
+
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM segments WHERE id IN ({','.join('?' for _ in segment_ids)})",
+            segment_ids,
+        ).fetchall()
+        if len(rows) != len(segment_ids):
+            raise HTTPException(status_code=404, detail="Some segments were not found")
+
+        ordered_rows = sorted(rows, key=lambda row: (row["chapter_id"], row["order_index"], row["id"]))
+        chapter_ids = {row["chapter_id"] for row in ordered_rows}
+        if len(chapter_ids) != 1:
+            raise HTTPException(status_code=400, detail="Segments must belong to the same chapter")
+
+        active_job_count = conn.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM generation_jobs
+            WHERE segment_id IN ({','.join('?' for _ in segment_ids)})
+              AND status IN ('pending', 'running')
+            """,
+            segment_ids,
+        ).fetchone()["count"]
+        if active_job_count:
+            raise HTTPException(status_code=400, detail="Selected segments still have active generation tasks. Please wait for them to finish before merging")
+
+        order_indexes = [row["order_index"] for row in ordered_rows]
+        expected_indexes = list(range(order_indexes[0], order_indexes[0] + len(order_indexes)))
+        if order_indexes != expected_indexes:
+            raise HTTPException(status_code=400, detail="Please select contiguous segments to merge")
+
+        chapter_id = ordered_rows[0]["chapter_id"]
+        project_id = ordered_rows[0]["project_id"]
+        artifact_paths: set[Path] = set()
+        for row in ordered_rows:
+            artifact_paths.update(collect_segment_artifacts(conn, row["id"]))
+
+        def merge_text(field: str, *, fallback_to_source: bool = False) -> str:
+            chunks = []
+            for row in ordered_rows:
+                value = (row[field] or "").strip()
+                if not value and fallback_to_source:
+                    value = (row["source_text"] or "").strip()
+                if value:
+                    chunks.append(value)
+            return "\n\n".join(chunks)
+
+        def shared_value(field: str):
+            values = {row[field] for row in ordered_rows}
+            return values.pop() if len(values) == 1 else None
+
+        primary_segment = ordered_rows[0]
+        merged_source_text = merge_text("source_text")
+        merged_tts_text = merge_text("tts_text", fallback_to_source=True)
+        merged_character_id = shared_value("character_profile_id")
+        merged_voice_id = shared_value("voice_profile_id")
+        now = utc_now()
+
+        conn.execute(
+            f"DELETE FROM review_issues WHERE segment_id IN ({','.join('?' for _ in segment_ids)})",
+            segment_ids,
+        )
+        conn.execute(
+            f"DELETE FROM audio_takes WHERE segment_id IN ({','.join('?' for _ in segment_ids)})",
+            segment_ids,
+        )
+        conn.execute(
+            f"DELETE FROM generation_jobs WHERE segment_id IN ({','.join('?' for _ in segment_ids)})",
+            segment_ids,
+        )
+        conn.execute(
+            """
+            UPDATE segments
+            SET source_text = ?, tts_text = ?, status = 'ready', character_profile_id = ?, voice_profile_id = ?,
+                latest_audio_take_id = NULL, asr_text = '', qc_score = 0, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                merged_source_text,
+                merged_tts_text,
+                merged_character_id,
+                merged_voice_id,
+                now,
+                primary_segment["id"],
+            ),
+        )
+
+        remaining_ids = [row["id"] for row in ordered_rows[1:]]
+        if remaining_ids:
+            conn.execute(
+                f"DELETE FROM segments WHERE id IN ({','.join('?' for _ in remaining_ids)})",
+                remaining_ids,
+            )
+        reindex_segments(conn, chapter_id)
+        conn.execute("UPDATE chapters SET updated_at = ? WHERE id = ?", (now, chapter_id))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
+        updated = get_segment(conn, primary_segment["id"])
+        log_activity(conn, user["id"], "segment", primary_segment["id"], "merge", f"{len(segment_ids)} segments")
+        response_payload = segment_payload(conn, updated)
+
+    for path in artifact_paths:
+        remove_generated_file(path)
+
+    return {
+        "success": True,
+        "segment": response_payload,
+        "merged_segment_id": primary_segment["id"],
+        "deleted_segment_ids": [row_id for row_id in segment_ids if row_id != primary_segment["id"]],
+        "chapter_id": chapter_id,
+        "project_id": project_id,
+    }
+
+
 @app.get("/api/projects/{project_id}/voice-profiles")
 def list_voice_profiles(project_id: int, user: dict = Depends(get_current_user)) -> dict:
     with get_conn() as conn:
@@ -1283,30 +1725,37 @@ def create_character_profile(project_id: int, payload: CharacterProfileCreate, u
         voice = conn.execute("SELECT * FROM voice_profiles WHERE id = ?", (payload.voice_profile_id,)).fetchone()
         if not voice:
             raise HTTPException(status_code=404, detail="Voice profile not found")
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Character name is required")
+        role_type = (payload.role_type or "supporting").strip() or "supporting"
+        story_character_name = payload.story_character_name.strip()
         character_id = conn.execute(
             """
             INSERT INTO character_profiles (
-                project_id, name, voice_profile_id, display_title, archetype, summary, personality,
+                project_id, name, voice_profile_id, role_type, story_character_name, display_title, archetype, summary, personality,
                 backstory, catchphrase, default_mood, preset_key, speed_override, style_override,
                 instructions, warmth, intensity, humor, mystery, bravery, discipline, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 project_id,
-                payload.name.strip(),
+                name,
                 payload.voice_profile_id,
-                payload.display_title,
-                payload.archetype,
-                payload.summary,
-                payload.personality,
-                payload.backstory,
-                payload.catchphrase,
-                payload.default_mood,
-                payload.preset_key,
+                role_type,
+                story_character_name,
+                payload.display_title.strip(),
+                payload.archetype.strip(),
+                payload.summary.strip(),
+                payload.personality.strip(),
+                payload.backstory.strip(),
+                payload.catchphrase.strip(),
+                payload.default_mood.strip(),
+                payload.preset_key.strip(),
                 payload.speed_override,
-                payload.style_override,
-                payload.instructions,
+                payload.style_override.strip(),
+                payload.instructions.strip(),
                 payload.warmth,
                 payload.intensity,
                 payload.humor,
@@ -1333,6 +1782,13 @@ def update_character_profile(character_profile_id: int, payload: CharacterProfil
     updates = {key: value for key, value in payload.model_dump().items() if key in provided_fields}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
+    for key in ("name", "role_type", "story_character_name", "display_title", "archetype", "summary", "personality", "backstory", "catchphrase", "default_mood", "preset_key", "style_override", "instructions"):
+        if key in updates and isinstance(updates[key], str):
+            updates[key] = updates[key].strip()
+    if "name" in updates and not updates["name"]:
+        raise HTTPException(status_code=400, detail="Character name is required")
+    if "role_type" in updates and not updates["role_type"]:
+        updates["role_type"] = "supporting"
     with get_conn() as conn:
         existing = get_character_profile(conn, character_profile_id)
         if "voice_profile_id" in updates:
@@ -1519,6 +1975,125 @@ def assign_chapter_character(chapter_id: int, payload: BatchCharacterAssignReque
     return {"success": True, "segment_count": count}
 
 
+@app.get("/api/chapters/{chapter_id}/character-detection")
+def get_chapter_character_detection(chapter_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        get_chapter(conn, chapter_id)
+        return chapter_character_detection(conn, chapter_id)
+
+
+@app.post("/api/chapters/{chapter_id}/auto-bind-characters")
+def auto_bind_chapter_characters(
+    chapter_id: int,
+    payload: ChapterCharacterAutoBindRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    with get_conn() as conn:
+        chapter = get_chapter(conn, chapter_id)
+        detection = chapter_character_detection(conn, chapter_id)
+        narrator_character = None
+        if payload.assign_unmatched_to_narrator:
+            if payload.narrator_character_profile_id is None:
+                raise HTTPException(status_code=400, detail="Narrator character is required when assigning unmatched segments")
+            narrator_character = get_character_profile(conn, payload.narrator_character_profile_id)
+            if narrator_character["project_id"] != chapter["project_id"]:
+                raise HTTPException(status_code=400, detail="Narrator character does not belong to this project")
+
+        needs_character_creation = any(item["matched_character_profile_id"] is None for item in detection["items"])
+        voice_row = resolve_voice_for_character_creation(conn, chapter["project_id"], payload.fallback_voice_profile_id) if needs_character_creation else None
+        if needs_character_creation and voice_row is None:
+            raise HTTPException(status_code=400, detail="Please configure a fallback voice or project default voice before auto-creating characters")
+
+        now = utc_now()
+        created_characters: list[dict] = []
+        bound_segment_count = 0
+
+        for item in detection["items"]:
+            target_character_id = item["matched_character_profile_id"]
+            if target_character_id is None:
+                preset_key = "narrator" if item["role_type"] == "narrator" else "background" if item["role_type"] == "background" else ""
+                summary = f"由章節《{chapter['title']}》文本自動識別建立。"
+                target_character_id = conn.execute(
+                    """
+                    INSERT INTO character_profiles (
+                        project_id, name, voice_profile_id, role_type, story_character_name, display_title, archetype, summary, personality,
+                        backstory, catchphrase, default_mood, preset_key, speed_override, style_override,
+                        instructions, warmth, intensity, humor, mystery, bravery, discipline, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        chapter["project_id"],
+                        item["speaker_name"],
+                        voice_row["id"],
+                        item["role_type"],
+                        item["speaker_name"],
+                        item["speaker_name"],
+                        "",
+                        summary,
+                        "",
+                        "",
+                        "",
+                        "",
+                        preset_key,
+                        None,
+                        "",
+                        "由文本自動建立，可後續微調聲線、說話風格與綁定資料。",
+                        50,
+                        50,
+                        50,
+                        50,
+                        50,
+                        50,
+                        now,
+                    ),
+                ).lastrowid
+                created_characters.append(
+                    {
+                        "id": target_character_id,
+                        "name": item["speaker_name"],
+                        "role_type": item["role_type"],
+                        "voice_profile_id": voice_row["id"],
+                    }
+                )
+
+            if item["segment_ids"]:
+                conn.execute(
+                    f"""
+                    UPDATE segments
+                    SET character_profile_id = ?, voice_profile_id = NULL, updated_at = ?
+                    WHERE id IN ({','.join('?' for _ in item['segment_ids'])})
+                    """,
+                    [target_character_id, now, *item["segment_ids"]],
+                )
+                bound_segment_count += len(item["segment_ids"])
+
+        narrator_bound_segment_count = 0
+        if narrator_character is not None and detection["unmatched_segment_ids"]:
+            conn.execute(
+                f"""
+                UPDATE segments
+                SET character_profile_id = ?, voice_profile_id = NULL, updated_at = ?
+                WHERE id IN ({','.join('?' for _ in detection['unmatched_segment_ids'])})
+                """,
+                [narrator_character["id"], now, *detection["unmatched_segment_ids"]],
+            )
+            narrator_bound_segment_count = len(detection["unmatched_segment_ids"])
+
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, chapter["project_id"]))
+
+    return {
+        "success": True,
+        "chapter_id": chapter_id,
+        "detected_character_count": len(detection["items"]),
+        "created_character_count": len(created_characters),
+        "bound_segment_count": bound_segment_count,
+        "narrator_bound_segment_count": narrator_bound_segment_count,
+        "unmatched_segment_count": detection["unmatched_segment_count"],
+        "created_characters": created_characters,
+    }
+
+
 @app.get("/api/projects/{project_id}/comic-profiles")
 def list_comic_profiles(project_id: int, user: dict = Depends(get_current_user)) -> dict:
     with get_conn() as conn:
@@ -1581,6 +2156,401 @@ def create_video_profile(project_id: int, payload: ModelProfileCreate, user: dic
         ).lastrowid
         row = conn.execute("SELECT * FROM video_profiles WHERE id = ?", (profile_id,)).fetchone()
     return {"profile": model_profile_payload(row, video_settings_defaults())}
+
+
+@app.get("/api/projects/{project_id}/comic-scripts")
+def list_comic_scripts(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        rows = conn.execute(
+            """
+            SELECT * FROM comic_scripts
+            WHERE project_id = ?
+            ORDER BY COALESCE(chapter_id, 0), id
+            """,
+            (project_id,),
+        ).fetchall()
+        return {"items": [comic_script_payload(conn, row) for row in rows]}
+
+
+@app.post("/api/projects/{project_id}/comic-scripts")
+def create_comic_script(project_id: int, payload: ComicScriptCreate, user: dict = Depends(get_current_user)) -> dict:
+    now = utc_now()
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        if payload.chapter_id is not None:
+            chapter = get_chapter(conn, payload.chapter_id)
+            if chapter["project_id"] != project_id:
+                raise HTTPException(status_code=400, detail="Chapter does not belong to this project")
+        script_id = conn.execute(
+            """
+            INSERT INTO comic_scripts (project_id, chapter_id, title, premise, outline_text, script_text, target_page_count, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                payload.chapter_id,
+                payload.title.strip(),
+                payload.premise,
+                payload.outline_text,
+                payload.script_text,
+                max(1, payload.target_page_count),
+                payload.status,
+                now,
+                now,
+            ),
+        ).lastrowid
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
+        row = get_comic_script(conn, script_id)
+        response_payload = comic_script_payload(conn, row)
+    return {"comic_script": response_payload}
+
+
+@app.patch("/api/comic-scripts/{comic_script_id}")
+def update_comic_script(comic_script_id: int, payload: ComicScriptUpdate, user: dict = Depends(get_current_user)) -> dict:
+    provided_fields = payload.model_fields_set
+    updates = {key: value for key, value in payload.model_dump().items() if key in provided_fields}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No updates provided")
+    with get_conn() as conn:
+        existing = get_comic_script(conn, comic_script_id)
+        if "chapter_id" in updates and updates["chapter_id"] is not None:
+            chapter = get_chapter(conn, updates["chapter_id"])
+            if chapter["project_id"] != existing["project_id"]:
+                raise HTTPException(status_code=400, detail="Chapter does not belong to this project")
+        if "title" in updates:
+            updates["title"] = (updates["title"] or "").strip()
+            if not updates["title"]:
+                raise HTTPException(status_code=400, detail="Title is required")
+        if "target_page_count" in updates and updates["target_page_count"] is not None:
+            updates["target_page_count"] = max(1, updates["target_page_count"])
+        updates["updated_at"] = utc_now()
+        set_clause = ", ".join(f"{key} = ?" for key in updates)
+        conn.execute(f"UPDATE comic_scripts SET {set_clause} WHERE id = ?", list(updates.values()) + [comic_script_id])
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), existing["project_id"]))
+        row = get_comic_script(conn, comic_script_id)
+        response_payload = comic_script_payload(conn, row)
+    return {"comic_script": response_payload}
+
+
+@app.delete("/api/comic-scripts/{comic_script_id}")
+def delete_comic_script(comic_script_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        script = dict(get_comic_script(conn, comic_script_id))
+        conn.execute("UPDATE comic_pages SET comic_script_id = NULL, updated_at = ? WHERE comic_script_id = ?", (utc_now(), comic_script_id))
+        conn.execute("DELETE FROM comic_scripts WHERE id = ?", (comic_script_id,))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), script["project_id"]))
+    return {"success": True, "deleted_comic_script_id": comic_script_id}
+
+
+@app.get("/api/projects/{project_id}/comic-pages")
+def list_comic_pages(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        rows = conn.execute(
+            """
+            SELECT * FROM comic_pages
+            WHERE project_id = ?
+            ORDER BY page_no, id
+            """,
+            (project_id,),
+        ).fetchall()
+        return {"items": [comic_page_payload(conn, row) for row in rows]}
+
+
+@app.post("/api/projects/{project_id}/comic-pages")
+def create_comic_page(project_id: int, payload: ComicPageCreate, user: dict = Depends(get_current_user)) -> dict:
+    now = utc_now()
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        if payload.chapter_id is not None:
+            chapter = get_chapter(conn, payload.chapter_id)
+            if chapter["project_id"] != project_id:
+                raise HTTPException(status_code=400, detail="Chapter does not belong to this project")
+        if payload.comic_script_id is not None:
+            script = get_comic_script(conn, payload.comic_script_id)
+            if script["project_id"] != project_id:
+                raise HTTPException(status_code=400, detail="Comic script does not belong to this project")
+        page_no = payload.page_no or next_comic_page_no(conn, project_id)
+        duplicate = conn.execute(
+            "SELECT id FROM comic_pages WHERE project_id = ? AND page_no = ?",
+            (project_id, page_no),
+        ).fetchone()
+        if duplicate:
+            raise HTTPException(status_code=400, detail="Page number already exists")
+        page_id = conn.execute(
+            """
+            INSERT INTO comic_pages (project_id, chapter_id, comic_script_id, page_no, title, layout_preset, summary, notes, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                payload.chapter_id,
+                payload.comic_script_id,
+                page_no,
+                payload.title.strip(),
+                payload.layout_preset,
+                payload.summary,
+                payload.notes,
+                payload.status,
+                now,
+                now,
+            ),
+        ).lastrowid
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
+        row = get_comic_page(conn, page_id)
+        response_payload = comic_page_payload(conn, row)
+    return {"comic_page": response_payload}
+
+
+@app.patch("/api/comic-pages/{comic_page_id}")
+def update_comic_page(comic_page_id: int, payload: ComicPageUpdate, user: dict = Depends(get_current_user)) -> dict:
+    provided_fields = payload.model_fields_set
+    updates = {key: value for key, value in payload.model_dump().items() if key in provided_fields}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No updates provided")
+    with get_conn() as conn:
+        existing = get_comic_page(conn, comic_page_id)
+        project_id = existing["project_id"]
+        if "chapter_id" in updates and updates["chapter_id"] is not None:
+            chapter = get_chapter(conn, updates["chapter_id"])
+            if chapter["project_id"] != project_id:
+                raise HTTPException(status_code=400, detail="Chapter does not belong to this project")
+        if "comic_script_id" in updates and updates["comic_script_id"] is not None:
+            script = get_comic_script(conn, updates["comic_script_id"])
+            if script["project_id"] != project_id:
+                raise HTTPException(status_code=400, detail="Comic script does not belong to this project")
+        if "page_no" in updates and updates["page_no"] is not None:
+            duplicate = conn.execute(
+                "SELECT id FROM comic_pages WHERE project_id = ? AND page_no = ? AND id <> ?",
+                (project_id, updates["page_no"], comic_page_id),
+            ).fetchone()
+            if duplicate:
+                raise HTTPException(status_code=400, detail="Page number already exists")
+        updates["updated_at"] = utc_now()
+        set_clause = ", ".join(f"{key} = ?" for key in updates)
+        conn.execute(f"UPDATE comic_pages SET {set_clause} WHERE id = ?", list(updates.values()) + [comic_page_id])
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), project_id))
+        row = get_comic_page(conn, comic_page_id)
+        response_payload = comic_page_payload(conn, row)
+    return {"comic_page": response_payload}
+
+
+@app.delete("/api/comic-pages/{comic_page_id}")
+def delete_comic_page(comic_page_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        page = dict(get_comic_page(conn, comic_page_id))
+        artifact_paths = collect_comic_page_artifacts(conn, comic_page_id)
+        conn.execute("DELETE FROM comic_pages WHERE id = ?", (comic_page_id,))
+        reindex_comic_pages(conn, page["project_id"])
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), page["project_id"]))
+    for path in artifact_paths:
+        remove_generated_file(path)
+    remove_generated_tree(GENERATED_DIR / "comic" / f"project_{page['project_id']}" / f"page_{comic_page_id}")
+    return {"success": True, "deleted_comic_page_id": comic_page_id}
+
+
+@app.post("/api/comic-pages/{comic_page_id}/panels")
+def create_comic_panel(comic_page_id: int, payload: ComicPanelCreate, user: dict = Depends(get_current_user)) -> dict:
+    now = utc_now()
+    with get_conn() as conn:
+        page = get_comic_page(conn, comic_page_id)
+        panel_no = payload.panel_no or next_comic_panel_no(conn, comic_page_id)
+        duplicate = conn.execute(
+            "SELECT id FROM comic_panels WHERE comic_page_id = ? AND panel_no = ?",
+            (comic_page_id, panel_no),
+        ).fetchone()
+        if duplicate:
+            raise HTTPException(status_code=400, detail="Panel number already exists")
+        if payload.character_ids:
+            rows = conn.execute(
+                f"SELECT id FROM character_profiles WHERE project_id = ? AND id IN ({','.join('?' for _ in payload.character_ids)})",
+                [page["project_id"], *payload.character_ids],
+            ).fetchall()
+            if len(rows) != len(set(payload.character_ids)):
+                raise HTTPException(status_code=400, detail="Some characters do not belong to this project")
+        panel_id = conn.execute(
+            """
+            INSERT INTO comic_panels (
+                project_id, comic_page_id, panel_no, title, script_text, dialogue_text, caption_text, sfx_text,
+                shot_type, camera_angle, composition_notes, character_refs, prompt_text, negative_prompt,
+                image_status, layout_notes, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                page["project_id"],
+                comic_page_id,
+                panel_no,
+                payload.title.strip(),
+                payload.script_text,
+                payload.dialogue_text,
+                payload.caption_text,
+                payload.sfx_text,
+                payload.shot_type,
+                payload.camera_angle,
+                payload.composition_notes,
+                json.dumps(payload.character_ids, ensure_ascii=False),
+                payload.prompt_text,
+                payload.negative_prompt,
+                payload.image_status,
+                payload.layout_notes,
+                now,
+                now,
+            ),
+        ).lastrowid
+        conn.execute("UPDATE comic_pages SET updated_at = ? WHERE id = ?", (now, comic_page_id))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, page["project_id"]))
+        row = get_comic_panel(conn, panel_id)
+    return {"comic_panel": comic_panel_payload(row)}
+
+
+@app.patch("/api/comic-panels/{comic_panel_id}")
+def update_comic_panel(comic_panel_id: int, payload: ComicPanelUpdate, user: dict = Depends(get_current_user)) -> dict:
+    provided_fields = payload.model_fields_set
+    updates = {key: value for key, value in payload.model_dump().items() if key in provided_fields}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No updates provided")
+    with get_conn() as conn:
+        existing = get_comic_panel(conn, comic_panel_id)
+        page = get_comic_page(conn, existing["comic_page_id"])
+        if "panel_no" in updates and updates["panel_no"] is not None:
+            duplicate = conn.execute(
+                "SELECT id FROM comic_panels WHERE comic_page_id = ? AND panel_no = ? AND id <> ?",
+                (existing["comic_page_id"], updates["panel_no"], comic_panel_id),
+            ).fetchone()
+            if duplicate:
+                raise HTTPException(status_code=400, detail="Panel number already exists")
+        if "character_ids" in updates and updates["character_ids"] is not None:
+            character_ids = updates["character_ids"]
+            if character_ids:
+                rows = conn.execute(
+                    f"SELECT id FROM character_profiles WHERE project_id = ? AND id IN ({','.join('?' for _ in character_ids)})",
+                    [existing["project_id"], *character_ids],
+                ).fetchall()
+                if len(rows) != len(set(character_ids)):
+                    raise HTTPException(status_code=400, detail="Some characters do not belong to this project")
+            updates["character_refs"] = json.dumps(character_ids, ensure_ascii=False)
+            del updates["character_ids"]
+        updates["updated_at"] = utc_now()
+        set_clause = ", ".join(f"{key} = ?" for key in updates)
+        conn.execute(f"UPDATE comic_panels SET {set_clause} WHERE id = ?", list(updates.values()) + [comic_panel_id])
+        conn.execute("UPDATE comic_pages SET updated_at = ? WHERE id = ?", (utc_now(), existing["comic_page_id"]))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), existing["project_id"]))
+        row = get_comic_panel(conn, comic_panel_id)
+    return {"comic_panel": comic_panel_payload(row)}
+
+
+@app.delete("/api/comic-panels/{comic_panel_id}")
+def delete_comic_panel(comic_panel_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        panel = dict(get_comic_panel(conn, comic_panel_id))
+        conn.execute("DELETE FROM comic_panels WHERE id = ?", (comic_panel_id,))
+        reindex_comic_panels(conn, panel["comic_page_id"])
+        conn.execute("UPDATE comic_pages SET updated_at = ? WHERE id = ?", (utc_now(), panel["comic_page_id"]))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), panel["project_id"]))
+    remove_generated_file(panel.get("image_path"))
+    return {"success": True, "deleted_comic_panel_id": comic_panel_id}
+
+
+@app.post("/api/comic-panels/{comic_panel_id}/image/mock-generate")
+def mock_generate_comic_panel_image(comic_panel_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        panel = dict(get_comic_panel(conn, comic_panel_id))
+        page = dict(get_comic_page(conn, panel["comic_page_id"]))
+        project = dict(get_project(conn, panel["project_id"]))
+        output_path = create_mock_panel_image(project, page, panel)
+        previous_path = panel.get("image_path")
+        conn.execute(
+            """
+            UPDATE comic_panels
+            SET image_path = ?, image_status = 'generated', updated_at = ?
+            WHERE id = ?
+            """,
+            (str(output_path), utc_now(), comic_panel_id),
+        )
+        conn.execute("UPDATE comic_pages SET updated_at = ? WHERE id = ?", (utc_now(), page["id"]))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), project["id"]))
+        row = get_comic_panel(conn, comic_panel_id)
+    if previous_path and previous_path != str(output_path):
+        remove_generated_file(previous_path)
+    return {"comic_panel": comic_panel_payload(row)}
+
+
+@app.post("/api/comic-panels/{comic_panel_id}/image/upload")
+async def upload_comic_panel_image(comic_panel_id: int, file: UploadFile = File(...), user: dict = Depends(get_current_user)) -> dict:
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    suffix = Path(file.filename or "panel.png").suffix.lower() or ".png"
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".svg"}:
+        raise HTTPException(status_code=400, detail="Unsupported image type")
+    with get_conn() as conn:
+        panel = dict(get_comic_panel(conn, comic_panel_id))
+        image_dir = GENERATED_DIR / "comic" / f"project_{panel['project_id']}" / f"page_{panel['comic_page_id']}"
+        image_dir.mkdir(parents=True, exist_ok=True)
+        image_path = image_dir / f"panel_{comic_panel_id}{suffix}"
+        image_path.write_bytes(raw)
+        previous_path = panel.get("image_path")
+        conn.execute(
+            """
+            UPDATE comic_panels
+            SET image_path = ?, image_status = 'uploaded', updated_at = ?
+            WHERE id = ?
+            """,
+            (str(image_path), utc_now(), comic_panel_id),
+        )
+        conn.execute("UPDATE comic_pages SET updated_at = ? WHERE id = ?", (utc_now(), panel["comic_page_id"]))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), panel["project_id"]))
+        row = get_comic_panel(conn, comic_panel_id)
+    if previous_path and previous_path != str(image_path):
+        remove_generated_file(previous_path)
+    return {"comic_panel": comic_panel_payload(row)}
+
+
+@app.post("/api/comic-panels/{comic_panel_id}/image/import")
+def import_comic_panel_image(comic_panel_id: int, payload: ComicPanelImageImportRequest, user: dict = Depends(get_current_user)) -> dict:
+    image_bytes, suffix, _, _ = download_remote_image(payload.url)
+    with get_conn() as conn:
+        panel = dict(get_comic_panel(conn, comic_panel_id))
+        image_dir = GENERATED_DIR / "comic" / f"project_{panel['project_id']}" / f"page_{panel['comic_page_id']}"
+        image_dir.mkdir(parents=True, exist_ok=True)
+        image_path = image_dir / f"panel_{comic_panel_id}{suffix}"
+        image_path.write_bytes(image_bytes)
+        previous_path = panel.get("image_path")
+        conn.execute(
+            """
+            UPDATE comic_panels
+            SET image_path = ?, image_status = 'imported', updated_at = ?
+            WHERE id = ?
+            """,
+            (str(image_path), utc_now(), comic_panel_id),
+        )
+        conn.execute("UPDATE comic_pages SET updated_at = ? WHERE id = ?", (utc_now(), panel["comic_page_id"]))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), panel["project_id"]))
+        row = get_comic_panel(conn, comic_panel_id)
+    if previous_path and previous_path != str(image_path):
+        remove_generated_file(previous_path)
+    return {"comic_panel": comic_panel_payload(row)}
+
+
+@app.delete("/api/comic-panels/{comic_panel_id}/image")
+def delete_comic_panel_image(comic_panel_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        panel = dict(get_comic_panel(conn, comic_panel_id))
+        conn.execute(
+            """
+            UPDATE comic_panels
+            SET image_path = '', image_status = 'pending', updated_at = ?
+            WHERE id = ?
+            """,
+            (utc_now(), comic_panel_id),
+        )
+        conn.execute("UPDATE comic_pages SET updated_at = ? WHERE id = ?", (utc_now(), panel["comic_page_id"]))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), panel["project_id"]))
+        row = get_comic_panel(conn, comic_panel_id)
+    remove_generated_file(panel.get("image_path"))
+    return {"comic_panel": comic_panel_payload(row)}
 
 
 @app.get("/api/system/providers")

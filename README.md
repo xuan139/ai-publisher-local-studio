@@ -1,10 +1,10 @@
 # AI Publisher Local Studio
 
-本專案是一個面向 `audiobook` 生產流程的本機版 Web Studio，目標是在一台 Mac 上先跑通完整內容生產閉環，並為後續 `comic / video` 擴展預留專案級模型設定。
+本專案是一個面向 `audiobook / comic` 生產流程的本機版 Web Studio，目標是在一台 Mac 上先跑通完整內容生產閉環，並為後續 `motion_comic / video` 擴展預留統一的專案級模型設定。
 
 它目前聚焦於單機 MVP：
 
-- Web UI：登入、專案管理、文本準備、聲線設定、生成、審核、匯出
+- Web UI：登入、專案管理、有聲書流程、漫畫流程、審核、匯出
 - Backend：FastAPI
 - Database：SQLite
 - Storage：本機檔案目錄
@@ -13,7 +13,7 @@
 ## 專案狀態
 
 - 狀態：`MVP / Active Development`
-- 目標：先穩定跑通本機端的 audiobook 生產工作台
+- 目標：先穩定跑通本機端的 audiobook 工作台，並完成靜態漫畫 Phase 1 主流程
 - 架構策略：模組化單體，不使用 Docker、Redis、獨立 Worker
 
 ## 主要能力
@@ -21,10 +21,16 @@
 - 支援 `.txt / .md / .docx / .epub / .html / .xhtml` 文本匯入
 - 自動拆章拆段
 - `source_text / tts_text` 雙軌編輯
+- 專案類型：`audiobook / comic / motion_comic / video`
 - 聲線設定與段落級覆寫
+- 角色設定：支援 `旁白 / 主角 / 配角 / 背景 / 自訂` 角色類型
+- 角色可綁定具體小說人物名，並可解除角色綁定或解除聲線覆寫
+- 文本準備頁支援按章人物自動識別與批量綁定聲線
+- 文本準備頁支援多選連續段落後合併為一段
 - 本機生成音訊
 - Review Queue 與問題標記
 - 章節渲染與 ZIP 匯出
+- 漫畫 Phase 1：漫畫腳本、分鏡工作台、畫格生成、頁面排版
 - 系統設定中的 `漫畫設定 / Video 設定`
 - 本機 smoke test
 - 可選接入 `OpenAI TTS / ASR`
@@ -46,7 +52,10 @@
 
 ## 目前流程
 
-`登入 -> 專案管理 -> 匯入文本 -> 拆章拆段 -> 編輯朗讀稿 -> 配置聲線 -> 生成音訊 -> 審核 -> 章節渲染 -> ZIP 匯出`
+- 有聲書：
+  `登入 -> 專案管理 -> 匯入文本 -> 拆章拆段 -> 人物識別 / 角色綁定 -> 編輯朗讀稿 -> 配置聲線 -> 生成音訊 -> 審核 -> 章節渲染 -> ZIP 匯出`
+- 漫畫：
+  `登入 -> 專案管理 -> 漫畫腳本 -> 分鏡工作台 -> 畫格生成 -> 頁面排版 -> 審核 -> 導出`
 
 ## 快速開始
 
@@ -97,17 +106,25 @@ chmod +x run_local.sh
 - `macOS say`
 - 規則化 mock QC
 
-## 漫畫與 Video 設定
+## 漫畫與 Video 能力
 
-目前已在 `系統設定` 頁加入兩組專案級配置：
+目前不只是保存配置，已經落地了漫畫 Phase 1 的主流程頁面：
+
+- `漫畫腳本`
+- `分鏡工作台`
+- `畫格生成`
+- `頁面排版`
+
+同時仍保留 `漫畫設定 / Video 設定` 兩組專案級配置：
 
 - `漫畫設定`：劇本模型、分鏡模型、圖像模型、風格、色彩、比例、角色一致性
 - `Video 設定`：腳本模型、鏡頭模型、圖像模型、影片模型、字幕模型、時長、動態風格
 
 說明：
 
-- 這一版會將上述設定保存到 SQLite 的 `projects` 資料中
-- 目前只做配置保存與回顯，尚未直接觸發漫畫或影片生成任務
+- `漫畫腳本 / 分鏡 / 畫格 / 排版` 已經有對應 SQLite 資料表與 API
+- `漫畫設定 / Video 設定` 仍以配置保存與回顯為主
+- 影片生成與動態漫畫時間軸尚未直接觸發實際生成任務
 
 ### 模型註冊表
 
@@ -151,6 +168,9 @@ cp .env.local.example .env.local
 - [審核員一頁說明 Printable HTML](docs/reviewer_one_page_guide_print.html)
 - [本機安裝手冊](docs/local_install_manual.md)
 - [需求文檔 REQ](docs/audiobook_platform_req.md)
+- [Schema / API 設計](docs/audiobook_platform_schema_api.md)
+- [Web 介面總覽](docs/audiobook_platform_web_overview.md)
+- [漫畫流程設計草案](docs/comic_workflow_plan.md)
 - [功能手冊 HTML](docs/audiobook_platform_function_manual.html)
 - [系統架構草案](docs/publishing_platform_architecture.md)
 
