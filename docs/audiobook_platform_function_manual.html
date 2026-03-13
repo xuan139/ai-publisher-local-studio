@@ -678,7 +678,7 @@
             <tr>
               <td>Operator</td>
               <td>导入文本、拆章拆段、编辑 tts_text、发起生成、局部重生、章节装配。</td>
-              <td>Text Prep、Voice Setup、Generate、Assemble</td>
+              <td>Projects、E-book Wizard、Text Prep、Voice Setup、Generate、Assemble</td>
               <td>可审阅的音频版本与章节 render</td>
             </tr>
             <tr>
@@ -695,7 +695,7 @@
             <div class="step-no">1</div>
             <div>
               <h4>导入与拆段</h4>
-              <p class="muted">导入 <span class="mono">txt / md / docx</span>，建立章节与 Segment 结构，同时保留 <span class="mono">source_text</span>。</p>
+              <p class="muted">可在项目列表打开全屏电子书向导，直接粘贴整本内容、手动新增自定义章节，或继续导入 <span class="mono">txt / md / docx / epub</span>，建立章节与 Segment 结构，同时保留 <span class="mono">source_text</span> 与整书 <span class="mono">source_book.txt</span>。</p>
             </div>
           </div>
           <div class="timeline-step avoid-break">
@@ -730,7 +730,7 @@
             <div class="step-no">6</div>
             <div>
               <h4>章节装配与导出</h4>
-              <p class="muted">从已通过 take 组装章节 render，设置 gap 或标题音频，然后导出 chapter mp3、book zip 与报告。</p>
+              <p class="muted">从已通过 take 组装章节 render，设置 gap 或标题音频，然后导出 chapter mp3、book zip、整书 <span class="mono">source_book.txt</span> 与报告。</p>
             </div>
           </div>
         </div>
@@ -816,7 +816,7 @@
               <td>Content Ingest</td>
               <td>导入文档、拆章、拆段、文本规范化与 source_text 保存。</td>
               <td>Chapter、Unit、source_text</td>
-              <td>Text Prep</td>
+              <td>Projects（E-book Wizard）、Text Prep</td>
             </tr>
             <tr>
               <td>Script Preparation</td>
@@ -927,7 +927,7 @@
               <ul>
                 <li>搜索项目、作者、request id、问题类型。</li>
                 <li>筛选正在生成、待审核、失败重试项目。</li>
-                <li>新建项目、复制模板、归档项目。</li>
+                <li>新建项目、打开全屏电子书向导、复制模板、归档项目。</li>
               </ul>
             </div>
           </div>
@@ -967,12 +967,14 @@
               <ul>
                 <li>把 source_text 变成适合朗读的 tts_text。</li>
                 <li>支持手工拆段、合段、顺序调整与边界修订。</li>
+                <li>承接全屏向导导入后的章节校对，也保留传统文件导入与手动新增章节入口。</li>
                 <li>保留原文，不能直接破坏 source_text。</li>
               </ul>
             </div>
             <div class="mini-card">
               <h4>关键动作</h4>
               <ul>
+                <li>传统文件导入、本机路径导入、手动新增章节。</li>
                 <li>自动拆章与自动拆段。</li>
                 <li>编辑 tts_text，删除不朗读内容。</li>
                 <li>接受或忽略系统清洗建议。</li>
@@ -1159,7 +1161,7 @@
               <ul>
                 <li>基于已通过的 take 装配章节音频。</li>
                 <li>支持顺序、gap、章节标题音频和 render 历史。</li>
-                <li>导出 chapter mp3、book zip 和报告类文件。</li>
+                <li>导出 chapter mp3、book zip、整书 TXT 和报告类文件。</li>
               </ul>
             </div>
             <div class="mini-card">
@@ -1167,7 +1169,7 @@
               <ul>
                 <li>生成 chapter render 新版本。</li>
                 <li>设置导出预设和 manifest。</li>
-                <li>查看 export task 历史与状态。</li>
+                <li>查看 export task 历史与状态，并下载整书 <span class="mono">source_book.txt</span>。</li>
               </ul>
             </div>
           </div>
@@ -1225,11 +1227,11 @@
             </tr>
             <tr>
               <td>文本导入</td>
-              <td>导入 txt / md / docx，自动建章</td>
+              <td>全屏向导贴整本、手动新增章节、导入 txt / md / docx / epub，自动建章</td>
               <td>P0</td>
               <td>Planned</td>
               <td>REQ-005、REQ-006</td>
-              <td>导入完成后能形成章节结构并保留原文。</td>
+              <td>导入完成后能形成章节结构、支持自定义标题，并保留原文与整书 TXT。</td>
             </tr>
             <tr>
               <td>文本准备</td>
@@ -1289,7 +1291,7 @@
             </tr>
             <tr>
               <td>导出</td>
-              <td>chapter mp3、book zip、manifest、报告</td>
+              <td>chapter mp3、book zip、source_book.txt、manifest、报告</td>
               <td>P0</td>
               <td>Planned</td>
               <td>REQ-035 ~ REQ-037</td>
@@ -1517,7 +1519,7 @@
           <tbody>
             <tr>
               <td>Phase 1</td>
-              <td>Import、Text Prep、Voice Setup、Generate、Review、Assemble、Export</td>
+              <td>Projects、E-book Wizard、Text Prep、Voice Setup、Generate、Review、Assemble、Export</td>
               <td>多角色戏剧化、复杂混音、完整 public publishing</td>
               <td>做出稳定 audiobook 生产链</td>
             </tr>
@@ -1594,7 +1596,7 @@
               <td>Text Prep</td>
               <td>Content Ingest、Script Preparation</td>
               <td>Chapter、Unit、source_text、tts_text</td>
-              <td>可生成的 ready segments</td>
+              <td>可生成的 ready segments、手动新增章节结果</td>
             </tr>
             <tr>
               <td>Voice Setup</td>
@@ -1618,7 +1620,7 @@
               <td>Assemble & Export</td>
               <td>Render / Export、Asset Management</td>
               <td>ChapterRender、ExportTask、manifest</td>
-              <td>chapter mp3、book zip、报告</td>
+              <td>chapter mp3、book zip、source_book.txt、报告</td>
             </tr>
           </tbody>
         </table>
