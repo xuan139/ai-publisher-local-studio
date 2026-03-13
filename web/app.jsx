@@ -2250,11 +2250,22 @@ function PageContent(props) {
 
 function ProjectsPage({ user, projects = [], selectedProject, token, refreshProject, deleteProject, onSelectProject, onOpenChapter, onOpenProjectText, requestConfirm, showFlash }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [wizardModalState, setWizardModalState] = useState({ open: false, mode: "paste", projectId: null });
   const primaryRoute = preferredProjectEntryRoute(user);
   const canCreateProject = hasPermission(user, "project_manage");
   const canDeleteProject = hasPermission(user, "project_delete");
+  const canManageText = hasPermission(user, "text_manage");
   const canOpenChapter = canAccessRoute(user, "text") || canAccessRoute(user, "export");
   const primaryRouteLabel = projectRouteTitle(primaryRoute);
+
+  function openWizardForProject(projectId, mode = "paste") {
+    onSelectProject(projectId);
+    setWizardModalState({ open: true, mode, projectId });
+  }
+
+  const wizardProject = selectedProject?.id === wizardModalState.projectId
+    ? selectedProject
+    : projects.find((item) => item.id === wizardModalState.projectId) || null;
 
   return (
     <>
@@ -2297,6 +2308,14 @@ function ProjectsPage({ user, projects = [], selectedProject, token, refreshProj
                     <td>{project.metrics?.failed_jobs || 0}</td>
                     <td>
                       <div className="toolbar" style={{ marginBottom: 0 }}>
+                        {canManageText ? (
+                          <button
+                            className="button"
+                            onClick={() => openWizardForProject(project.id, "paste")}
+                          >
+                            新建電子書
+                          </button>
+                        ) : null}
                         {primaryRoute !== "projects" ? (
                           <button
                             className="button-secondary"
@@ -2334,13 +2353,52 @@ function ProjectsPage({ user, projects = [], selectedProject, token, refreshProj
         <div className="grid">
           {selectedProject ? (
             <div className="grid">
+              {canManageText ? (
+                <section className="panel wizard-panel">
+                  <div className="wizard-hero">
+                    <div className="eyebrow">Full Screen Wizard</div>
+                    <h2>用全屏向導建立整本電子書</h2>
+                    <div className="subtext">入口現在集中成一個明顯動作。點一下就會打開全屏向導，支援整本貼上拆章、手動新增章節、保存整書 TXT，以及後續語音生成與出版流程。</div>
+                    <div className="wizard-step-row">
+                      <div className="wizard-step">
+                        <strong>1</strong>
+                        <span>先選專案，再打開全屏向導</span>
+                      </div>
+                      <div className="wizard-step">
+                        <strong>2</strong>
+                        <span>可貼整本拆章，也可逐章建立</span>
+                      </div>
+                      <div className="wizard-step">
+                        <strong>3</strong>
+                        <span>完成後直接接語音生成、審核、出版</span>
+                      </div>
+                    </div>
+                    <div className="wizard-cta-row">
+                      <button className="wizard-cta" onClick={() => openWizardForProject(selectedProject.id, "paste")}>
+                        立即打開全屏向導
+                      </button>
+                      <button className="wizard-cta secondary" onClick={() => openWizardForProject(selectedProject.id, "manual")}>
+                        從手動新增開始
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+
               <section className="panel">
                 <div className="panel-head">
                   <div>
                     <h2>{selectedProject.title}</h2>
                     <div className="subtext">{selectedProject.author || "未填作者"} · {selectedProject.language}</div>
                   </div>
-                  <span className="tag brand">{statusLabel(selectedProject.status)}</span>
+                  <div className="toolbar" style={{ marginBottom: 0 }}>
+                    {canManageText ? (
+                      <button className="button-secondary" onClick={() => openWizardForProject(selectedProject.id, "paste")}>
+                        開啟全屏向導
+                      </button>
+                    ) : null}
+                    <span className="tag brand">{statusLabel(selectedProject.status)}</span>
+                  </div>
                 </div>
                 <div className="metrics">
                   <div className="metric">
@@ -2421,6 +2479,15 @@ function ProjectsPage({ user, projects = [], selectedProject, token, refreshProj
           showFlash={showFlash}
         />
       ) : null}
+      <EbookWizardModal
+        open={wizardModalState.open}
+        mode={wizardModalState.mode}
+        project={wizardProject}
+        token={token}
+        onClose={() => setWizardModalState((current) => ({ ...current, open: false }))}
+        refreshProject={refreshProject}
+        showFlash={showFlash}
+      />
     </>
   );
 }
@@ -2431,6 +2498,10 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [detectionBusy, setDetectionBusy] = useState(false);
   const [autoBindBusy, setAutoBindBusy] = useState(false);
+  const [chapterBusy, setChapterBusy] = useState(false);
+  const [showChapterComposer, setShowChapterComposer] = useState(false);
+  const [newChapterTitle, setNewChapterTitle] = useState("");
+  const [newChapterBody, setNewChapterBody] = useState("");
   const activeSegment = segments.find((segment) => segment.id === activeSegmentId) || segments[0] || null;
   const [draftText, setDraftText] = useState("");
   const [voiceId, setVoiceId] = useState("");
@@ -2445,6 +2516,7 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
   const [pageSize, setPageSize] = useState(10);
   const narratorCharacters = useMemo(() => characters.filter((character) => character.role_type === "narrator"), [characters]);
   const canManageProject = hasPermission(user, "project_manage");
+  const canManageText = hasPermission(user, "text_manage");
   const defaultVoice = voices.find((voice) => String(voice.id) === String(project?.default_voice_profile_id || ""));
 
   const totalSegmentPages = Math.max(1, Math.ceil(segments.length / pageSize));
@@ -2486,6 +2558,13 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
     setDetectedCharacters([]);
     setDetectionSummary(null);
   }, [selectedChapterId]);
+
+  useEffect(() => {
+    setShowChapterComposer(false);
+    setNewChapterTitle("");
+    setNewChapterBody("");
+    setChapterBusy(false);
+  }, [project?.id]);
 
   useEffect(() => {
     if (autoBindVoiceId) return;
@@ -2770,6 +2849,42 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
     }
   }
 
+  async function createManualChapter() {
+    if (!project) return;
+    if (!newChapterTitle.trim()) {
+      showFlash("error", "請先輸入章節標題。");
+      return;
+    }
+    if (!newChapterBody.trim()) {
+      showFlash("error", "請先貼上章節內容。");
+      return;
+    }
+    setChapterBusy(true);
+    try {
+      const payload = await apiFetch(`/api/projects/${project.id}/chapters`, {
+        method: "POST",
+        token,
+        body: {
+          title: newChapterTitle.trim(),
+          body: newChapterBody,
+        },
+      });
+      const createdChapterId = payload.chapter?.id || payload.chapter_id || null;
+      setShowChapterComposer(false);
+      setNewChapterTitle("");
+      setNewChapterBody("");
+      await refreshProject({ projectId: project.id, chapterId: createdChapterId });
+      if (createdChapterId) {
+        setSelectedChapterId(createdChapterId);
+      }
+      showFlash("success", "新章節已建立，已接入後續生成與審核流程。");
+    } catch (error) {
+      showFlash("error", error.message || "新增章節失敗。");
+    } finally {
+      setChapterBusy(false);
+    }
+  }
+
   if (!project) {
     return <div className="empty-state">請先在專案頁選取一個專案，再進入文本準備。</div>;
   }
@@ -2780,9 +2895,43 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
         <div className="panel-head">
           <div>
             <h3>章節</h3>
-            <div className="subtext">匯入後自動拆章拆段。</div>
+            <div className="subtext">可整書匯入，也可手動新增自訂章節。</div>
           </div>
+          {canManageText ? (
+            <button className="button-secondary" onClick={() => setShowChapterComposer((current) => !current)}>
+              {showChapterComposer ? "收起章節表單" : "手動新增章節"}
+            </button>
+          ) : null}
         </div>
+        {showChapterComposer ? (
+          <div className="grid" style={{ marginBottom: 14 }}>
+            <div className="field">
+              <label>章節標題</label>
+              <input
+                className="input"
+                placeholder="例如：西游记第一章 石猴出世"
+                value={newChapterTitle}
+                onChange={(event) => setNewChapterTitle(event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>章節內容</label>
+              <textarea
+                className="textarea"
+                rows={8}
+                placeholder="把這一章的完整內容直接貼進來，儲存後會自動拆成段落。"
+                value={newChapterBody}
+                onChange={(event) => setNewChapterBody(event.target.value)}
+              />
+            </div>
+            <div className="toolbar">
+              <button className="button" disabled={chapterBusy} onClick={createManualChapter}>
+                {chapterBusy ? "建立中..." : "建立章節"}
+              </button>
+              <div className="subtext">建立後會自動進入目前專案，和既有生成、審核、出版流程完全一致。</div>
+            </div>
+          </div>
+        ) : null}
         <div className="list">
           {(project.chapters || []).map((chapter) => (
             <button key={chapter.id} className={`project-button ${chapter.id === selectedChapterId ? "active" : ""}`} onClick={() => setSelectedChapterId(chapter.id)}>
@@ -5880,7 +6029,7 @@ function ExportPage({ token, project, selectedChapter, selectedChapterId, setSel
         <div className="panel-head">
           <div>
             <h2>專案匯出</h2>
-            <div className="subtext">匯出 zip，內含章節 render 與 manifest。</div>
+            <div className="subtext">匯出 zip，內含章節 render、manifest 與完整整書 TXT。</div>
           </div>
         </div>
         <div className="toolbar">
@@ -5891,6 +6040,11 @@ function ExportPage({ token, project, selectedChapter, selectedChapterId, setSel
           }}>
             匯出 ZIP
           </button>
+          {project?.source_book_url ? (
+            <a className="button-secondary" href={project.source_book_url} download={project.source_book_name || "source_book.txt"}>
+              下載整書 TXT
+            </a>
+          ) : null}
         </div>
         <div className="list">
           {exportsList.map((item) => (
@@ -6126,11 +6280,349 @@ function ProjectCreateModal({ open, token, onClose, onCreated, showFlash }) {
   );
 }
 
-function ImportInline({ token, project, onDone, showFlash }) {
+function EbookWizardModal({ open, mode = "paste", project, token, onClose, refreshProject, showFlash }) {
+  const [activeMode, setActiveMode] = useState(mode);
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualBody, setManualBody] = useState("");
+  const [notice, setNotice] = useState(null);
+  const pasteInputRef = useRef(null);
+  const manualInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setActiveMode(mode || "paste");
+    setManualBusy(false);
+    setManualTitle("");
+    setManualBody("");
+    setNotice(null);
+  }, [open, mode, project?.id]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleKeydown(event) {
+      if (event.key === "Escape") {
+        onClose?.();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeydown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeydown);
+    };
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open || !project?.id) return undefined;
+    const target = activeMode === "manual" ? manualInputRef.current : pasteInputRef.current;
+    const timerId = window.setTimeout(() => {
+      target?.focus();
+    }, 80);
+    return () => window.clearTimeout(timerId);
+  }, [open, activeMode, project?.id]);
+
+  if (!open) return null;
+
+  const chapterList = project?.chapters || [];
+  const chapterCount = project?.metrics?.chapter_count || chapterList.length || 0;
+  const segmentCount = project?.metrics?.segment_count || 0;
+  const reviewCount = project?.metrics?.review_required_count || 0;
+  const approvedCount = project?.metrics?.approved_count || 0;
+  const sourceBookName = project?.source_book_name || "source_book.txt";
+
+  async function createManualChapter() {
+    if (!project?.id) return;
+    if (!manualTitle.trim()) {
+      setNotice({ type: "error", message: "請先輸入章節標題。" });
+      return;
+    }
+    if (!manualBody.trim()) {
+      setNotice({ type: "error", message: "請先貼上章節內容。" });
+      return;
+    }
+    setManualBusy(true);
+    setNotice(null);
+    try {
+      const payload = await apiFetch(`/api/projects/${project.id}/chapters`, {
+        method: "POST",
+        token,
+        body: {
+          title: manualTitle.trim(),
+          body: manualBody,
+        },
+      });
+      setManualTitle("");
+      setManualBody("");
+      setNotice({ type: "success", message: "新章節已建立，右側章節地圖已同步更新。" });
+      await refreshProject({ projectId: project.id, chapterId: payload.chapter_id || payload.chapter?.id || null });
+      showFlash("success", "新章節已建立。");
+      window.setTimeout(() => manualInputRef.current?.focus(), 60);
+    } catch (error) {
+      const message = error.message || "新增章節失敗。";
+      setNotice({ type: "error", message });
+      showFlash("error", message);
+    } finally {
+      setManualBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop ebook-wizard-backdrop" onClick={() => onClose?.()}>
+      <div className="modal-card ebook-wizard-card" onClick={(event) => event.stopPropagation()}>
+        <div className="ebook-wizard-header">
+          <div>
+            <div className="eyebrow">E-Book Builder</div>
+            <h2>新建電子書向導</h2>
+            <div className="subtext">
+              {project?.title
+                ? `正在編輯「${project.title}」。在這裡直接貼整本內容，或手動逐章建立。`
+                : "正在載入專案資料，稍候即可開始導入內容。"}
+            </div>
+          </div>
+          <div className="toolbar" style={{ marginBottom: 0 }}>
+            {project ? <span className="tag brand">{project.author || "未填作者"} · {project.language}</span> : null}
+            <button className="button-secondary" onClick={onClose}>關閉向導</button>
+          </div>
+        </div>
+
+        <div className="ebook-wizard-body">
+          <section className="ebook-wizard-main">
+            <div className="wizard-hero ebook-wizard-hero">
+              <div className="wizard-step-row">
+                <div className="wizard-step">
+                  <strong>1</strong>
+                  <span>選擇導入方式：整本拆章或逐章新增</span>
+                </div>
+                <div className="wizard-step">
+                  <strong>2</strong>
+                  <span>保存後自動寫入完整整書 TXT 與章節資料</span>
+                </div>
+                <div className="wizard-step">
+                  <strong>3</strong>
+                  <span>接著就能進語音生成、審核、渲染與出版</span>
+                </div>
+              </div>
+              <div className="ebook-wizard-mode-row">
+                <button
+                  className={`ebook-wizard-mode ${activeMode === "paste" ? "active" : ""}`}
+                  onClick={() => setActiveMode("paste")}
+                >
+                  <strong>方式 A：貼整本並拆章</strong>
+                  <span>推薦。一次貼完整電子書內容，系統自動識別章節標題並切段。</span>
+                </button>
+                <button
+                  className={`ebook-wizard-mode ${activeMode === "manual" ? "active" : ""}`}
+                  onClick={() => setActiveMode("manual")}
+                >
+                  <strong>方式 B：手動新增單章</strong>
+                  <span>適合從 Word、PDF、網頁逐章複製貼上，例如「西游记第一章」。</span>
+                </button>
+              </div>
+            </div>
+
+            {notice ? <div className={`flash ${notice.type}`}>{notice.message}</div> : null}
+
+            <div className="ebook-wizard-stage">
+              {project?.id ? (
+                activeMode === "paste" ? (
+                  <div className="wizard-card ebook-wizard-stage-card">
+                    <div className="panel-head">
+                      <div>
+                        <h3>整本電子書匯入</h3>
+                        <div className="subtext">把整本內容直接貼進文本框，按下 `貼上並拆章`。支援 `西游记第一章`、`第二章节`、`第一回`，也支援 `# 章節標題`。</div>
+                      </div>
+                      <span className="tag success">推薦</span>
+                    </div>
+                    <ImportInline
+                      token={token}
+                      project={project}
+                      pasteFirst
+                      emphasizeWizard
+                      pasteInputRef={pasteInputRef}
+                      onDone={async () => {
+                        await refreshProject({ projectId: project.id });
+                        setNotice({ type: "success", message: "整本內容已匯入完成，章節與段落都已建立。" });
+                        showFlash("success", "整本內容已匯入完成。");
+                      }}
+                      showFlash={(type, message) => {
+                        setNotice({ type, message });
+                        showFlash(type, message);
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="wizard-card ebook-wizard-stage-card">
+                    <div className="panel-head">
+                      <div>
+                        <h3>手動新增章節</h3>
+                        <div className="subtext">先填章節標題，再貼這一章正文。儲存後會自動切成段落，並同步寫回整書 TXT。</div>
+                      </div>
+                      <span className="tag warn">逐章模式</span>
+                    </div>
+                    <div className="ebook-wizard-highlights">
+                      <div className="ebook-wizard-highlight">
+                        <strong>標題可自訂</strong>
+                        <span>例如：西游记第一章、第二章节、第一回 石猴出世。</span>
+                      </div>
+                      <div className="ebook-wizard-highlight">
+                        <strong>支援複製貼上</strong>
+                        <span>可以直接從 Word、PDF 或網站複製整章正文貼進來。</span>
+                      </div>
+                      <div className="ebook-wizard-highlight">
+                        <strong>沿用現有流程</strong>
+                        <span>建立完成後直接走語音生成、審核、出版，不需要另接流程。</span>
+                      </div>
+                    </div>
+                    <div className="ebook-wizard-form">
+                      <div className="field">
+                        <label>章節標題</label>
+                        <input
+                          ref={manualInputRef}
+                          className="input"
+                          placeholder="例如：西游记第一章 石猴出世"
+                          value={manualTitle}
+                          onChange={(event) => setManualTitle(event.target.value)}
+                        />
+                      </div>
+                      <div className="field">
+                        <label>章節內容</label>
+                        <textarea
+                          className="textarea xl"
+                          placeholder="把這一章正文直接貼進來。保存後會自動切段，並更新整書 TXT。"
+                          value={manualBody}
+                          onChange={(event) => setManualBody(event.target.value)}
+                        />
+                      </div>
+                      <div className="toolbar">
+                        <button className="button" disabled={manualBusy} onClick={createManualChapter}>
+                          {manualBusy ? "建立中..." : "建立章節"}
+                        </button>
+                        <button
+                          className="button-secondary"
+                          disabled={manualBusy}
+                          onClick={() => {
+                            setManualTitle("");
+                            setManualBody("");
+                            setNotice(null);
+                            window.setTimeout(() => manualInputRef.current?.focus(), 60);
+                          }}
+                        >
+                          清空表單
+                        </button>
+                        <div className="subtext">建立成功後，右側章節地圖會立刻更新。</div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              ) : (
+                <div className="empty-state">專案資料載入中。若你是從專案列表點進來，稍候一下就可以直接開始。</div>
+              )}
+            </div>
+          </section>
+
+          <aside className="ebook-wizard-side">
+            <div className="wizard-card ebook-wizard-side-card">
+              <div className="panel-head">
+                <div>
+                  <h3>目前專案</h3>
+                  <div className="subtext">向導內所有動作都會直接保存到這個專案。</div>
+                </div>
+                <span className="tag brand">{statusLabel(project?.status) || "草稿"}</span>
+              </div>
+              <div className="metrics ebook-wizard-metrics">
+                <div className="metric">
+                  <div className="eyebrow">章節</div>
+                  <strong>{chapterCount}</strong>
+                </div>
+                <div className="metric">
+                  <div className="eyebrow">段落</div>
+                  <strong>{segmentCount}</strong>
+                </div>
+                <div className="metric">
+                  <div className="eyebrow">待審核</div>
+                  <strong>{reviewCount}</strong>
+                </div>
+                <div className="metric">
+                  <div className="eyebrow">已通過</div>
+                  <strong>{approvedCount}</strong>
+                </div>
+              </div>
+              {project?.source_book_url ? (
+                <div className="ebook-wizard-download">
+                  <div>
+                    <strong>完整電子書 TXT 已保存</strong>
+                    <div className="subtext">{sourceBookName}</div>
+                  </div>
+                  <a className="button-secondary" href={project.source_book_url} download={sourceBookName}>
+                    下載整書 TXT
+                  </a>
+                </div>
+              ) : (
+                <div className="empty-state">還沒有完整整書 TXT。你一旦匯入整本或新增章節，這裡就會出現下載按鈕。</div>
+              )}
+            </div>
+
+            <div className="wizard-card ebook-wizard-side-card">
+              <div className="panel-head">
+                <div>
+                  <h3>章節地圖</h3>
+                  <div className="subtext">保存成功後，這裡會立即顯示最新章節。</div>
+                </div>
+                <span className="tag">{chapterCount} 章</span>
+              </div>
+              {chapterList.length ? (
+                <div className="list ebook-wizard-chapter-list">
+                  {chapterList.map((chapter) => (
+                    <div key={chapter.id} className="list-item">
+                      <div className="title-row">
+                        <strong>{chapter.order_index}. {chapter.title}</strong>
+                      </div>
+                      <div className="pill-row" style={{ marginTop: 10 }}>
+                        <span className="tag">{chapter.segment_count} 段</span>
+                        <span className="tag success">{chapter.approved_count} 已通過</span>
+                        <span className="tag warn">{chapter.review_count} 待審核</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : chapterCount > 0 ? (
+                <div className="empty-state">章節統計已存在，詳細章節清單正在載入。</div>
+              ) : (
+                <div className="empty-state">還沒有章節。你可以先從左側選擇一種方式開始建立內容。</div>
+              )}
+            </div>
+
+            <div className="wizard-card ebook-wizard-side-card">
+              <div className="panel-head">
+                <div>
+                  <h3>下一步怎麼做</h3>
+                  <div className="subtext">內容進來後，不需要另外配置新流程。</div>
+                </div>
+              </div>
+              <div className="ebook-wizard-checklist">
+                <div className="ebook-wizard-check">1. 到語音生成頁送出本章或整章任務。</div>
+                <div className="ebook-wizard-check">2. 到審核頁聽音並處理待審核段落。</div>
+                <div className="ebook-wizard-check">3. 到出版頁渲染章節並匯出 ZIP。</div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImportInline({ token, project, onDone, showFlash, pasteFirst = false, emphasizeWizard = false, pasteInputRef = null }) {
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [localPath, setLocalPath] = useState("");
+  const [manualText, setManualText] = useState("");
+  const [manualFileName, setManualFileName] = useState("source_book.txt");
   const inputRef = useRef(null);
 
   function handleFiles(fileList) {
@@ -6139,8 +6631,7 @@ function ImportInline({ token, project, onDone, showFlash }) {
     setDragActive(false);
   }
 
-  return (
-    <div className="toolbar import-toolbar">
+  const dropzoneSection = (
       <div
         className={`import-dropzone ${dragActive ? "active" : ""}`}
         onDragEnter={(event) => {
@@ -6173,6 +6664,9 @@ function ImportInline({ token, project, onDone, showFlash }) {
           </div>
         </div>
       </div>
+  );
+
+  const localPathSection = (
       <div className="field">
         <label>或直接貼本機檔案路徑</label>
         <div className="toolbar">
@@ -6195,7 +6689,7 @@ function ImportInline({ token, project, onDone, showFlash }) {
                 });
                 setFile(null);
                 setLocalPath("");
-                onDone();
+                await onDone?.();
               } catch (error) {
                 showFlash("error", error.message);
               } finally {
@@ -6208,6 +6702,70 @@ function ImportInline({ token, project, onDone, showFlash }) {
         </div>
         <div className="subtext">支援 `.epub / .html / .xhtml / .txt / .md / .docx`，也可以直接貼 Finder 裡的完整檔案路徑。</div>
       </div>
+  );
+
+  const pasteSection = (
+      <div className={`field ${emphasizeWizard ? "wizard-paste-field" : ""}`}>
+        <label>或直接貼上整本內容，自動拆成章節</label>
+        <div className="grid" style={{ gap: 10 }}>
+          <input
+            className="input"
+            placeholder="source_book.txt"
+            value={manualFileName}
+            onChange={(event) => setManualFileName(event.target.value)}
+          />
+          <textarea
+            ref={pasteInputRef}
+            className="textarea"
+            rows={10}
+            placeholder={"可直接貼入整本電子書內容。\n支援標題格式如：西游记第一章、第二章节、第一回，或用 # 章節標題 來分章。"}
+            value={manualText}
+            onChange={(event) => setManualText(event.target.value)}
+          />
+          <div className="toolbar">
+            <button
+              className="button-secondary"
+              disabled={!manualText.trim() || busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await apiFetch(`/api/projects/${project.id}/import-paste`, {
+                    method: "POST",
+                    token,
+                    body: {
+                      text: manualText,
+                      filename: manualFileName.trim() || "source_book.txt",
+                    },
+                  });
+                  setFile(null);
+                  setLocalPath("");
+                  setManualText("");
+                  await onDone?.();
+                } catch (error) {
+                  showFlash("error", error.message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? "匯入中..." : "貼上並拆章"}
+            </button>
+            {project?.source_book_url ? (
+              <a className="button-secondary" href={project.source_book_url} download={project.source_book_name || "source_book.txt"}>
+                下載目前整書 TXT
+              </a>
+            ) : null}
+          </div>
+          <div className="subtext">系統會把內容保存為完整整書 TXT，並建立章節與段落，後續可直接進入語音生成、審核與匯出。</div>
+        </div>
+      </div>
+  );
+
+  return (
+    <div className={`toolbar import-toolbar ${emphasizeWizard ? "import-toolbar-wizard" : ""}`}>
+      {pasteFirst ? pasteSection : dropzoneSection}
+      {pasteFirst ? dropzoneSection : localPathSection}
+      {pasteFirst ? localPathSection : pasteSection}
       <input
         ref={inputRef}
         className="file-input"
@@ -6228,7 +6786,7 @@ function ImportInline({ token, project, onDone, showFlash }) {
           });
           setFile(null);
           setLocalPath("");
-          onDone();
+          await onDone?.();
         } catch (error) {
           showFlash("error", error.message);
         } finally {

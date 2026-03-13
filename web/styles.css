@@ -678,6 +678,10 @@ button {
   gap: 12px;
 }
 
+.import-toolbar-wizard {
+  gap: 16px;
+}
+
 .import-dropzone {
   padding: 18px;
   border-radius: 18px;
@@ -701,6 +705,101 @@ button {
 .import-dropzone-title {
   font-size: 15px;
   font-weight: 700;
+}
+
+.wizard-panel {
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.16), transparent 32%),
+    radial-gradient(circle at top right, rgba(194, 65, 12, 0.12), transparent 26%),
+    linear-gradient(180deg, rgba(255, 251, 245, 0.97), rgba(246, 239, 227, 0.94));
+}
+
+.wizard-hero {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.wizard-hero h2 {
+  font-size: 34px;
+  line-height: 1.02;
+}
+
+.wizard-step-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wizard-step {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(15, 118, 110, 0.12);
+}
+
+.wizard-step strong {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand), #4e958d);
+  color: white;
+  font-size: 15px;
+}
+
+.wizard-step span {
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.wizard-cta-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wizard-cta {
+  min-width: 220px;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--brand), #4e958d);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 16px 28px rgba(15, 118, 110, 0.18);
+}
+
+.wizard-cta.secondary {
+  background: linear-gradient(135deg, #c2410c, #d97706);
+  box-shadow: 0 16px 28px rgba(194, 65, 12, 0.16);
+}
+
+.wizard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.wizard-card {
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(31, 41, 55, 0.1);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.wizard-paste-field {
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.1), transparent 36%),
+    rgba(244, 251, 249, 0.92);
 }
 
 .textarea {
@@ -950,6 +1049,177 @@ button {
   width: min(640px, 100%);
 }
 
+.ebook-wizard-backdrop {
+  padding: 18px;
+}
+
+.ebook-wizard-card {
+  width: min(1380px, 100%);
+  height: min(94vh, 980px);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 18px;
+  padding: 24px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 30%),
+    radial-gradient(circle at top right, rgba(194, 65, 12, 0.14), transparent 24%),
+    linear-gradient(180deg, rgba(255, 252, 246, 0.98), rgba(247, 241, 230, 0.95));
+}
+
+.ebook-wizard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(157, 138, 106, 0.18);
+}
+
+.ebook-wizard-body {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.86fr);
+  gap: 18px;
+}
+
+.ebook-wizard-main,
+.ebook-wizard-side {
+  min-height: 0;
+}
+
+.ebook-wizard-main {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 14px;
+}
+
+.ebook-wizard-hero {
+  margin-bottom: 0;
+}
+
+.ebook-wizard-mode-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ebook-wizard-mode {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(31, 41, 55, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  text-align: left;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.ebook-wizard-mode:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(90, 67, 33, 0.12);
+}
+
+.ebook-wizard-mode.active {
+  border-color: rgba(15, 118, 110, 0.2);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.18), transparent 32%),
+    linear-gradient(135deg, var(--brand), #4e958d);
+  color: white;
+  box-shadow: 0 18px 34px rgba(15, 118, 110, 0.22);
+}
+
+.ebook-wizard-mode strong {
+  font-size: 18px;
+}
+
+.ebook-wizard-mode span {
+  font-size: 14px;
+  line-height: 1.55;
+  color: inherit;
+}
+
+.ebook-wizard-stage,
+.ebook-wizard-side {
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.ebook-wizard-stage-card,
+.ebook-wizard-side-card {
+  display: grid;
+  gap: 14px;
+}
+
+.ebook-wizard-highlights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ebook-wizard-highlight {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(31, 41, 55, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.ebook-wizard-highlight strong {
+  font-size: 14px;
+}
+
+.ebook-wizard-highlight span {
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.ebook-wizard-form {
+  display: grid;
+  gap: 12px;
+}
+
+.ebook-wizard-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ebook-wizard-download {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  background: rgba(243, 250, 248, 0.88);
+}
+
+.ebook-wizard-download strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.ebook-wizard-chapter-list {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.ebook-wizard-checklist {
+  display: grid;
+  gap: 10px;
+}
+
+.ebook-wizard-check {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(31, 41, 55, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  line-height: 1.55;
+}
+
 .modal-actions {
   justify-content: flex-end;
   margin-top: 8px;
@@ -1035,7 +1305,12 @@ button {
   .grid.three,
   .grid.two,
   .grid.text-prep,
-  .split-layout {
+  .split-layout,
+  .wizard-grid,
+  .wizard-step-row,
+  .ebook-wizard-body,
+  .ebook-wizard-mode-row,
+  .ebook-wizard-highlights {
     grid-template-columns: 1fr;
   }
 
@@ -1046,5 +1321,30 @@ button {
 
   .metrics {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .wizard-hero h2 {
+    font-size: 28px;
+  }
+
+  .ebook-wizard-card {
+    height: min(96vh, 1280px);
+  }
+
+  .ebook-wizard-header,
+  .ebook-wizard-download {
+    display: grid;
+  }
+}
+
+@media (max-width: 760px) {
+  .ebook-wizard-backdrop {
+    padding: 8px;
+  }
+
+  .ebook-wizard-card {
+    padding: 16px;
+    border-radius: 20px;
+    height: 98vh;
   }
 }

@@ -235,10 +235,32 @@ def tag_name(tag: str) -> str:
     return tag.split("}", 1)[-1] if "}" in tag else tag
 
 
+MARKDOWN_CHAPTER_PATTERN = re.compile(r"^\s{0,3}#{1,2}\s*(?P<title>.+?)\s*$")
+CHINESE_CHAPTER_MARKER = r"第[一二三四五六七八九十百千万0-9]+(?:章(?:節|节)?|回)"
 CHAPTER_PATTERNS = [
-    re.compile(r"^\s*第[一二三四五六七八九十百千万0-9]+章[^\n]*$", re.MULTILINE),
-    re.compile(r"^\s*Chapter\s+\d+[^\n]*$", re.IGNORECASE | re.MULTILINE),
+    re.compile(
+        rf"^\s*(?:#{1,2}\s*)?(?:[A-Za-z0-9一-龥《》〈〉「」『』【】（）()·\-_ ]{{0,24}})?{CHINESE_CHAPTER_MARKER}[^\n]*$"
+    ),
+    re.compile(r"^\s*(?:#{1,2}\s*)?Chapter\s+\d+[^\n]*$", re.IGNORECASE),
 ]
+
+
+def normalize_chapter_heading(line: str) -> str:
+    stripped = line.strip()
+    match = MARKDOWN_CHAPTER_PATTERN.match(stripped)
+    if match:
+        return normalize_inline_text(match.group("title"))
+    return stripped
+
+
+def is_chapter_heading(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if MARKDOWN_CHAPTER_PATTERN.match(stripped):
+        return True
+    normalized = normalize_chapter_heading(stripped)
+    return any(pattern.match(normalized) for pattern in CHAPTER_PATTERNS)
 
 
 def split_into_chapters(text: str) -> list[tuple[str, str]]:
@@ -258,11 +280,11 @@ def split_into_chapters(text: str) -> list[tuple[str, str]]:
     found_heading = False
     for line in lines:
         stripped = line.strip()
-        is_heading = any(pattern.match(stripped) for pattern in CHAPTER_PATTERNS)
+        is_heading = is_chapter_heading(stripped)
         if is_heading:
             found_heading = True
             flush()
-            current_title = stripped
+            current_title = normalize_chapter_heading(stripped)
         else:
             current_lines.append(line)
 

@@ -42,8 +42,10 @@ from .schemas import (
     LoginRequest,
     MergeSegmentsRequest,
     ModelProfileCreate,
+    ProjectChapterCreate,
     ProjectCreate,
     ProjectImportLocalRequest,
+    ProjectPasteImportRequest,
     ProjectUpdate,
     RejectRequest,
     SegmentUpdate,
@@ -51,11 +53,12 @@ from .schemas import (
     VoiceProfileUpdate,
 )
 from .security import create_token, verify_password
-from .text_utils import detect_segment_speaker, extract_chapters_from_upload, split_into_segments
+from .text_utils import detect_segment_speaker, extract_chapters_from_upload, normalize_text, split_into_segments
 
 WEB_DIR = BASE_DIR.parent / "web"
 APP_TITLE = "AI Publisher Local Studio"
 LOOK_SLOT_COUNT = 9
+SOURCE_BOOK_FILENAME = "source_book.txt"
 ALL_ROUTE_KEYS = [
     "projects",
     "text",
@@ -199,11 +202,81 @@ def video_settings_defaults() -> dict:
     return get_registry_defaults()["video_settings"]
 
 
+def project_import_dir(project_id: int) -> Path:
+    return GENERATED_DIR / "imports" / f"project_{project_id}"
+
+
+def project_source_book_path(project_id: int) -> Path:
+    return project_import_dir(project_id) / SOURCE_BOOK_FILENAME
+
+
+def normalize_project_chapters(chapters: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    normalized: list[tuple[str, str]] = []
+    for index, (title, body) in enumerate(chapters, start=1):
+        chapter_title = (title or "").strip() or f"Chapter {index}"
+        chapter_body = normalize_text(body or "")
+        if chapter_body:
+            normalized.append((chapter_title, chapter_body))
+    if not normalized:
+        raise HTTPException(status_code=400, detail="No readable chapter content found")
+    return normalized
+
+
+def compose_project_source_book(chapters: list[tuple[str, str]]) -> str:
+    blocks: list[str] = []
+    for index, (title, body) in enumerate(chapters):
+        if index:
+            blocks.append("")
+        blocks.append(title.strip())
+        blocks.append(body.strip())
+    return "\n\n".join(blocks).strip() + "\n"
+
+
+def persist_project_source_book(project_id: int, chapters: list[tuple[str, str]]) -> Path:
+    import_dir = project_import_dir(project_id)
+    import_dir.mkdir(parents=True, exist_ok=True)
+    path = project_source_book_path(project_id)
+    path.write_text(compose_project_source_book(chapters), encoding="utf-8")
+    return path
+
+
+def create_chapter_record(
+    conn: sqlite3.Connection,
+    project_id: int,
+    title: str,
+    body: str,
+    order_index: int,
+    *,
+    status: str = "draft",
+    now: str | None = None,
+) -> int:
+    timestamp = now or utc_now()
+    chapter_id = conn.execute(
+        """
+        INSERT INTO chapters (project_id, title, order_index, source_text, tts_text, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (project_id, title, order_index, body, body, status, timestamp, timestamp),
+    ).lastrowid
+    for segment_index, segment_text in enumerate(split_into_segments(body), start=1):
+        conn.execute(
+            """
+            INSERT INTO segments (project_id, chapter_id, order_index, source_text, tts_text, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'ready', ?, ?)
+            """,
+            (project_id, chapter_id, segment_index, segment_text, segment_text, timestamp, timestamp),
+        )
+    return chapter_id
+
+
 def project_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     project = dict(row)
     project["comic_settings"] = merge_settings(project.get("comic_settings"), comic_settings_defaults())
     project["video_settings"] = merge_settings(project.get("video_settings"), video_settings_defaults())
     project["metrics"] = project_metrics(conn, row["id"])
+    source_book_path = project_source_book_path(row["id"])
+    project["source_book_url"] = public_file_path(source_book_path) if source_book_path.exists() else ""
+    project["source_book_name"] = SOURCE_BOOK_FILENAME if source_book_path.exists() else ""
     return project
 
 
@@ -898,7 +971,7 @@ def import_project_document(project_id: int, filename: str, raw: bytes, user_id:
     if not raw:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
     try:
-        chapters = extract_chapters_from_upload(filename or "upload.txt", raw)
+        chapters = normalize_project_chapters(extract_chapters_from_upload(filename or "upload.txt", raw))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -911,27 +984,14 @@ def import_project_document(project_id: int, filename: str, raw: bytes, user_id:
         conn.execute("DELETE FROM chapters WHERE project_id = ?", (project_id,))
         conn.execute("DELETE FROM export_tasks WHERE project_id = ?", (project_id,))
         now = utc_now()
-        import_dir = GENERATED_DIR / "imports" / f"project_{project_id}"
+        import_dir = project_import_dir(project_id)
         import_dir.mkdir(parents=True, exist_ok=True)
-        import_path = import_dir / (filename or f"project_{project_id}.txt")
+        import_name = Path(filename or f"project_{project_id}.txt").name or f"project_{project_id}.txt"
+        import_path = import_dir / import_name
         import_path.write_bytes(raw)
+        persist_project_source_book(project_id, chapters)
         for chapter_index, (title, body) in enumerate(chapters, start=1):
-            chapter_id = conn.execute(
-                """
-                INSERT INTO chapters (project_id, title, order_index, source_text, tts_text, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)
-                """,
-                (project_id, title, chapter_index, body, body, now, now),
-            ).lastrowid
-            segments = split_into_segments(body)
-            for segment_index, segment_text in enumerate(segments, start=1):
-                conn.execute(
-                    """
-                    INSERT INTO segments (project_id, chapter_id, order_index, source_text, tts_text, status, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, 'ready', ?, ?)
-                    """,
-                    (project_id, chapter_id, segment_index, segment_text, segment_text, now, now),
-                )
+            create_chapter_record(conn, project_id, title, body, chapter_index, now=now)
         conn.execute("UPDATE projects SET status = 'active', updated_at = ? WHERE id = ?", (now, project_id))
         log_activity(conn, user_id, "project", project_id, "import", filename or "")
 
@@ -1391,7 +1451,12 @@ def run_export_task(task_id: int) -> None:
     try:
         if not unique_renders:
             raise ValueError("No chapter renders available for export")
-        output_path = create_export_zip(project["title"], list(unique_renders.items()), GENERATED_DIR / "exports" / f"project_{project['id']}")
+        output_path = create_export_zip(
+            project["title"],
+            list(unique_renders.items()),
+            GENERATED_DIR / "exports" / f"project_{project['id']}",
+            source_book_path=project_source_book_path(project["id"]),
+        )
         with get_conn() as conn:
             conn.execute("UPDATE export_tasks SET status = 'succeeded', file_path = ? WHERE id = ?", (str(output_path), task_id))
             log_activity(conn, None, "project", project["id"], "export", str(output_path))
@@ -1576,12 +1641,61 @@ def import_project_local_path(
     return {"success": True, "chapter_count": chapter_count}
 
 
+@app.post("/api/projects/{project_id}/import-paste")
+def import_project_pasted_text(
+    project_id: int,
+    payload: ProjectPasteImportRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    require_permission(user, "text_manage")
+    filename = (payload.filename or SOURCE_BOOK_FILENAME).strip() or SOURCE_BOOK_FILENAME
+    if not Path(filename).suffix:
+        filename = f"{filename}.txt"
+    chapter_count = import_project_document(project_id, filename, payload.text.encode("utf-8"), user["id"])
+    return {"success": True, "chapter_count": chapter_count}
+
+
 @app.get("/api/projects/{project_id}/chapters")
 def list_chapters(project_id: int, user: dict = Depends(get_current_user)) -> dict:
     with get_conn() as conn:
         get_project(conn, project_id)
         rows = conn.execute("SELECT * FROM chapters WHERE project_id = ? ORDER BY order_index", (project_id,)).fetchall()
         return {"items": [chapter_payload(conn, row) for row in rows]}
+
+
+@app.post("/api/projects/{project_id}/chapters")
+def create_project_chapter(
+    project_id: int,
+    payload: ProjectChapterCreate,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    require_permission(user, "text_manage")
+    title = (payload.title or "").strip()
+    body = normalize_text(payload.body or "")
+    if not title:
+        raise HTTPException(status_code=400, detail="Chapter title is required")
+    if not body:
+        raise HTTPException(status_code=400, detail="Chapter body is empty")
+
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        now = utc_now()
+        next_order_index = conn.execute(
+            "SELECT COALESCE(MAX(order_index), 0) AS value FROM chapters WHERE project_id = ?",
+            (project_id,),
+        ).fetchone()["value"] + 1
+        chapter_id = create_chapter_record(conn, project_id, title, body, next_order_index, now=now)
+        conn.execute("UPDATE projects SET status = 'active', updated_at = ? WHERE id = ?", (now, project_id))
+        chapters = conn.execute("SELECT title, source_text FROM chapters WHERE project_id = ? ORDER BY order_index, id", (project_id,)).fetchall()
+        persist_project_source_book(project_id, [(row["title"], row["source_text"]) for row in chapters])
+        log_activity(conn, user["id"], "chapter", chapter_id, "create", title)
+        chapter_data = chapter_payload(conn, get_chapter(conn, chapter_id))
+
+    return {
+        "chapter": chapter_data,
+        "chapter_id": chapter_id,
+        "project_id": project_id,
+    }
 
 
 @app.get("/api/chapters/{chapter_id}/segments")
@@ -1617,6 +1731,17 @@ def delete_chapter(chapter_id: int, user: dict = Depends(get_current_user)) -> d
             "SELECT id FROM chapters WHERE project_id = ? ORDER BY order_index, id LIMIT 1",
             (chapter["project_id"],),
         ).fetchone()
+        remaining_chapters = conn.execute(
+            "SELECT title, source_text FROM chapters WHERE project_id = ? ORDER BY order_index, id",
+            (chapter["project_id"],),
+        ).fetchall()
+        if remaining_chapters:
+            persist_project_source_book(
+                chapter["project_id"],
+                [(row["title"], row["source_text"]) for row in remaining_chapters],
+            )
+        else:
+            remove_generated_file(project_source_book_path(chapter["project_id"]))
     for path in artifact_paths:
         remove_generated_file(path)
     remove_generated_tree(GENERATED_DIR / "audio" / f"project_{chapter['project_id']}" / f"chapter_{chapter_id}")

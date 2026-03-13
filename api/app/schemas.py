@@ -34,6 +34,16 @@ class ProjectImportLocalRequest(BaseModel):
     path: str = Field(min_length=1)
 
 
+class ProjectPasteImportRequest(BaseModel):
+    text: str = Field(min_length=1)
+    filename: str = "source_book.txt"
+
+
+class ProjectChapterCreate(BaseModel):
+    title: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+
+
 class SegmentUpdate(BaseModel):
     tts_text: str
     status: str | None = None

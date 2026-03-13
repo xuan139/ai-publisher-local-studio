@@ -74,7 +74,12 @@ def concat_wavs(paths: list[Path], output_path: Path) -> Path:
     return output_path
 
 
-def create_export_zip(project_title: str, renders: list[tuple[str, Path]], export_dir: Path) -> Path:
+def create_export_zip(
+    project_title: str,
+    renders: list[tuple[str, Path]],
+    export_dir: Path,
+    source_book_path: Path | None = None,
+) -> Path:
     export_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     zip_path = export_dir / f"{slugify(project_title)}-{stamp}.zip"
@@ -83,8 +88,12 @@ def create_export_zip(project_title: str, renders: list[tuple[str, Path]], expor
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "chapters": [{"title": title, "file": path.name} for title, path in renders],
     }
+    if source_book_path and source_book_path.exists():
+        manifest["source_book"] = source_book_path.name
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        if source_book_path and source_book_path.exists():
+            archive.write(source_book_path, arcname=f"ebook/{source_book_path.name}")
         for title, path in renders:
             archive.write(path, arcname=f"chapters/{path.name}")
     return zip_path

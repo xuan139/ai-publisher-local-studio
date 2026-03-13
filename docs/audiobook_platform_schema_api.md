@@ -40,6 +40,19 @@
 - `GET /api/chapters/{chapter_id}/character-detection`
 - `POST /api/chapters/{chapter_id}/auto-bind-characters`
 - `POST /api/segments/merge`
+- `POST /api/projects/{project_id}/import-paste`
+- `POST /api/projects/{project_id}/chapters`
+
+当前项目导入行为补充：
+
+- 支持文件上传导入
+- 支持本机路径导入
+- 支持直接粘贴整本内容后自动拆章
+- 支持手动新增自定义章节
+- 导入完成后会保存完整整书 `source_book.txt`
+- project payload 会补充：
+  - `source_book_url`
+  - `source_book_name`
 
 说明：
 
@@ -384,6 +397,18 @@ Base URL 示例：
 
 导入文本文件并触发拆章。
 
+Local Studio 当前实现补充：
+
+- 文件上传接口：`POST /api/projects/{project_id}/import`
+- 本机路径接口：`POST /api/projects/{project_id}/import-local`
+- 整本粘贴接口：`POST /api/projects/{project_id}/import-paste`
+- 自动识别的章节标题格式包括：
+  - `# 章節標題`
+  - `西游记第一章`
+  - `第二章节`
+  - `第一回`
+- 导入后会同步写出完整整书 `source_book.txt`
+
 ### GET `/books/:bookId/chapters`
 
 获取章节列表。
@@ -391,6 +416,23 @@ Base URL 示例：
 ### POST `/books/:bookId/chapters`
 
 新增章节。
+
+Local Studio 当前实现补充：
+
+- 当前接口为 `POST /api/projects/{project_id}/chapters`
+- 请求体支持：
+
+```json
+{
+  "title": "西游记第一章 石猴出世",
+  "body": "这一章的完整正文"
+}
+```
+
+- 服务端会自动：
+  - 创建 chapter
+  - 切分 segments
+  - 重建整书 `source_book.txt`
 
 ### PATCH `/chapters/:chapterId`
 
@@ -592,6 +634,11 @@ Base URL 示例：
   "exportType": "book_zip"
 }
 ```
+
+Local Studio 当前实现补充：
+
+- 当前接口为 `POST /api/projects/{project_id}/export`
+- 当项目存在完整整书文本时，导出的 ZIP 会额外包含 `source_book.txt`
 
 ### GET `/exports/:exportTaskId`
 

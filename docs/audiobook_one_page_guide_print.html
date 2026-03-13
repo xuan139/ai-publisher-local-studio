@@ -257,7 +257,7 @@
 
           <div class="pipeline">
             <strong>主流程</strong>
-            <code>登入 -> 新建專案 -> 匯入文本 -> 檢查 tts_text -> 選聲音 -> 生成 -> 審核 -> 匯出</code>
+            <code>登入 -> 新建專案 -> 開啟全屏電子書向導 / 匯入文本 -> 檢查 tts_text -> 選聲音 -> 生成 -> 審核 -> 匯出</code>
           </div>
         </div>
 
@@ -267,12 +267,12 @@
             <ol>
               <li><strong>登入系統</strong>：打開 `http://127.0.0.1:8000`，完整流程建議使用 `admin@example.com / admin123` 登入；此 admin 帳密保持不變。</li>
               <li><strong>新建專案</strong>：填寫書名、作者、語言與簡短說明，建立後進入專案；若後續要擴展漫畫或 Video，可在 `系統設定` 先保存模型模板。</li>
-              <li><strong>匯入文本</strong>：上傳 `txt`、`md` 或 `docx`，系統會自動拆章拆段。</li>
+              <li><strong>匯入文本</strong>：回到 `專案列表`，點 `新建電子書` 或 `開啟全屏向導`。可直接貼整本內容後 `貼上並拆章`，也可手動新增單章；若仍走傳統方式，也可在 `Text Prep` 上傳 `txt`、`md` 或 `docx`。</li>
               <li><strong>整理朗讀稿</strong>：在 `Text Prep` 檢查每段 `tts_text`，把不適合朗讀的文字改成自然口語。</li>
               <li><strong>選擇聲音</strong>：在 `Voice Setup` 指定本機語音或已配置的 AI provider。</li>
               <li><strong>生成音訊</strong>：到 `Generate` 執行段落或章節生成，等待每段出現可播放音訊。</li>
               <li><strong>審核通過</strong>：到 `Review` 播放段落，沒問題就通過，有問題就退回重生。</li>
-              <li><strong>匯出成品</strong>：到 `Assemble / Export` 渲染章節並匯出單章音訊或全書 `zip`。</li>
+              <li><strong>匯出成品</strong>：到 `Assemble / Export` 渲染章節並匯出單章音訊或全書 `zip`；若已保存整書文本，也可直接下載 `source_book.txt`。</li>
             </ol>
           </div>
 
@@ -307,7 +307,8 @@
             <div class="notes">
               <h3>常見提醒</h3>
               <ul>
-                <li>章節切分不對，先回 `Text Prep` 修正。</li>
+                <li>找不到入口時，先回 `專案列表`，選中專案後找 `新建電子書`。</li>
+                <li>章節切分不對，先回 `Text Prep` 或重新打開全屏向導修正。</li>
                 <li>朗讀不自然，先改 `tts_text`，不要只反覆重跑。</li>
                 <li>演示時可直接用本機聲音，不一定要先接真實 AI。</li>
                 <li>`漫畫設定 / Video 設定` 目前只保存配置，不會直接生成漫畫或影片。</li>
