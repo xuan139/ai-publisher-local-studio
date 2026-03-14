@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import mimetypes
 import os
@@ -8,6 +9,7 @@ import shutil
 import sqlite3
 import urllib.parse
 import urllib.request
+import zipfile
 from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from html import escape
@@ -24,7 +26,10 @@ from .config import get_settings
 from .db import BASE_DIR, DEFAULT_USERS, GENERATED_DIR, connect, get_conn, init_db, utc_now
 from .model_registry import REGISTRY_PATH, get_model_registry, get_registry_defaults, get_system_catalog
 from .schemas import (
+    AdvertiserDealCreate,
+    AdvertiserDealUpdate,
     BatchCharacterAssignRequest,
+    BusinessBaseCurrencyUpdate,
     ChapterCharacterAutoBindRequest,
     CharacterLookImportRequest,
     CharacterLookUpdate,
@@ -37,6 +42,12 @@ from .schemas import (
     ComicPanelUpdate,
     ComicScriptCreate,
     ComicScriptUpdate,
+    CostItemCreate,
+    CostItemUpdate,
+    DistributionChannelCreate,
+    DistributionChannelUpdate,
+    ExchangeRateCreate,
+    ExchangeRateUpdate,
     IssueCreate,
     IssueUpdate,
     LoginRequest,
@@ -48,6 +59,12 @@ from .schemas import (
     ProjectPasteImportRequest,
     ProjectUpdate,
     RejectRequest,
+    RightsRecordCreate,
+    RightsRecordUpdate,
+    RoyaltyStatementCreate,
+    RoyaltyStatementUpdate,
+    SalesRecordCreate,
+    SalesRecordUpdate,
     SegmentUpdate,
     VoiceProfileCreate,
     VoiceProfileUpdate,
@@ -61,6 +78,7 @@ LOOK_SLOT_COUNT = 9
 SOURCE_BOOK_FILENAME = "source_book.txt"
 ALL_ROUTE_KEYS = [
     "projects",
+    "business",
     "text",
     "voices",
     "characters",
@@ -79,11 +97,12 @@ ROLE_ROUTE_ACCESS = {
     "admin": ALL_ROUTE_KEYS,
     "text_editor": ["projects", "text", "generate"],
     "reviewer": ["projects", "review"],
-    "delivery_manager": ["projects", "export"],
+    "delivery_manager": ["projects", "business", "export"],
     "settings_manager": ["projects", "voices", "characters", "comic", "video", "settings"],
 }
 ROLE_PERMISSION_ACCESS = {
     "admin": {
+        "business_manage",
         "project_manage",
         "project_delete",
         "text_manage",
@@ -95,7 +114,7 @@ ROLE_PERMISSION_ACCESS = {
     },
     "text_editor": {"text_manage", "generate_manage"},
     "reviewer": {"review_manage"},
-    "delivery_manager": {"delivery_manage"},
+    "delivery_manager": {"business_manage", "delivery_manage"},
     "settings_manager": {"project_manage", "settings_manage"},
 }
 
@@ -269,11 +288,12 @@ def create_chapter_record(
     return chapter_id
 
 
-def project_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+def project_payload(conn: sqlite3.Connection, row: sqlite3.Row, *, include_business: bool = False) -> dict:
     project = dict(row)
     project["comic_settings"] = merge_settings(project.get("comic_settings"), comic_settings_defaults())
     project["video_settings"] = merge_settings(project.get("video_settings"), video_settings_defaults())
     project["metrics"] = project_metrics(conn, row["id"])
+    project["business_summary"] = project_business_summary(conn, row["id"]) if include_business else None
     source_book_path = project_source_book_path(row["id"])
     project["source_book_url"] = public_file_path(source_book_path) if source_book_path.exists() else ""
     project["source_book_name"] = SOURCE_BOOK_FILENAME if source_book_path.exists() else ""
@@ -757,6 +777,527 @@ def project_metrics(conn: sqlite3.Connection, project_id: int) -> dict:
         "comic_page_count": comic_page_count or 0,
         "comic_panel_count": comic_panel_count or 0,
     }
+
+
+def normalize_currency_code(value: str | None) -> str:
+    normalized = (value or "CNY").strip().upper()
+    return normalized or "CNY"
+
+
+def round_money(value: float | int | None) -> float:
+    return round(float(value or 0), 2)
+
+
+def round_rate(value: float | int | None) -> float:
+    return round(float(value or 0), 6)
+
+
+def rights_record_is_active(record: dict, today: str) -> bool:
+    status = (record.get("status") or "").strip().lower()
+    if status in {"expired", "terminated", "inactive", "void"}:
+        return False
+    start_date = (record.get("start_date") or "").strip()
+    end_date = (record.get("end_date") or "").strip()
+    if start_date and start_date > today:
+        return False
+    if end_date and end_date < today:
+        return False
+    return status not in {"planning", "pending"}
+
+
+def distribution_channel_is_live(record: dict, today: str) -> bool:
+    status = (record.get("release_status") or "").strip().lower()
+    if status not in {"live", "active", "launched"}:
+        return False
+    release_date = (record.get("release_date") or "").strip()
+    return not release_date or release_date <= today
+
+
+def rights_record_payload(row: sqlite3.Row, today: str | None = None) -> dict:
+    payload = dict(row)
+    payload["is_active"] = rights_record_is_active(payload, today or datetime.now(timezone.utc).date().isoformat())
+    return payload
+
+
+def cost_item_payload(row: sqlite3.Row) -> dict:
+    payload = dict(row)
+    payload["amount"] = round_money(payload.get("amount"))
+    payload["currency"] = normalize_currency_code(payload.get("currency"))
+    return payload
+
+
+def distribution_channel_payload(row: sqlite3.Row, today: str | None = None) -> dict:
+    payload = dict(row)
+    payload["price"] = round_money(payload.get("price"))
+    payload["currency"] = normalize_currency_code(payload.get("currency"))
+    payload["channel_category"] = (payload.get("channel_category") or "retail").strip().lower() or "retail"
+    payload["is_live"] = distribution_channel_is_live(payload, today or datetime.now(timezone.utc).date().isoformat())
+    return payload
+
+
+def sales_record_payload(row: sqlite3.Row) -> dict:
+    payload = dict(row)
+    payload["gross_revenue"] = round_money(payload.get("gross_revenue"))
+    payload["refunds"] = round_money(payload.get("refunds"))
+    payload["net_revenue"] = round_money(payload.get("net_revenue"))
+    payload["currency"] = normalize_currency_code(payload.get("currency"))
+    payload["channel_category"] = (payload.get("channel_category") or "retail").strip().lower() or "retail"
+    return payload
+
+
+def royalty_statement_payload(row: sqlite3.Row) -> dict:
+    payload = dict(row)
+    payload["rate_percent"] = round_money(payload.get("rate_percent"))
+    payload["amount_due"] = round_money(payload.get("amount_due"))
+    payload["currency"] = normalize_currency_code(payload.get("currency"))
+    return payload
+
+
+def exchange_rate_payload(row: sqlite3.Row) -> dict:
+    payload = dict(row)
+    payload["source_currency"] = normalize_currency_code(payload.get("source_currency"))
+    payload["target_currency"] = normalize_currency_code(payload.get("target_currency"))
+    payload["rate"] = round_rate(payload.get("rate"))
+    return payload
+
+
+def advertiser_deal_payload(row: sqlite3.Row) -> dict:
+    payload = dict(row)
+    payload["contract_amount"] = round_money(payload.get("contract_amount"))
+    payload["settled_amount"] = round_money(payload.get("settled_amount"))
+    payload["currency"] = normalize_currency_code(payload.get("currency"))
+    payload["pending_amount"] = round_money(payload["contract_amount"] - payload["settled_amount"])
+    return payload
+
+
+def business_report_payload(row: sqlite3.Row) -> dict:
+    payload = dict(row)
+    file_path = payload.get("file_path") or ""
+    payload["file_url"] = public_file_path(file_path) if file_path else ""
+    payload["file_name"] = Path(file_path).name if file_path else ""
+    return payload
+
+
+def list_rights_records(conn: sqlite3.Connection, project_id: int) -> list[dict]:
+    today = datetime.now(timezone.utc).date().isoformat()
+    rows = conn.execute(
+        """
+        SELECT * FROM rights_records
+        WHERE project_id = ?
+        ORDER BY COALESCE(start_date, '') DESC, updated_at DESC, id DESC
+        """,
+        (project_id,),
+    ).fetchall()
+    return [rights_record_payload(row, today=today) for row in rows]
+
+
+def list_cost_items(conn: sqlite3.Connection, project_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM cost_items
+        WHERE project_id = ?
+        ORDER BY COALESCE(occurred_on, '') DESC, updated_at DESC, id DESC
+        """,
+        (project_id,),
+    ).fetchall()
+    return [cost_item_payload(row) for row in rows]
+
+
+def list_distribution_channels(conn: sqlite3.Connection, project_id: int) -> list[dict]:
+    today = datetime.now(timezone.utc).date().isoformat()
+    rows = conn.execute(
+        """
+        SELECT * FROM distribution_channels
+        WHERE project_id = ?
+        ORDER BY COALESCE(release_date, '') DESC, updated_at DESC, id DESC
+        """,
+        (project_id,),
+    ).fetchall()
+    return [distribution_channel_payload(row, today=today) for row in rows]
+
+
+def list_sales_records(conn: sqlite3.Connection, project_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM sales_records
+        WHERE project_id = ?
+        ORDER BY COALESCE(period_end, period_start, '') DESC, updated_at DESC, id DESC
+        """,
+        (project_id,),
+    ).fetchall()
+    return [sales_record_payload(row) for row in rows]
+
+
+def list_royalty_statements(conn: sqlite3.Connection, project_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM royalty_statements
+        WHERE project_id = ?
+        ORDER BY COALESCE(period_end, period_start, '') DESC, updated_at DESC, id DESC
+        """,
+        (project_id,),
+    ).fetchall()
+    return [royalty_statement_payload(row) for row in rows]
+
+
+def list_exchange_rates(conn: sqlite3.Connection, project_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM exchange_rates
+        WHERE project_id = ?
+        ORDER BY target_currency ASC, source_currency ASC, COALESCE(effective_date, '') DESC, updated_at DESC, id DESC
+        """,
+        (project_id,),
+    ).fetchall()
+    return [exchange_rate_payload(row) for row in rows]
+
+
+def list_advertiser_deals(conn: sqlite3.Connection, project_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM advertiser_deals
+        WHERE project_id = ?
+        ORDER BY COALESCE(end_date, start_date, '') DESC, updated_at DESC, id DESC
+        """,
+        (project_id,),
+    ).fetchall()
+    return [advertiser_deal_payload(row) for row in rows]
+
+
+def list_business_reports(conn: sqlite3.Connection, project_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM business_reports
+        WHERE project_id = ?
+        ORDER BY created_at DESC, id DESC
+        """,
+        (project_id,),
+    ).fetchall()
+    return [business_report_payload(row) for row in rows]
+
+
+def select_exchange_rate_candidate(candidates: list[dict], as_of_date: str = "") -> dict | None:
+    normalized_as_of = (as_of_date or "").strip()
+    if normalized_as_of:
+        eligible = [item for item in candidates if not item.get("effective_date") or item["effective_date"] <= normalized_as_of]
+        if eligible:
+            return eligible[0]
+    return candidates[0] if candidates else None
+
+
+def resolve_exchange_rate(source_currency: str, target_currency: str, exchange_rates: list[dict], *, as_of_date: str = "") -> tuple[float | None, str]:
+    source = normalize_currency_code(source_currency)
+    target = normalize_currency_code(target_currency)
+    if source == target:
+        return 1.0, "identity"
+    direct = [
+        item for item in exchange_rates
+        if item["source_currency"] == source and item["target_currency"] == target
+    ]
+    direct_hit = select_exchange_rate_candidate(direct, as_of_date=as_of_date)
+    if direct_hit:
+        return float(direct_hit["rate"]), "direct"
+
+    inverse = [
+        item for item in exchange_rates
+        if item["source_currency"] == target and item["target_currency"] == source and float(item.get("rate") or 0) > 0
+    ]
+    inverse_hit = select_exchange_rate_candidate(inverse, as_of_date=as_of_date)
+    if inverse_hit:
+        return 1.0 / float(inverse_hit["rate"]), "inverse"
+    return None, "missing"
+
+
+def convert_money(
+    amount: float | int | None,
+    source_currency: str | None,
+    target_currency: str | None,
+    exchange_rates: list[dict],
+    *,
+    as_of_date: str = "",
+) -> tuple[float | None, str]:
+    rate, resolution = resolve_exchange_rate(source_currency or "", target_currency or "", exchange_rates, as_of_date=as_of_date)
+    if rate is None:
+        return None, resolution
+    return round_money((amount or 0) * rate), resolution
+
+
+def project_business_summary(conn: sqlite3.Connection, project_id: int) -> dict:
+    today = datetime.now(timezone.utc).date().isoformat()
+    project = get_project(conn, project_id)
+    base_currency = normalize_currency_code(project["business_base_currency"])
+    rights_records = list_rights_records(conn, project_id)
+    cost_items = list_cost_items(conn, project_id)
+    distribution_channels = list_distribution_channels(conn, project_id)
+    sales_records = list_sales_records(conn, project_id)
+    royalty_statements = list_royalty_statements(conn, project_id)
+    exchange_rates = list_exchange_rates(conn, project_id)
+    advertiser_deals = list_advertiser_deals(conn, project_id)
+
+    currency_breakdown: dict[str, dict[str, float]] = {}
+    missing_currencies: set[str] = set()
+
+    def add_breakdown(currency: str, key: str, amount: float) -> None:
+        normalized_currency = normalize_currency_code(currency)
+        entry = currency_breakdown.setdefault(normalized_currency, {"cost": 0.0, "sales": 0.0, "royalties": 0.0})
+        entry[key] = round_money(entry[key] + amount)
+
+    total_cost = 0.0
+    for item in cost_items:
+        add_breakdown(item["currency"], "cost", item["amount"])
+        converted_amount, resolution = convert_money(item["amount"], item["currency"], base_currency, exchange_rates, as_of_date=item.get("occurred_on") or today)
+        if converted_amount is None:
+            missing_currencies.add(item["currency"])
+        else:
+            total_cost += converted_amount
+
+    total_sales = 0.0
+    advertiser_revenue = 0.0
+    for item in sales_records:
+        add_breakdown(item["currency"], "sales", item["net_revenue"])
+        converted_amount, _resolution = convert_money(item["net_revenue"], item["currency"], base_currency, exchange_rates, as_of_date=item.get("period_end") or item.get("period_start") or today)
+        if converted_amount is None:
+            missing_currencies.add(item["currency"])
+        else:
+            total_sales += converted_amount
+            if item.get("channel_category") == "advertiser":
+                advertiser_revenue += converted_amount
+
+    total_royalties = 0.0
+    for item in royalty_statements:
+        add_breakdown(item["currency"], "royalties", item["amount_due"])
+        converted_amount, _resolution = convert_money(item["amount_due"], item["currency"], base_currency, exchange_rates, as_of_date=item.get("period_end") or item.get("period_start") or today)
+        if converted_amount is None:
+            missing_currencies.add(item["currency"])
+        else:
+            total_royalties += converted_amount
+
+    advertiser_pipeline = 0.0
+    advertiser_settled = 0.0
+    for item in advertiser_deals:
+        converted_contract, _contract_resolution = convert_money(item["contract_amount"], item["currency"], base_currency, exchange_rates, as_of_date=item.get("end_date") or item.get("start_date") or today)
+        converted_settled, _settled_resolution = convert_money(item["settled_amount"], item["currency"], base_currency, exchange_rates, as_of_date=item.get("end_date") or item.get("start_date") or today)
+        if converted_contract is None or converted_settled is None:
+            missing_currencies.add(item["currency"])
+        else:
+            advertiser_pipeline += converted_contract
+            advertiser_settled += converted_settled
+
+    total_cost = round_money(total_cost)
+    total_sales = round_money(total_sales)
+    total_royalties = round_money(total_royalties)
+    gross_profit = round_money(total_sales - total_cost - total_royalties)
+    currencies = sorted(
+        {
+            item.get("currency")
+            for item in [*cost_items, *distribution_channels, *sales_records, *royalty_statements, *advertiser_deals]
+            if item.get("currency")
+        }
+    )
+    last_sales_date = ""
+    if sales_records:
+        last_sales_date = max((item.get("period_end") or item.get("period_start") or "") for item in sales_records)
+
+    return {
+        "active_rights_count": sum(1 for item in rights_records if rights_record_is_active(item, today)),
+        "rights_record_count": len(rights_records),
+        "live_channel_count": sum(1 for item in distribution_channels if distribution_channel_is_live(item, today)),
+        "advertiser_channel_count": sum(1 for item in distribution_channels if item.get("channel_category") == "advertiser"),
+        "advertiser_deal_count": len(advertiser_deals),
+        "channel_count": len(distribution_channels),
+        "cost_item_count": len(cost_items),
+        "sales_record_count": len(sales_records),
+        "royalty_statement_count": len(royalty_statements),
+        "total_cost": total_cost,
+        "total_sales": total_sales,
+        "total_royalties": total_royalties,
+        "gross_profit": gross_profit,
+        "units_sold": sum(int(item.get("units_sold") or 0) for item in sales_records),
+        "advertiser_revenue": round_money(advertiser_revenue),
+        "advertiser_pipeline": round_money(advertiser_pipeline),
+        "advertiser_settled": round_money(advertiser_settled),
+        "base_currency": base_currency,
+        "currencies": currencies,
+        "is_multi_currency": len(currencies) > 1,
+        "exchange_rate_count": len(exchange_rates),
+        "conversion_ready": not missing_currencies,
+        "unconverted_currencies": sorted(missing_currencies),
+        "unconverted_currency_count": len(missing_currencies),
+        "currency_breakdown": currency_breakdown,
+        "last_sales_date": last_sales_date,
+    }
+
+
+def project_business_payload(conn: sqlite3.Connection, project_id: int) -> dict:
+    return {
+        "summary": project_business_summary(conn, project_id),
+        "rights_records": list_rights_records(conn, project_id),
+        "distribution_channels": list_distribution_channels(conn, project_id),
+        "cost_items": list_cost_items(conn, project_id),
+        "sales_records": list_sales_records(conn, project_id),
+        "royalty_statements": list_royalty_statements(conn, project_id),
+        "exchange_rates": list_exchange_rates(conn, project_id),
+        "advertiser_deals": list_advertiser_deals(conn, project_id),
+        "business_reports": list_business_reports(conn, project_id),
+    }
+
+
+def get_project_owned_row(conn: sqlite3.Connection, table_name: str, project_id: int, row_id: int, detail_name: str) -> sqlite3.Row:
+    row = conn.execute(
+        f"SELECT * FROM {table_name} WHERE id = ? AND project_id = ?",
+        (row_id, project_id),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"{detail_name} not found")
+    return row
+
+
+def touch_project(conn: sqlite3.Connection, project_id: int, now: str | None = None) -> None:
+    conn.execute(
+        "UPDATE projects SET updated_at = ? WHERE id = ?",
+        (now or utc_now(), project_id),
+    )
+
+
+def update_project_owned_row(
+    conn: sqlite3.Connection,
+    table_name: str,
+    project_id: int,
+    row_id: int,
+    updates: dict,
+    detail_name: str,
+) -> sqlite3.Row:
+    if not updates:
+        raise HTTPException(status_code=400, detail="No updates provided")
+    get_project_owned_row(conn, table_name, project_id, row_id, detail_name)
+    updates["updated_at"] = utc_now()
+    set_clause = ", ".join(f"{column} = ?" for column in updates)
+    conn.execute(
+        f"UPDATE {table_name} SET {set_clause} WHERE id = ? AND project_id = ?",
+        [*updates.values(), row_id, project_id],
+    )
+    return get_project_owned_row(conn, table_name, project_id, row_id, detail_name)
+
+
+def business_export_dir(project_id: int) -> Path:
+    return GENERATED_DIR / "exports" / f"project_{project_id}" / "business_reports"
+
+
+def csv_string(rows: list[dict], fieldnames: list[str]) -> str:
+    output_lines: list[str] = []
+    class _ListWriter:
+        def write(self, value: str) -> int:
+            output_lines.append(value)
+            return len(value)
+
+    writer = csv.DictWriter(_ListWriter(), fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({name: row.get(name, "") for name in fieldnames})
+    return "".join(output_lines)
+
+
+def business_report_html(project: dict, payload: dict) -> str:
+    summary = payload["summary"]
+    sections = [
+        ("Rights Records", payload["rights_records"]),
+        ("Distribution Channels", payload["distribution_channels"]),
+        ("Cost Items", payload["cost_items"]),
+        ("Sales Records", payload["sales_records"]),
+        ("Royalty Statements", payload["royalty_statements"]),
+        ("Exchange Rates", payload["exchange_rates"]),
+        ("Advertiser Deals", payload["advertiser_deals"]),
+    ]
+    section_blocks: list[str] = []
+    for title, items in sections:
+        rows = []
+        for item in items[:20]:
+            cells = "".join(
+                f"<td>{escape(str(value))}</td>"
+                for key, value in item.items()
+                if key not in {"notes", "file_url"}
+            )
+            rows.append(f"<tr>{cells}</tr>")
+        if not rows:
+            rows.append("<tr><td colspan='10'>No data</td></tr>")
+        header_row = ""
+        if items:
+            header_row = "".join(
+                f"<th>{escape(str(key))}</th>"
+                for key in items[0].keys()
+                if key not in {"notes", "file_url"}
+            )
+        section_blocks.append(
+            f"""
+            <section>
+              <h2>{escape(title)}</h2>
+              <table>
+                <thead><tr>{header_row}</tr></thead>
+                <tbody>{''.join(rows)}</tbody>
+              </table>
+            </section>
+            """
+        )
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>{escape(project['title'])} Business Report</title>
+    <style>
+      body {{ font-family: Arial, sans-serif; margin: 28px; color: #1f2937; }}
+      h1, h2 {{ margin: 0 0 12px; }}
+      .summary {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0 28px; }}
+      .card {{ border: 1px solid #d1d5db; border-radius: 14px; padding: 14px; background: #f9fafb; }}
+      .eyebrow {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #6b7280; }}
+      .value {{ font-size: 24px; font-weight: bold; margin-top: 6px; }}
+      table {{ width: 100%; border-collapse: collapse; margin-bottom: 24px; }}
+      th, td {{ border: 1px solid #d1d5db; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }}
+      th {{ background: #f3f4f6; }}
+      section {{ margin-top: 22px; }}
+    </style>
+  </head>
+  <body>
+    <h1>{escape(project['title'])} Business Report</h1>
+    <p>Author: {escape(project.get('author') or '')} | Base currency: {escape(summary.get('base_currency') or 'CNY')} | Generated at: {escape(utc_now())}</p>
+    <div class="summary">
+      <div class="card"><div class="eyebrow">Total Sales</div><div class="value">{summary['total_sales']}</div></div>
+      <div class="card"><div class="eyebrow">Total Cost</div><div class="value">{summary['total_cost']}</div></div>
+      <div class="card"><div class="eyebrow">Gross Profit</div><div class="value">{summary['gross_profit']}</div></div>
+      <div class="card"><div class="eyebrow">Advertiser Revenue</div><div class="value">{summary.get('advertiser_revenue', 0)}</div></div>
+      <div class="card"><div class="eyebrow">Advertiser Pipeline</div><div class="value">{summary.get('advertiser_pipeline', 0)}</div></div>
+      <div class="card"><div class="eyebrow">Exchange Rates</div><div class="value">{summary.get('exchange_rate_count', 0)}</div></div>
+    </div>
+    {''.join(section_blocks)}
+  </body>
+</html>
+"""
+
+
+def generate_business_report_bundle(conn: sqlite3.Connection, project_id: int) -> Path:
+    project = project_payload(conn, get_project(conn, project_id), include_business=True)
+    payload = project_business_payload(conn, project_id)
+    export_dir = business_export_dir(project_id)
+    export_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    base_name = f"{slugify(project['title'])}-business-report-{stamp}"
+    zip_path = export_dir / f"{base_name}.zip"
+    html_text = business_report_html(project, payload)
+    csv_map = {
+        "rights_records.csv": (payload["rights_records"], ["id", "rights_type", "holder_name", "grant_scope", "territory", "license_language", "contract_code", "start_date", "end_date", "status", "is_active"]),
+        "distribution_channels.csv": (payload["distribution_channels"], ["id", "channel_name", "channel_category", "release_format", "release_status", "price", "currency", "release_date", "external_sku", "is_live"]),
+        "cost_items.csv": (payload["cost_items"], ["id", "category", "vendor_name", "description", "amount", "currency", "occurred_on", "status"]),
+        "sales_records.csv": (payload["sales_records"], ["id", "channel_name", "channel_category", "period_start", "period_end", "units_sold", "gross_revenue", "refunds", "net_revenue", "currency"]),
+        "royalty_statements.csv": (payload["royalty_statements"], ["id", "payee_name", "role_name", "basis", "rate_percent", "amount_due", "currency", "period_start", "period_end", "status"]),
+        "exchange_rates.csv": (payload["exchange_rates"], ["id", "source_currency", "target_currency", "rate", "effective_date", "notes"]),
+        "advertiser_deals.csv": (payload["advertiser_deals"], ["id", "advertiser_name", "campaign_name", "contact_name", "deliverables", "start_date", "end_date", "contract_amount", "settled_amount", "currency", "status", "owner_name", "pending_amount"]),
+    }
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("business_report.html", html_text)
+        archive.writestr("summary.json", json.dumps(payload["summary"], ensure_ascii=False, indent=2))
+        archive.writestr("full_payload.json", json.dumps(payload, ensure_ascii=False, indent=2))
+        for filename, (rows, fieldnames) in csv_map.items():
+            archive.writestr(filename, csv_string(rows, fieldnames))
+    return zip_path
 
 
 def segment_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
@@ -1563,10 +2104,490 @@ def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user
 @app.get("/api/projects/{project_id}")
 def get_project_detail(project_id: int, user: dict = Depends(get_current_user)) -> dict:
     with get_conn() as conn:
-        project = project_payload(conn, get_project(conn, project_id))
+        project = project_payload(conn, get_project(conn, project_id), include_business="business_manage" in permissions_for_role(user.get("role")))
         chapters = conn.execute("SELECT * FROM chapters WHERE project_id = ? ORDER BY order_index", (project_id,)).fetchall()
         project["chapters"] = [chapter_payload(conn, row) for row in chapters]
     return {"project": project}
+
+
+@app.get("/api/projects/{project_id}/business")
+def get_project_business(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        return project_business_payload(conn, project_id)
+
+
+@app.post("/api/projects/{project_id}/business-base-currency")
+def update_business_base_currency(project_id: int, payload: BusinessBaseCurrencyUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        currency = normalize_currency_code(payload.business_base_currency)
+        conn.execute(
+            "UPDATE projects SET business_base_currency = ?, updated_at = ? WHERE id = ?",
+            (currency, utc_now(), project_id),
+        )
+        log_activity(conn, user["id"], "project", project_id, "business_base_currency", currency)
+        return {"currency": currency, "summary": project_business_summary(conn, project_id)}
+
+
+@app.post("/api/projects/{project_id}/rights-records")
+def create_rights_record(project_id: int, payload: RightsRecordCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    now = utc_now()
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        record_id = conn.execute(
+            """
+            INSERT INTO rights_records
+            (project_id, rights_type, holder_name, grant_scope, territory, license_language, contract_code, start_date, end_date, status, notes, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                (payload.rights_type or "audiobook").strip() or "audiobook",
+                payload.holder_name.strip(),
+                payload.grant_scope.strip(),
+                payload.territory.strip(),
+                payload.license_language.strip(),
+                payload.contract_code.strip(),
+                payload.start_date.strip(),
+                payload.end_date.strip(),
+                (payload.status or "active").strip() or "active",
+                payload.notes.strip(),
+                now,
+                now,
+            ),
+        ).lastrowid
+        touch_project(conn, project_id, now)
+        row = get_project_owned_row(conn, "rights_records", project_id, record_id, "Rights record")
+        log_activity(conn, user["id"], "rights_record", record_id, "create", payload.holder_name.strip())
+        return {"item": rights_record_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.patch("/api/projects/{project_id}/rights-records/{record_id}")
+def update_rights_record(project_id: int, record_id: int, payload: RightsRecordUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    updates = {key: value for key, value in payload.model_dump().items() if value is not None}
+    if "holder_name" in updates:
+        updates["holder_name"] = updates["holder_name"].strip()
+    with get_conn() as conn:
+        row = update_project_owned_row(conn, "rights_records", project_id, record_id, updates, "Rights record")
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "rights_record", record_id, "update", row["holder_name"])
+        return {"item": rights_record_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.delete("/api/projects/{project_id}/rights-records/{record_id}")
+def delete_rights_record(project_id: int, record_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    with get_conn() as conn:
+        row = get_project_owned_row(conn, "rights_records", project_id, record_id, "Rights record")
+        conn.execute("DELETE FROM rights_records WHERE id = ?", (record_id,))
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "rights_record", record_id, "delete", row["holder_name"])
+        return {"success": True, "summary": project_business_summary(conn, project_id)}
+
+
+@app.post("/api/projects/{project_id}/cost-items")
+def create_cost_item(project_id: int, payload: CostItemCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    now = utc_now()
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        item_id = conn.execute(
+            """
+            INSERT INTO cost_items
+            (project_id, category, vendor_name, description, amount, currency, occurred_on, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                (payload.category or "production").strip() or "production",
+                payload.vendor_name.strip(),
+                payload.description.strip(),
+                round_money(payload.amount),
+                normalize_currency_code(payload.currency),
+                payload.occurred_on.strip(),
+                (payload.status or "booked").strip() or "booked",
+                now,
+                now,
+            ),
+        ).lastrowid
+        touch_project(conn, project_id, now)
+        row = get_project_owned_row(conn, "cost_items", project_id, item_id, "Cost item")
+        log_activity(conn, user["id"], "cost_item", item_id, "create", payload.category.strip())
+        return {"item": cost_item_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.patch("/api/projects/{project_id}/cost-items/{item_id}")
+def update_cost_item(project_id: int, item_id: int, payload: CostItemUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    updates = {key: value for key, value in payload.model_dump().items() if value is not None}
+    if "amount" in updates:
+        updates["amount"] = round_money(updates["amount"])
+    if "currency" in updates:
+        updates["currency"] = normalize_currency_code(updates["currency"])
+    with get_conn() as conn:
+        row = update_project_owned_row(conn, "cost_items", project_id, item_id, updates, "Cost item")
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "cost_item", item_id, "update", row["category"])
+        return {"item": cost_item_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.delete("/api/projects/{project_id}/cost-items/{item_id}")
+def delete_cost_item(project_id: int, item_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    with get_conn() as conn:
+        row = get_project_owned_row(conn, "cost_items", project_id, item_id, "Cost item")
+        conn.execute("DELETE FROM cost_items WHERE id = ?", (item_id,))
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "cost_item", item_id, "delete", row["category"])
+        return {"success": True, "summary": project_business_summary(conn, project_id)}
+
+
+@app.post("/api/projects/{project_id}/distribution-channels")
+def create_distribution_channel(project_id: int, payload: DistributionChannelCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    now = utc_now()
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        channel_id = conn.execute(
+            """
+            INSERT INTO distribution_channels
+            (project_id, channel_name, channel_category, release_format, release_status, price, currency, release_date, external_sku, notes, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                payload.channel_name.strip(),
+                (payload.channel_category or "retail").strip().lower() or "retail",
+                (payload.release_format or "audiobook").strip() or "audiobook",
+                (payload.release_status or "planning").strip() or "planning",
+                round_money(payload.price),
+                normalize_currency_code(payload.currency),
+                payload.release_date.strip(),
+                payload.external_sku.strip(),
+                payload.notes.strip(),
+                now,
+                now,
+            ),
+        ).lastrowid
+        touch_project(conn, project_id, now)
+        row = get_project_owned_row(conn, "distribution_channels", project_id, channel_id, "Distribution channel")
+        log_activity(conn, user["id"], "distribution_channel", channel_id, "create", payload.channel_name.strip())
+        return {"item": distribution_channel_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.patch("/api/projects/{project_id}/distribution-channels/{channel_id}")
+def update_distribution_channel(project_id: int, channel_id: int, payload: DistributionChannelUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    updates = {key: value for key, value in payload.model_dump().items() if value is not None}
+    if "channel_category" in updates:
+        updates["channel_category"] = (updates["channel_category"] or "retail").strip().lower() or "retail"
+    if "price" in updates:
+        updates["price"] = round_money(updates["price"])
+    if "currency" in updates:
+        updates["currency"] = normalize_currency_code(updates["currency"])
+    with get_conn() as conn:
+        row = update_project_owned_row(conn, "distribution_channels", project_id, channel_id, updates, "Distribution channel")
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "distribution_channel", channel_id, "update", row["channel_name"])
+        return {"item": distribution_channel_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.delete("/api/projects/{project_id}/distribution-channels/{channel_id}")
+def delete_distribution_channel(project_id: int, channel_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    with get_conn() as conn:
+        row = get_project_owned_row(conn, "distribution_channels", project_id, channel_id, "Distribution channel")
+        conn.execute("DELETE FROM distribution_channels WHERE id = ?", (channel_id,))
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "distribution_channel", channel_id, "delete", row["channel_name"])
+        return {"success": True, "summary": project_business_summary(conn, project_id)}
+
+
+@app.post("/api/projects/{project_id}/sales-records")
+def create_sales_record(project_id: int, payload: SalesRecordCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    now = utc_now()
+    net_revenue = payload.net_revenue
+    if net_revenue is None:
+        net_revenue = max(0.0, round_money(payload.gross_revenue - payload.refunds))
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        record_id = conn.execute(
+            """
+            INSERT INTO sales_records
+            (project_id, channel_name, channel_category, period_start, period_end, units_sold, gross_revenue, refunds, net_revenue, currency, notes, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                payload.channel_name.strip(),
+                (payload.channel_category or "retail").strip().lower() or "retail",
+                payload.period_start.strip(),
+                payload.period_end.strip(),
+                payload.units_sold,
+                round_money(payload.gross_revenue),
+                round_money(payload.refunds),
+                round_money(net_revenue),
+                normalize_currency_code(payload.currency),
+                payload.notes.strip(),
+                now,
+                now,
+            ),
+        ).lastrowid
+        touch_project(conn, project_id, now)
+        row = get_project_owned_row(conn, "sales_records", project_id, record_id, "Sales record")
+        log_activity(conn, user["id"], "sales_record", record_id, "create", payload.channel_name.strip())
+        return {"item": sales_record_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.patch("/api/projects/{project_id}/sales-records/{record_id}")
+def update_sales_record(project_id: int, record_id: int, payload: SalesRecordUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    updates = {key: value for key, value in payload.model_dump().items() if value is not None}
+    if "channel_category" in updates:
+        updates["channel_category"] = (updates["channel_category"] or "retail").strip().lower() or "retail"
+    if "gross_revenue" in updates:
+        updates["gross_revenue"] = round_money(updates["gross_revenue"])
+    if "refunds" in updates:
+        updates["refunds"] = round_money(updates["refunds"])
+    if "net_revenue" in updates:
+        updates["net_revenue"] = round_money(updates["net_revenue"])
+    if "currency" in updates:
+        updates["currency"] = normalize_currency_code(updates["currency"])
+    with get_conn() as conn:
+        if "net_revenue" not in updates and ("gross_revenue" in updates or "refunds" in updates):
+            current = get_project_owned_row(conn, "sales_records", project_id, record_id, "Sales record")
+            gross = updates.get("gross_revenue", current["gross_revenue"])
+            refunds = updates.get("refunds", current["refunds"])
+            updates["net_revenue"] = round_money(max(0.0, float(gross) - float(refunds)))
+        row = update_project_owned_row(conn, "sales_records", project_id, record_id, updates, "Sales record")
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "sales_record", record_id, "update", row["channel_name"])
+        return {"item": sales_record_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.post("/api/projects/{project_id}/exchange-rates")
+def create_exchange_rate(project_id: int, payload: ExchangeRateCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    now = utc_now()
+    source_currency = normalize_currency_code(payload.source_currency)
+    target_currency = normalize_currency_code(payload.target_currency)
+    if source_currency == target_currency:
+        raise HTTPException(status_code=400, detail="Source and target currency cannot be the same")
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        rate_id = conn.execute(
+            """
+            INSERT INTO exchange_rates
+            (project_id, source_currency, target_currency, rate, effective_date, notes, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                source_currency,
+                target_currency,
+                round_rate(payload.rate),
+                payload.effective_date.strip(),
+                payload.notes.strip(),
+                now,
+                now,
+            ),
+        ).lastrowid
+        touch_project(conn, project_id, now)
+        row = get_project_owned_row(conn, "exchange_rates", project_id, rate_id, "Exchange rate")
+        log_activity(conn, user["id"], "exchange_rate", rate_id, "create", f"{source_currency}->{target_currency}")
+        return {"item": exchange_rate_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.patch("/api/projects/{project_id}/exchange-rates/{rate_id}")
+def update_exchange_rate(project_id: int, rate_id: int, payload: ExchangeRateUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    updates = {key: value for key, value in payload.model_dump().items() if value is not None}
+    if "source_currency" in updates:
+        updates["source_currency"] = normalize_currency_code(updates["source_currency"])
+    if "target_currency" in updates:
+        updates["target_currency"] = normalize_currency_code(updates["target_currency"])
+    if "rate" in updates:
+        updates["rate"] = round_rate(updates["rate"])
+    with get_conn() as conn:
+        row = update_project_owned_row(conn, "exchange_rates", project_id, rate_id, updates, "Exchange rate")
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "exchange_rate", rate_id, "update", f"{row['source_currency']}->{row['target_currency']}")
+        return {"item": exchange_rate_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.delete("/api/projects/{project_id}/exchange-rates/{rate_id}")
+def delete_exchange_rate(project_id: int, rate_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    with get_conn() as conn:
+        row = get_project_owned_row(conn, "exchange_rates", project_id, rate_id, "Exchange rate")
+        conn.execute("DELETE FROM exchange_rates WHERE id = ?", (rate_id,))
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "exchange_rate", rate_id, "delete", f"{row['source_currency']}->{row['target_currency']}")
+        return {"success": True, "summary": project_business_summary(conn, project_id)}
+
+
+@app.delete("/api/projects/{project_id}/sales-records/{record_id}")
+def delete_sales_record(project_id: int, record_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    with get_conn() as conn:
+        row = get_project_owned_row(conn, "sales_records", project_id, record_id, "Sales record")
+        conn.execute("DELETE FROM sales_records WHERE id = ?", (record_id,))
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "sales_record", record_id, "delete", row["channel_name"])
+        return {"success": True, "summary": project_business_summary(conn, project_id)}
+
+
+@app.post("/api/projects/{project_id}/advertiser-deals")
+def create_advertiser_deal(project_id: int, payload: AdvertiserDealCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    now = utc_now()
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        deal_id = conn.execute(
+            """
+            INSERT INTO advertiser_deals
+            (project_id, advertiser_name, campaign_name, contact_name, deliverables, start_date, end_date, contract_amount, settled_amount, currency, status, owner_name, notes, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                payload.advertiser_name.strip(),
+                payload.campaign_name.strip(),
+                payload.contact_name.strip(),
+                payload.deliverables.strip(),
+                payload.start_date.strip(),
+                payload.end_date.strip(),
+                round_money(payload.contract_amount),
+                round_money(payload.settled_amount),
+                normalize_currency_code(payload.currency),
+                (payload.status or "proposal").strip().lower() or "proposal",
+                payload.owner_name.strip(),
+                payload.notes.strip(),
+                now,
+                now,
+            ),
+        ).lastrowid
+        touch_project(conn, project_id, now)
+        row = get_project_owned_row(conn, "advertiser_deals", project_id, deal_id, "Advertiser deal")
+        log_activity(conn, user["id"], "advertiser_deal", deal_id, "create", payload.campaign_name.strip())
+        return {"item": advertiser_deal_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.patch("/api/projects/{project_id}/advertiser-deals/{deal_id}")
+def update_advertiser_deal(project_id: int, deal_id: int, payload: AdvertiserDealUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    updates = {key: value for key, value in payload.model_dump().items() if value is not None}
+    if "contract_amount" in updates:
+        updates["contract_amount"] = round_money(updates["contract_amount"])
+    if "settled_amount" in updates:
+        updates["settled_amount"] = round_money(updates["settled_amount"])
+    if "currency" in updates:
+        updates["currency"] = normalize_currency_code(updates["currency"])
+    if "status" in updates:
+        updates["status"] = (updates["status"] or "proposal").strip().lower() or "proposal"
+    with get_conn() as conn:
+        row = update_project_owned_row(conn, "advertiser_deals", project_id, deal_id, updates, "Advertiser deal")
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "advertiser_deal", deal_id, "update", row["campaign_name"])
+        return {"item": advertiser_deal_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.delete("/api/projects/{project_id}/advertiser-deals/{deal_id}")
+def delete_advertiser_deal(project_id: int, deal_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    with get_conn() as conn:
+        row = get_project_owned_row(conn, "advertiser_deals", project_id, deal_id, "Advertiser deal")
+        conn.execute("DELETE FROM advertiser_deals WHERE id = ?", (deal_id,))
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "advertiser_deal", deal_id, "delete", row["campaign_name"])
+        return {"success": True, "summary": project_business_summary(conn, project_id)}
+
+
+@app.post("/api/projects/{project_id}/business-reports/export")
+def export_business_report(project_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        output_path = generate_business_report_bundle(conn, project_id)
+        report_id = conn.execute(
+            """
+            INSERT INTO business_reports (project_id, report_type, file_path, created_at)
+            VALUES (?, 'business_zip', ?, ?)
+            """,
+            (project_id, str(output_path), utc_now()),
+        ).lastrowid
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "business_report", report_id, "export", str(output_path))
+        report_row = conn.execute("SELECT * FROM business_reports WHERE id = ?", (report_id,)).fetchone()
+        return {"report": business_report_payload(report_row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.post("/api/projects/{project_id}/royalty-statements")
+def create_royalty_statement(project_id: int, payload: RoyaltyStatementCreate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    now = utc_now()
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        statement_id = conn.execute(
+            """
+            INSERT INTO royalty_statements
+            (project_id, payee_name, role_name, basis, rate_percent, amount_due, currency, period_start, period_end, status, notes, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                payload.payee_name.strip(),
+                payload.role_name.strip(),
+                (payload.basis or "net_revenue").strip() or "net_revenue",
+                round_money(payload.rate_percent),
+                round_money(payload.amount_due),
+                normalize_currency_code(payload.currency),
+                payload.period_start.strip(),
+                payload.period_end.strip(),
+                (payload.status or "pending").strip() or "pending",
+                payload.notes.strip(),
+                now,
+                now,
+            ),
+        ).lastrowid
+        touch_project(conn, project_id, now)
+        row = get_project_owned_row(conn, "royalty_statements", project_id, statement_id, "Royalty statement")
+        log_activity(conn, user["id"], "royalty_statement", statement_id, "create", payload.payee_name.strip())
+        return {"item": royalty_statement_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.patch("/api/projects/{project_id}/royalty-statements/{statement_id}")
+def update_royalty_statement(project_id: int, statement_id: int, payload: RoyaltyStatementUpdate, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    updates = {key: value for key, value in payload.model_dump().items() if value is not None}
+    if "rate_percent" in updates:
+        updates["rate_percent"] = round_money(updates["rate_percent"])
+    if "amount_due" in updates:
+        updates["amount_due"] = round_money(updates["amount_due"])
+    if "currency" in updates:
+        updates["currency"] = normalize_currency_code(updates["currency"])
+    with get_conn() as conn:
+        row = update_project_owned_row(conn, "royalty_statements", project_id, statement_id, updates, "Royalty statement")
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "royalty_statement", statement_id, "update", row["payee_name"])
+        return {"item": royalty_statement_payload(row), "summary": project_business_summary(conn, project_id)}
+
+
+@app.delete("/api/projects/{project_id}/royalty-statements/{statement_id}")
+def delete_royalty_statement(project_id: int, statement_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "business_manage")
+    with get_conn() as conn:
+        row = get_project_owned_row(conn, "royalty_statements", project_id, statement_id, "Royalty statement")
+        conn.execute("DELETE FROM royalty_statements WHERE id = ?", (statement_id,))
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "royalty_statement", statement_id, "delete", row["payee_name"])
+        return {"success": True, "summary": project_business_summary(conn, project_id)}
 
 
 @app.patch("/api/projects/{project_id}")
@@ -1581,6 +2602,8 @@ def update_project(project_id: int, payload: ProjectUpdate, user: dict = Depends
         updates["comic_settings"] = json.dumps(merge_settings(updates["comic_settings"], comic_settings_defaults()), ensure_ascii=False)
     if "video_settings" in updates:
         updates["video_settings"] = json.dumps(merge_settings(updates["video_settings"], video_settings_defaults()), ensure_ascii=False)
+    if "business_base_currency" in updates:
+        updates["business_base_currency"] = normalize_currency_code(updates["business_base_currency"])
     updates["updated_at"] = utc_now()
     set_clause = ", ".join(f"{key} = ?" for key in updates)
     params = list(updates.values()) + [project_id]

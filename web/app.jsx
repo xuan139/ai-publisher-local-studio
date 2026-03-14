@@ -636,6 +636,7 @@ const EXACT_TRANSLATIONS = {
 };
 const NAV_ITEMS = [
   { key: "projects", label: "專案" },
+  { key: "business", label: "經營管理" },
   { key: "text", label: "文本準備" },
   { key: "voices", label: "聲線設定" },
   { key: "characters", label: "角色設定" },
@@ -1191,6 +1192,19 @@ function relativeTime(value) {
   return date.toLocaleString(localeCode(), { hour12: false });
 }
 
+function formatMoney(value, currency = "CNY") {
+  const amount = Number(value || 0);
+  try {
+    return new Intl.NumberFormat(localeCode(), {
+      style: "currency",
+      currency: currency || "CNY",
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currency || "CNY"} ${amount.toFixed(2)}`;
+  }
+}
+
 function projectRouteTitle(route) {
   const item = NAV_ITEMS.find((entry) => entry.key === route);
   return item ? translateLiteral(item.label, ACTIVE_LOCALE) : translateLiteral("專案列表", ACTIVE_LOCALE);
@@ -1227,6 +1241,7 @@ function userRoleLabel(value) {
 function preferredProjectEntryRoute(user) {
   return firstAllowedRoute(user, [
     "text",
+    "business",
     "review",
     "export",
     "voices",
@@ -1370,6 +1385,7 @@ function App() {
   const [reviewQueue, setReviewQueue] = useState([]);
   const [renders, setRenders] = useState([]);
   const [exportsList, setExportsList] = useState([]);
+  const [businessData, setBusinessData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [flash, setFlash] = useState(null);
   const [confirmState, setConfirmState] = useState(null);
@@ -1401,6 +1417,7 @@ function App() {
     setReviewQueue([]);
     setRenders([]);
     setExportsList([]);
+    setBusinessData(null);
   }
 
   function requestConfirm(config) {
@@ -1437,7 +1454,8 @@ function App() {
       const canUseGenerate = canAccessRoute(user, "generate");
       const canUseReview = canAccessRoute(user, "review");
       const canUseExport = canAccessRoute(user, "export");
-      const [projectPayload, voicePayload, characterPayload, comicScriptPayload, comicPagePayload, comicProfilePayload, videoPayload, jobsPayload, reviewPayload, exportPayload] = await Promise.all([
+      const canUseBusiness = canAccessRoute(user, "business");
+      const [projectPayload, voicePayload, characterPayload, comicScriptPayload, comicPagePayload, comicProfilePayload, videoPayload, jobsPayload, reviewPayload, exportPayload, businessPayload] = await Promise.all([
         apiFetch(`/api/projects/${projectId}`, { token }),
         canUseTextAssets ? apiFetch(`/api/projects/${projectId}/voice-profiles`, { token }) : Promise.resolve({ items: [] }),
         canUseTextAssets ? apiFetch(`/api/projects/${projectId}/character-profiles`, { token }) : Promise.resolve({ items: [] }),
@@ -1448,6 +1466,7 @@ function App() {
         canUseGenerate ? apiFetch(`/api/projects/${projectId}/jobs`, { token }) : Promise.resolve({ items: [] }),
         canUseReview ? apiFetch(`/api/projects/${projectId}/review-queue`, { token }) : Promise.resolve({ items: [] }),
         canUseExport ? apiFetch(`/api/projects/${projectId}/exports`, { token }) : Promise.resolve({ items: [] }),
+        canUseBusiness ? apiFetch(`/api/projects/${projectId}/business`, { token }) : Promise.resolve(null),
       ]);
       const project = projectPayload.project;
       setProjectDetail(projectPayload);
@@ -1460,6 +1479,7 @@ function App() {
       setJobs(jobsPayload.items || []);
       setReviewQueue(reviewPayload.items || []);
       setExportsList(exportPayload.items || []);
+      setBusinessData(businessPayload);
       const nextChapterId = chapterId || project?.chapters?.[0]?.id || null;
       setSelectedChapterId(nextChapterId);
       if (nextChapterId) {
@@ -1599,7 +1619,7 @@ function App() {
   useEffect(() => {
     if (!user) return;
     if (canAccessRoute(user, route)) return;
-    setRoute(firstAllowedRoute(user, ["projects", "text", "review", "export", "voices", "characters", "settings"]));
+    setRoute(firstAllowedRoute(user, ["projects", "business", "text", "review", "export", "voices", "characters", "settings"]));
   }, [route, user]);
 
   async function handleLogin(form) {
@@ -1726,6 +1746,7 @@ function App() {
             reviewQueue={reviewQueue}
             renders={renders}
             exportsList={exportsList}
+            businessData={businessData}
             user={user}
             refreshProject={refreshProject}
             deleteProject={handleDeleteProject}
@@ -1977,6 +1998,7 @@ function LoginPage({ onLogin, flash, locale, onLocaleChange, demoAccounts = [] }
 function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectProject, user, onLogout, locale, onLocaleChange }) {
   const [openSections, setOpenSections] = useState({
     project: true,
+    business: true,
     audiobook: true,
     comic: true,
     system: false,
@@ -1984,6 +2006,7 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
   });
 
   const projectItem = NAV_ITEMS.find((item) => item.key === "projects");
+  const businessNavItems = NAV_ITEMS.filter((item) => ["business"].includes(item.key) && canAccessRoute(user, item.key));
   const audiobookNavItems = NAV_ITEMS.filter((item) => ["text", "voices", "characters", "generate", "review", "export"].includes(item.key) && canAccessRoute(user, item.key));
   const comicNavItems = NAV_ITEMS.filter((item) => ["comic-script", "storyboard", "panels", "layout", "comic"].includes(item.key) && canAccessRoute(user, item.key));
   const systemNavItems = NAV_ITEMS.filter((item) => ["video", "settings"].includes(item.key) && canAccessRoute(user, item.key));
@@ -2040,6 +2063,30 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
           </div>
         ) : null}
       </div>
+
+      {businessNavItems.length ? (
+        <div className={`sidebar-section ${openSections.business ? "open" : ""}`}>
+          <button className="sidebar-toggle" onClick={() => toggleSection("business")}>
+            <span className="sidebar-toggle-main">
+              <span className="sidebar-label">經營管理</span>
+              <span className="sidebar-hint">權利、成本、渠道、銷售、版稅</span>
+            </span>
+            <span className="sidebar-toggle-meta">
+              <span className="sidebar-meta-text">{businessNavItems.length} 項</span>
+              <span className={`sidebar-chevron ${openSections.business ? "open" : ""}`}>▾</span>
+            </span>
+          </button>
+          {openSections.business ? (
+            <div className="sidebar-section-body">
+              {businessNavItems.map((item) => (
+                <button key={item.key} className={`nav-button ${route === item.key ? "active" : ""}`} onClick={() => onRouteChange(item.key)}>
+                  <span>{projectRouteTitle(item.key)}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {audiobookNavItems.length ? (
         <div className={`sidebar-section ${openSections.audiobook ? "open" : ""}`}>
@@ -2190,6 +2237,7 @@ function PageContent(props) {
     reviewQueue,
     renders,
     exportsList,
+    businessData,
     refreshProject,
     deleteProject,
     onOpenChapter,
@@ -2204,7 +2252,10 @@ function PageContent(props) {
   }
 
   if (route === "projects") {
-    return <ProjectsPage user={user} projects={projects} selectedProject={project} token={token} refreshProject={refreshProject} deleteProject={deleteProject} onSelectProject={onSelectProject} onOpenChapter={onOpenChapter} onOpenProjectText={onOpenProjectText} requestConfirm={requestConfirm} showFlash={showFlash} />;
+    return <ProjectsPage user={user} projects={projects} selectedProject={project} businessData={businessData} token={token} refreshProject={refreshProject} deleteProject={deleteProject} onSelectProject={onSelectProject} onOpenChapter={onOpenChapter} onOpenProjectText={onOpenProjectText} requestConfirm={requestConfirm} showFlash={showFlash} />;
+  }
+  if (route === "business") {
+    return <BusinessPage token={token} project={project} businessData={businessData} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
   }
   if (route === "text") {
     return <TextPrepPage user={user} token={token} project={project} selectedChapter={selectedChapter} selectedChapterId={selectedChapterId} setSelectedChapterId={setSelectedChapterId} segments={segments} voices={voices} characters={characters} jobs={jobs} refreshProject={refreshProject} requestConfirm={requestConfirm} showFlash={showFlash} />;
@@ -2248,7 +2299,7 @@ function PageContent(props) {
   return null;
 }
 
-function ProjectsPage({ user, projects = [], selectedProject, token, refreshProject, deleteProject, onSelectProject, onOpenChapter, onOpenProjectText, requestConfirm, showFlash }) {
+function ProjectsPage({ user, projects = [], selectedProject, businessData, token, refreshProject, deleteProject, onSelectProject, onOpenChapter, onOpenProjectText, requestConfirm, showFlash }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [wizardModalState, setWizardModalState] = useState({ open: false, mode: "paste", projectId: null });
   const primaryRoute = preferredProjectEntryRoute(user);
@@ -2256,7 +2307,9 @@ function ProjectsPage({ user, projects = [], selectedProject, token, refreshProj
   const canDeleteProject = hasPermission(user, "project_delete");
   const canManageText = hasPermission(user, "text_manage");
   const canOpenChapter = canAccessRoute(user, "text") || canAccessRoute(user, "export");
+  const canManageBusiness = canAccessRoute(user, "business");
   const primaryRouteLabel = projectRouteTitle(primaryRoute);
+  const businessSummary = selectedProject?.business_summary || businessData?.summary || null;
 
   function openWizardForProject(projectId, mode = "paste") {
     onSelectProject(projectId);
@@ -2425,7 +2478,36 @@ function ProjectsPage({ user, projects = [], selectedProject, token, refreshProj
                     <div className="eyebrow">畫格</div>
                     <strong>{selectedProject.metrics?.comic_panel_count || 0}</strong>
                   </div>
+                  {canManageBusiness && businessSummary ? (
+                    <>
+                      <div className="metric">
+                        <div className="eyebrow">有效授權</div>
+                        <strong>{businessSummary.active_rights_count || 0}</strong>
+                      </div>
+                      <div className="metric">
+                        <div className="eyebrow">上架渠道</div>
+                        <strong>{businessSummary.live_channel_count || 0}</strong>
+                      </div>
+                      <div className="metric">
+                        <div className="eyebrow">累計營收</div>
+                        <strong style={{ fontSize: 22 }}>{formatMoney(businessSummary.total_sales, businessSummary.base_currency)}</strong>
+                      </div>
+                      <div className="metric">
+                        <div className="eyebrow">估算毛利</div>
+                        <strong style={{ fontSize: 22 }}>{formatMoney(businessSummary.gross_profit, businessSummary.base_currency)}</strong>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
+                {canManageBusiness ? (
+                  <div className="toolbar" style={{ marginTop: 14, marginBottom: 0 }}>
+                    <button className="button-secondary" onClick={async () => {
+                      await onOpenProjectText(selectedProject.id, "business");
+                    }}>
+                      打開經營頁
+                    </button>
+                  </div>
+                ) : null}
               </section>
 
               <section className="panel">
@@ -2489,6 +2571,975 @@ function ProjectsPage({ user, projects = [], selectedProject, token, refreshProj
         showFlash={showFlash}
       />
     </>
+  );
+}
+
+function defaultRightsForm() {
+  return {
+    rights_type: "audiobook",
+    holder_name: "",
+    grant_scope: "",
+    territory: "全球",
+    license_language: "zh-CN",
+    contract_code: "",
+    start_date: "",
+    end_date: "",
+    status: "active",
+    notes: "",
+  };
+}
+
+function defaultChannelForm() {
+  return {
+    channel_name: "",
+    channel_category: "retail",
+    release_format: "audiobook",
+    release_status: "planning",
+    price: "",
+    currency: "CNY",
+    release_date: "",
+    external_sku: "",
+    notes: "",
+  };
+}
+
+function defaultCostForm() {
+  return {
+    category: "production",
+    vendor_name: "",
+    description: "",
+    amount: "",
+    currency: "CNY",
+    occurred_on: "",
+    status: "booked",
+  };
+}
+
+function defaultSalesForm() {
+  return {
+    channel_name: "",
+    channel_category: "retail",
+    period_start: "",
+    period_end: "",
+    units_sold: "",
+    gross_revenue: "",
+    refunds: "",
+    net_revenue: "",
+    currency: "CNY",
+    notes: "",
+  };
+}
+
+function defaultRoyaltyForm() {
+  return {
+    payee_name: "",
+    role_name: "",
+    basis: "net_revenue",
+    rate_percent: "",
+    amount_due: "",
+    currency: "CNY",
+    period_start: "",
+    period_end: "",
+    status: "pending",
+    notes: "",
+  };
+}
+
+function defaultExchangeRateForm(baseCurrency = "CNY") {
+  return {
+    source_currency: "USD",
+    target_currency: baseCurrency || "CNY",
+    rate: "",
+    effective_date: "",
+    notes: "",
+  };
+}
+
+function defaultAdvertiserDealForm() {
+  return {
+    advertiser_name: "",
+    campaign_name: "",
+    contact_name: "",
+    deliverables: "",
+    start_date: "",
+    end_date: "",
+    contract_amount: "",
+    settled_amount: "",
+    currency: "CNY",
+    status: "proposal",
+    owner_name: "",
+    notes: "",
+  };
+}
+
+function BusinessPage({ token, project, businessData, refreshProject, requestConfirm, showFlash }) {
+  const resolvedBaseCurrency = project?.business_base_currency || businessData?.summary?.base_currency || "CNY";
+  const [rightsForm, setRightsForm] = useState(defaultRightsForm());
+  const [channelForm, setChannelForm] = useState(defaultChannelForm());
+  const [costForm, setCostForm] = useState(defaultCostForm());
+  const [salesForm, setSalesForm] = useState(defaultSalesForm());
+  const [royaltyForm, setRoyaltyForm] = useState(defaultRoyaltyForm());
+  const [advertiserDealForm, setAdvertiserDealForm] = useState(defaultAdvertiserDealForm());
+  const [baseCurrency, setBaseCurrency] = useState(resolvedBaseCurrency);
+  const [exchangeRateForm, setExchangeRateForm] = useState(defaultExchangeRateForm(resolvedBaseCurrency));
+  const [editingIds, setEditingIds] = useState({
+    rights: null,
+    channel: null,
+    cost: null,
+    sales: null,
+    royalty: null,
+    exchangeRate: null,
+    advertiserDeal: null,
+  });
+  const [busyKey, setBusyKey] = useState("");
+
+  useEffect(() => {
+    setBaseCurrency(resolvedBaseCurrency);
+    setExchangeRateForm((current) => ({
+      ...current,
+      target_currency: resolvedBaseCurrency,
+    }));
+  }, [resolvedBaseCurrency]);
+
+  useEffect(() => {
+    setEditingIds({
+      rights: null,
+      channel: null,
+      cost: null,
+      sales: null,
+      royalty: null,
+      exchangeRate: null,
+      advertiserDeal: null,
+    });
+    setRightsForm(defaultRightsForm());
+    setChannelForm(defaultChannelForm());
+    setCostForm(defaultCostForm());
+    setSalesForm(defaultSalesForm());
+    setRoyaltyForm(defaultRoyaltyForm());
+    setAdvertiserDealForm(defaultAdvertiserDealForm());
+    setExchangeRateForm(defaultExchangeRateForm(resolvedBaseCurrency));
+  }, [project?.id, resolvedBaseCurrency]);
+
+  if (!project) {
+    return <div className="empty-state">先選取一個專案，再進入經營管理頁。</div>;
+  }
+
+  const summary = businessData?.summary || project?.business_summary || {
+    active_rights_count: 0,
+    live_channel_count: 0,
+    advertiser_channel_count: 0,
+    advertiser_deal_count: 0,
+    total_cost: 0,
+    total_sales: 0,
+    total_royalties: 0,
+    gross_profit: 0,
+    units_sold: 0,
+    advertiser_revenue: 0,
+    advertiser_pipeline: 0,
+    advertiser_settled: 0,
+    base_currency: "CNY",
+    conversion_ready: true,
+    is_multi_currency: false,
+    exchange_rate_count: 0,
+    currency_breakdown: {},
+    unconverted_currency_count: 0,
+    unconverted_currencies: [],
+    last_sales_date: "",
+  };
+  const rightsRecords = businessData?.rights_records || [];
+  const channels = businessData?.distribution_channels || [];
+  const costItems = businessData?.cost_items || [];
+  const salesRecords = businessData?.sales_records || [];
+  const royaltyStatements = businessData?.royalty_statements || [];
+  const exchangeRates = businessData?.exchange_rates || [];
+  const advertiserDeals = businessData?.advertiser_deals || [];
+  const businessReports = businessData?.business_reports || [];
+
+  function updateForm(setter, key, value) {
+    setter((current) => ({ ...current, [key]: value }));
+  }
+
+  function beginEdit(section, setter, item, transform = (value) => value) {
+    setEditingIds((current) => ({ ...current, [section]: item.id }));
+    setter(transform(item));
+  }
+
+  function cancelEdit(section, setter, factory) {
+    setEditingIds((current) => ({ ...current, [section]: null }));
+    setter(factory());
+  }
+
+  async function persistSection({ section, createPath, updatePath, editingId, body, setter, factory, createMessage, updateMessage }) {
+    setBusyKey(section);
+    try {
+      await apiFetch(editingId ? updatePath : createPath, {
+        method: editingId ? "PATCH" : "POST",
+        token,
+        body,
+      });
+      cancelEdit(section, setter, factory);
+      await refreshProject({ projectId: project.id });
+      showFlash("success", editingId ? updateMessage : createMessage);
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function saveBaseCurrency() {
+    setBusyKey("base-currency");
+    try {
+      await apiFetch(`/api/projects/${project.id}/business-base-currency`, {
+        method: "POST",
+        token,
+        body: { business_base_currency: baseCurrency },
+      });
+      await refreshProject({ projectId: project.id });
+      showFlash("success", "基準幣已更新。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function submitRights(event) {
+    event.preventDefault();
+    await persistSection({
+      section: "rights",
+      createPath: `/api/projects/${project.id}/rights-records`,
+      updatePath: `/api/projects/${project.id}/rights-records/${editingIds.rights}`,
+      editingId: editingIds.rights,
+      body: rightsForm,
+      setter: setRightsForm,
+      factory: defaultRightsForm,
+      createMessage: "權利與合同資料已新增。",
+      updateMessage: "權利與合同資料已更新。",
+    });
+  }
+
+  async function submitChannel(event) {
+    event.preventDefault();
+    await persistSection({
+      section: "channel",
+      createPath: `/api/projects/${project.id}/distribution-channels`,
+      updatePath: `/api/projects/${project.id}/distribution-channels/${editingIds.channel}`,
+      editingId: editingIds.channel,
+      body: { ...channelForm, price: Number(channelForm.price || 0) },
+      setter: setChannelForm,
+      factory: defaultChannelForm,
+      createMessage: "發行渠道資料已新增。",
+      updateMessage: "發行渠道資料已更新。",
+    });
+  }
+
+  async function submitCost(event) {
+    event.preventDefault();
+    await persistSection({
+      section: "cost",
+      createPath: `/api/projects/${project.id}/cost-items`,
+      updatePath: `/api/projects/${project.id}/cost-items/${editingIds.cost}`,
+      editingId: editingIds.cost,
+      body: { ...costForm, amount: Number(costForm.amount || 0) },
+      setter: setCostForm,
+      factory: defaultCostForm,
+      createMessage: "成本項目已新增。",
+      updateMessage: "成本項目已更新。",
+    });
+  }
+
+  async function submitSales(event) {
+    event.preventDefault();
+    await persistSection({
+      section: "sales",
+      createPath: `/api/projects/${project.id}/sales-records`,
+      updatePath: `/api/projects/${project.id}/sales-records/${editingIds.sales}`,
+      editingId: editingIds.sales,
+      body: {
+        ...salesForm,
+        units_sold: Number(salesForm.units_sold || 0),
+        gross_revenue: Number(salesForm.gross_revenue || 0),
+        refunds: Number(salesForm.refunds || 0),
+        net_revenue: salesForm.net_revenue === "" ? null : Number(salesForm.net_revenue || 0),
+      },
+      setter: setSalesForm,
+      factory: defaultSalesForm,
+      createMessage: "銷售回傳已新增。",
+      updateMessage: "銷售回傳已更新。",
+    });
+  }
+
+  async function submitRoyalty(event) {
+    event.preventDefault();
+    await persistSection({
+      section: "royalty",
+      createPath: `/api/projects/${project.id}/royalty-statements`,
+      updatePath: `/api/projects/${project.id}/royalty-statements/${editingIds.royalty}`,
+      editingId: editingIds.royalty,
+      body: {
+        ...royaltyForm,
+        rate_percent: Number(royaltyForm.rate_percent || 0),
+        amount_due: Number(royaltyForm.amount_due || 0),
+      },
+      setter: setRoyaltyForm,
+      factory: defaultRoyaltyForm,
+      createMessage: "版稅結算資料已新增。",
+      updateMessage: "版稅結算資料已更新。",
+    });
+  }
+
+  async function submitExchangeRate(event) {
+    event.preventDefault();
+    await persistSection({
+      section: "exchange-rate",
+      createPath: `/api/projects/${project.id}/exchange-rates`,
+      updatePath: `/api/projects/${project.id}/exchange-rates/${editingIds.exchangeRate}`,
+      editingId: editingIds.exchangeRate,
+      body: { ...exchangeRateForm, rate: Number(exchangeRateForm.rate || 0) },
+      setter: setExchangeRateForm,
+      factory: () => defaultExchangeRateForm(baseCurrency),
+      createMessage: "匯率已新增。",
+      updateMessage: "匯率已更新。",
+    });
+  }
+
+  async function submitAdvertiserDeal(event) {
+    event.preventDefault();
+    await persistSection({
+      section: "advertiserDeal",
+      createPath: `/api/projects/${project.id}/advertiser-deals`,
+      updatePath: `/api/projects/${project.id}/advertiser-deals/${editingIds.advertiserDeal}`,
+      editingId: editingIds.advertiserDeal,
+      body: {
+        ...advertiserDealForm,
+        contract_amount: Number(advertiserDealForm.contract_amount || 0),
+        settled_amount: Number(advertiserDealForm.settled_amount || 0),
+      },
+      setter: setAdvertiserDealForm,
+      factory: defaultAdvertiserDealForm,
+      createMessage: "廣告合作已新增。",
+      updateMessage: "廣告合作已更新。",
+    });
+  }
+
+  async function exportBusinessReport() {
+    setBusyKey("business-report");
+    try {
+      const payload = await apiFetch(`/api/projects/${project.id}/business-reports/export`, {
+        method: "POST",
+        token,
+      });
+      await refreshProject({ projectId: project.id });
+      if (payload.report?.file_url) {
+        window.open(payload.report.file_url, "_blank", "noopener,noreferrer");
+      }
+      showFlash("success", "經營報表已匯出。");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  function confirmDelete({ title, message, path, successMessage }) {
+    requestConfirm({
+      title,
+      message,
+      confirmLabel: "刪除",
+      onConfirm: async () => {
+        await apiFetch(path, { method: "DELETE", token });
+        await refreshProject({ projectId: project.id });
+        showFlash("success", successMessage);
+      },
+    });
+  }
+
+  return (
+    <div className="grid">
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>經營總覽</h2>
+            <div className="subtext">把權利、廣告、渠道、成本、銷售、版稅與報表集中在同一頁。</div>
+          </div>
+          <div className="toolbar" style={{ marginBottom: 0 }}>
+            <span className="tag brand">{summary.base_currency || "CNY"}</span>
+            {summary.last_sales_date ? <span className="tag">最近銷售：{summary.last_sales_date}</span> : null}
+            <button className="button-secondary" onClick={exportBusinessReport} disabled={busyKey === "business-report"}>
+              {busyKey === "business-report" ? "匯出中..." : "匯出經營報表"}
+            </button>
+          </div>
+        </div>
+        <div className="metrics">
+          <div className="metric"><div className="eyebrow">有效授權</div><strong>{summary.active_rights_count || 0}</strong></div>
+          <div className="metric"><div className="eyebrow">上架渠道</div><strong>{summary.live_channel_count || 0}</strong></div>
+          <div className="metric"><div className="eyebrow">廣告合作</div><strong>{summary.advertiser_deal_count || 0}</strong></div>
+          <div className="metric"><div className="eyebrow">累計成本</div><strong style={{ fontSize: 22 }}>{formatMoney(summary.total_cost, summary.base_currency)}</strong></div>
+          <div className="metric"><div className="eyebrow">累計營收</div><strong style={{ fontSize: 22 }}>{formatMoney(summary.total_sales, summary.base_currency)}</strong></div>
+          <div className="metric"><div className="eyebrow">版稅應付</div><strong style={{ fontSize: 22 }}>{formatMoney(summary.total_royalties, summary.base_currency)}</strong></div>
+          <div className="metric"><div className="eyebrow">估算毛利</div><strong style={{ fontSize: 22 }}>{formatMoney(summary.gross_profit, summary.base_currency)}</strong></div>
+          <div className="metric"><div className="eyebrow">廣告收入</div><strong style={{ fontSize: 22 }}>{formatMoney(summary.advertiser_revenue, summary.base_currency)}</strong></div>
+          <div className="metric"><div className="eyebrow">廣告簽約額</div><strong style={{ fontSize: 22 }}>{formatMoney(summary.advertiser_pipeline, summary.base_currency)}</strong></div>
+          <div className="metric"><div className="eyebrow">廣告已回款</div><strong style={{ fontSize: 22 }}>{formatMoney(summary.advertiser_settled, summary.base_currency)}</strong></div>
+          <div className="metric"><div className="eyebrow">累計銷量</div><strong>{summary.units_sold || 0}</strong></div>
+          <div className="metric"><div className="eyebrow">匯率筆數</div><strong>{summary.exchange_rate_count || 0}</strong></div>
+        </div>
+        {summary.is_multi_currency ? (
+          <div className="subtext" style={{ marginTop: 12 }}>
+            目前專案已啟用多幣種，總覽金額依 {summary.base_currency || "CNY"} 折算。
+            {summary.conversion_ready
+              ? " 目前所有幣別都有可用匯率。"
+              : ` 尚有 ${summary.unconverted_currency_count || 0} 個幣別缺少匯率：${(summary.unconverted_currencies || []).join("、") || "未提供"}`}
+          </div>
+        ) : null}
+      </section>
+
+      <div className="grid business-layout">
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>多幣種與匯率</h2>
+              <div className="subtext">先設定專案基準幣，再維護匯率，讓營收、成本、版稅都能換算。</div>
+            </div>
+            <span className="tag brand">{exchangeRates.length} 筆</span>
+          </div>
+          <div className="form-grid">
+            <div className="split-layout">
+              <div className="field">
+                <label>專案基準幣</label>
+                <input className="input" value={baseCurrency} onChange={(event) => setBaseCurrency(event.target.value.toUpperCase())} placeholder="CNY / USD / HKD" />
+              </div>
+              <div className="field" style={{ alignContent: "end" }}>
+                <label>&nbsp;</label>
+                <button className="button-secondary" type="button" onClick={saveBaseCurrency} disabled={busyKey === "base-currency"}>
+                  {busyKey === "base-currency" ? "更新中..." : "更新基準幣"}
+                </button>
+              </div>
+            </div>
+            <form className="form-grid" onSubmit={submitExchangeRate}>
+              <div className="split-layout">
+                <div className="field">
+                  <label>來源幣別</label>
+                  <input className="input" value={exchangeRateForm.source_currency} onChange={(event) => updateForm(setExchangeRateForm, "source_currency", event.target.value.toUpperCase())} required />
+                </div>
+                <div className="field">
+                  <label>目標幣別</label>
+                  <input className="input" value={exchangeRateForm.target_currency} onChange={(event) => updateForm(setExchangeRateForm, "target_currency", event.target.value.toUpperCase())} required />
+                </div>
+              </div>
+              <div className="split-layout">
+                <div className="field">
+                  <label>匯率</label>
+                  <input className="input" type="number" step="0.000001" value={exchangeRateForm.rate} onChange={(event) => updateForm(setExchangeRateForm, "rate", event.target.value)} required />
+                </div>
+                <div className="field">
+                  <label>生效日期</label>
+                  <input className="input" type="date" value={exchangeRateForm.effective_date} onChange={(event) => updateForm(setExchangeRateForm, "effective_date", event.target.value)} />
+                </div>
+              </div>
+              <div className="field">
+                <label>備註</label>
+                <input className="input" value={exchangeRateForm.notes} onChange={(event) => updateForm(setExchangeRateForm, "notes", event.target.value)} placeholder="例如：2026 Q1 財務匯率" />
+              </div>
+              <div className="toolbar">
+                <button className="button" type="submit" disabled={busyKey === "exchange-rate"}>{busyKey === "exchange-rate" ? "儲存中..." : (editingIds.exchangeRate ? "更新匯率" : "新增匯率")}</button>
+                {editingIds.exchangeRate ? <button className="button-secondary" type="button" onClick={() => cancelEdit("exchangeRate", setExchangeRateForm, () => defaultExchangeRateForm(baseCurrency))}>取消編輯</button> : null}
+              </div>
+            </form>
+          </div>
+          <div className="list">
+            {exchangeRates.map((item) => (
+              <div key={item.id} className="list-item">
+                <div className="title-row">
+                  <strong>{item.source_currency} -> {item.target_currency} · {item.rate}</strong>
+                  <div className="toolbar" style={{ marginBottom: 0 }}>
+                    <button className="button-flat" onClick={() => beginEdit("exchangeRate", setExchangeRateForm, item, (row) => ({ source_currency: row.source_currency, target_currency: row.target_currency, rate: String(row.rate), effective_date: row.effective_date || "", notes: row.notes || "" }))}>編輯</button>
+                    <button className="button-flat-danger" onClick={() => confirmDelete({
+                      title: "刪除匯率",
+                      message: `確定刪除 ${item.source_currency} -> ${item.target_currency} 的匯率嗎？`,
+                      path: `/api/projects/${project.id}/exchange-rates/${item.id}`,
+                      successMessage: "匯率已刪除。",
+                    })}>刪除</button>
+                  </div>
+                </div>
+                <div className="subtext">{item.effective_date || "未填生效日"} {item.notes ? `· ${item.notes}` : ""}</div>
+              </div>
+            ))}
+            {!exchangeRates.length ? <div className="empty-state">還沒有匯率資料，跨幣種金額將無法折算。</div> : null}
+          </div>
+          {Object.keys(summary.currency_breakdown || {}).length ? (
+            <div className="list" style={{ marginTop: 14 }}>
+              {Object.entries(summary.currency_breakdown).map(([currency, bucket]) => (
+                <div key={currency} className="list-item">
+                  <div className="title-row">
+                    <strong>{currency}</strong>
+                    <span className="tag brand">原始金額彙總</span>
+                  </div>
+                  <div className="subtext" style={{ marginTop: 6 }}>
+                    成本 {formatMoney(bucket.cost, currency)} · 營收 {formatMoney(bucket.sales, currency)} · 版稅 {formatMoney(bucket.royalties, currency)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>廣告合作專區</h2>
+              <div className="subtext">集中管理廣告商、合作檔期、交付內容、簽約額與回款，這裡就是你的廣告台帳。</div>
+            </div>
+            <span className="tag brand">{advertiserDeals.length} 筆</span>
+          </div>
+          <form className="form-grid" onSubmit={submitAdvertiserDeal}>
+            <div className="split-layout">
+              <div className="field">
+                <label>廣告商</label>
+                <input className="input" value={advertiserDealForm.advertiser_name} onChange={(event) => updateForm(setAdvertiserDealForm, "advertiser_name", event.target.value)} placeholder="品牌 / 廣告主" required />
+              </div>
+              <div className="field">
+                <label>合作專案</label>
+                <input className="input" value={advertiserDealForm.campaign_name} onChange={(event) => updateForm(setAdvertiserDealForm, "campaign_name", event.target.value)} placeholder="春季品牌合作 / 書內植入" required />
+              </div>
+            </div>
+            <div className="split-layout">
+              <div className="field">
+                <label>聯絡人</label>
+                <input className="input" value={advertiserDealForm.contact_name} onChange={(event) => updateForm(setAdvertiserDealForm, "contact_name", event.target.value)} placeholder="窗口姓名" />
+              </div>
+              <div className="field">
+                <label>負責人</label>
+                <input className="input" value={advertiserDealForm.owner_name} onChange={(event) => updateForm(setAdvertiserDealForm, "owner_name", event.target.value)} placeholder="內部 PM" />
+              </div>
+            </div>
+            <div className="field">
+              <label>交付內容</label>
+              <input className="input" value={advertiserDealForm.deliverables} onChange={(event) => updateForm(setAdvertiserDealForm, "deliverables", event.target.value)} placeholder="片頭口播、書腰、聯名封面、投放頁" />
+            </div>
+            <div className="split-layout">
+              <div className="field">
+                <label>開始日期</label>
+                <input className="input" type="date" value={advertiserDealForm.start_date} onChange={(event) => updateForm(setAdvertiserDealForm, "start_date", event.target.value)} />
+              </div>
+              <div className="field">
+                <label>結束日期</label>
+                <input className="input" type="date" value={advertiserDealForm.end_date} onChange={(event) => updateForm(setAdvertiserDealForm, "end_date", event.target.value)} />
+              </div>
+            </div>
+            <div className="split-layout">
+              <div className="field">
+                <label>簽約金額</label>
+                <input className="input" type="number" step="0.01" value={advertiserDealForm.contract_amount} onChange={(event) => updateForm(setAdvertiserDealForm, "contract_amount", event.target.value)} placeholder="0.00" />
+              </div>
+              <div className="field">
+                <label>已回款</label>
+                <input className="input" type="number" step="0.01" value={advertiserDealForm.settled_amount} onChange={(event) => updateForm(setAdvertiserDealForm, "settled_amount", event.target.value)} placeholder="0.00" />
+              </div>
+            </div>
+            <div className="split-layout">
+              <div className="field">
+                <label>幣別</label>
+                <input className="input" value={advertiserDealForm.currency} onChange={(event) => updateForm(setAdvertiserDealForm, "currency", event.target.value.toUpperCase())} placeholder="CNY" />
+              </div>
+              <div className="field">
+                <label>狀態</label>
+                <select className="select" value={advertiserDealForm.status} onChange={(event) => updateForm(setAdvertiserDealForm, "status", event.target.value)}>
+                  <option value="proposal">proposal</option>
+                  <option value="negotiating">negotiating</option>
+                  <option value="signed">signed</option>
+                  <option value="running">running</option>
+                  <option value="settled">settled</option>
+                  <option value="closed">closed</option>
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label>備註</label>
+              <input className="input" value={advertiserDealForm.notes} onChange={(event) => updateForm(setAdvertiserDealForm, "notes", event.target.value)} placeholder="例如：需另附品牌审稿" />
+            </div>
+            <div className="toolbar">
+              <button className="button" type="submit" disabled={busyKey === "advertiserDeal"}>{busyKey === "advertiserDeal" ? "儲存中..." : (editingIds.advertiserDeal ? "更新廣告合作" : "新增廣告合作")}</button>
+              {editingIds.advertiserDeal ? <button className="button-secondary" type="button" onClick={() => cancelEdit("advertiserDeal", setAdvertiserDealForm, defaultAdvertiserDealForm)}>取消編輯</button> : null}
+            </div>
+          </form>
+          <div className="list">
+            {advertiserDeals.map((item) => (
+              <div key={item.id} className="list-item">
+                <div className="title-row">
+                  <strong>{item.advertiser_name} · {item.campaign_name}</strong>
+                  <div className="toolbar" style={{ marginBottom: 0 }}>
+                    <span className="tag warn">{item.status}</span>
+                    <button className="button-flat" onClick={() => beginEdit("advertiserDeal", setAdvertiserDealForm, item, (row) => ({ advertiser_name: row.advertiser_name, campaign_name: row.campaign_name, contact_name: row.contact_name || "", deliverables: row.deliverables || "", start_date: row.start_date || "", end_date: row.end_date || "", contract_amount: String(row.contract_amount || ""), settled_amount: String(row.settled_amount || ""), currency: row.currency || "CNY", status: row.status || "proposal", owner_name: row.owner_name || "", notes: row.notes || "" }))}>編輯</button>
+                    <button className="button-flat-danger" onClick={() => confirmDelete({
+                      title: "刪除廣告合作",
+                      message: `確定刪除 ${item.campaign_name} 這筆廣告合作嗎？`,
+                      path: `/api/projects/${project.id}/advertiser-deals/${item.id}`,
+                      successMessage: "廣告合作已刪除。",
+                    })}>刪除</button>
+                  </div>
+                </div>
+                <div className="subtext">{item.start_date || "未填開始"} 至 {item.end_date || "未填結束"} · 負責 {item.owner_name || "未指定"}</div>
+                <div className="subtext" style={{ marginTop: 6 }}>簽約 {formatMoney(item.contract_amount, item.currency)} · 已回款 {formatMoney(item.settled_amount, item.currency)} · 未回款 {formatMoney(item.pending_amount, item.currency)}</div>
+              </div>
+            ))}
+            {!advertiserDeals.length ? <div className="empty-state">還沒有廣告合作資料。</div> : null}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>權利與合同</h2>
+              <div className="subtext">記錄作品是否取得有聲書、漫畫、海外版等權利。</div>
+            </div>
+            <span className="tag brand">{rightsRecords.length} 筆</span>
+          </div>
+          <form className="form-grid" onSubmit={submitRights}>
+            <div className="split-layout">
+              <div className="field"><label>權利類型</label><input className="input" value={rightsForm.rights_type} onChange={(event) => updateForm(setRightsForm, "rights_type", event.target.value)} /></div>
+              <div className="field"><label>權利持有人</label><input className="input" value={rightsForm.holder_name} onChange={(event) => updateForm(setRightsForm, "holder_name", event.target.value)} required /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>授權範圍</label><input className="input" value={rightsForm.grant_scope} onChange={(event) => updateForm(setRightsForm, "grant_scope", event.target.value)} /></div>
+              <div className="field"><label>地區</label><input className="input" value={rightsForm.territory} onChange={(event) => updateForm(setRightsForm, "territory", event.target.value)} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>語言</label><input className="input" value={rightsForm.license_language} onChange={(event) => updateForm(setRightsForm, "license_language", event.target.value)} /></div>
+              <div className="field"><label>合同編號</label><input className="input" value={rightsForm.contract_code} onChange={(event) => updateForm(setRightsForm, "contract_code", event.target.value)} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>開始日期</label><input className="input" type="date" value={rightsForm.start_date} onChange={(event) => updateForm(setRightsForm, "start_date", event.target.value)} /></div>
+              <div className="field"><label>結束日期</label><input className="input" type="date" value={rightsForm.end_date} onChange={(event) => updateForm(setRightsForm, "end_date", event.target.value)} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field">
+                <label>狀態</label>
+                <select className="select" value={rightsForm.status} onChange={(event) => updateForm(setRightsForm, "status", event.target.value)}>
+                  <option value="active">active</option>
+                  <option value="planning">planning</option>
+                  <option value="pending">pending</option>
+                  <option value="expired">expired</option>
+                  <option value="terminated">terminated</option>
+                </select>
+              </div>
+              <div className="field"><label>備註</label><input className="input" value={rightsForm.notes} onChange={(event) => updateForm(setRightsForm, "notes", event.target.value)} /></div>
+            </div>
+            <div className="toolbar">
+              <button className="button" type="submit" disabled={busyKey === "rights"}>{busyKey === "rights" ? "儲存中..." : (editingIds.rights ? "更新權利紀錄" : "新增權利紀錄")}</button>
+              {editingIds.rights ? <button className="button-secondary" type="button" onClick={() => cancelEdit("rights", setRightsForm, defaultRightsForm)}>取消編輯</button> : null}
+            </div>
+          </form>
+          <div className="list">
+            {rightsRecords.map((item) => (
+              <div key={item.id} className="list-item">
+                <div className="title-row">
+                  <strong>{item.rights_type} · {item.holder_name}</strong>
+                  <div className="toolbar" style={{ marginBottom: 0 }}>
+                    <span className={`tag ${item.is_active ? "success" : "warn"}`}>{item.status}</span>
+                    <button className="button-flat" onClick={() => beginEdit("rights", setRightsForm, item, (row) => ({ rights_type: row.rights_type || "audiobook", holder_name: row.holder_name || "", grant_scope: row.grant_scope || "", territory: row.territory || "", license_language: row.license_language || "", contract_code: row.contract_code || "", start_date: row.start_date || "", end_date: row.end_date || "", status: row.status || "active", notes: row.notes || "" }))}>編輯</button>
+                    <button className="button-flat-danger" onClick={() => confirmDelete({
+                      title: "刪除權利紀錄",
+                      message: `確定刪除 ${item.holder_name} 的權利紀錄嗎？`,
+                      path: `/api/projects/${project.id}/rights-records/${item.id}`,
+                      successMessage: "權利紀錄已刪除。",
+                    })}>刪除</button>
+                  </div>
+                </div>
+                <div className="subtext">{item.grant_scope || "未填授權範圍"} · {item.territory || "未填地區"} · {item.license_language || "未填語言"}</div>
+              </div>
+            ))}
+            {!rightsRecords.length ? <div className="empty-state">還沒有權利與合同資料。</div> : null}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>發行渠道</h2>
+              <div className="subtext">追蹤上架平台、廣告商、館配或教育渠道。</div>
+            </div>
+            <span className="tag brand">{channels.length} 筆</span>
+          </div>
+          <form className="form-grid" onSubmit={submitChannel}>
+            <div className="split-layout">
+              <div className="field"><label>渠道名稱</label><input className="input" value={channelForm.channel_name} onChange={(event) => updateForm(setChannelForm, "channel_name", event.target.value)} required /></div>
+              <div className="field">
+                <label>渠道類型</label>
+                <select className="select" value={channelForm.channel_category} onChange={(event) => updateForm(setChannelForm, "channel_category", event.target.value)}>
+                  <option value="retail">零售渠道</option>
+                  <option value="advertiser">廣告商</option>
+                  <option value="platform">平台合作</option>
+                  <option value="library">圖書館</option>
+                  <option value="education">教育機構</option>
+                </select>
+              </div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>格式</label><input className="input" value={channelForm.release_format} onChange={(event) => updateForm(setChannelForm, "release_format", event.target.value)} /></div>
+              <div className="field">
+                <label>狀態</label>
+                <select className="select" value={channelForm.release_status} onChange={(event) => updateForm(setChannelForm, "release_status", event.target.value)}>
+                  <option value="planning">planning</option>
+                  <option value="scheduled">scheduled</option>
+                  <option value="live">live</option>
+                  <option value="paused">paused</option>
+                  <option value="delisted">delisted</option>
+                </select>
+              </div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>上架日期</label><input className="input" type="date" value={channelForm.release_date} onChange={(event) => updateForm(setChannelForm, "release_date", event.target.value)} /></div>
+              <div className="field"><label>售價</label><input className="input" type="number" step="0.01" value={channelForm.price} onChange={(event) => updateForm(setChannelForm, "price", event.target.value)} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>幣別</label><input className="input" value={channelForm.currency} onChange={(event) => updateForm(setChannelForm, "currency", event.target.value.toUpperCase())} /></div>
+              <div className="field"><label>外部 SKU</label><input className="input" value={channelForm.external_sku} onChange={(event) => updateForm(setChannelForm, "external_sku", event.target.value)} /></div>
+            </div>
+            <div className="field"><label>備註</label><input className="input" value={channelForm.notes} onChange={(event) => updateForm(setChannelForm, "notes", event.target.value)} /></div>
+            <div className="toolbar">
+              <button className="button" type="submit" disabled={busyKey === "channel"}>{busyKey === "channel" ? "儲存中..." : (editingIds.channel ? "更新發行渠道" : "新增發行渠道")}</button>
+              {editingIds.channel ? <button className="button-secondary" type="button" onClick={() => cancelEdit("channel", setChannelForm, defaultChannelForm)}>取消編輯</button> : null}
+            </div>
+          </form>
+          <div className="list">
+            {channels.map((item) => (
+              <div key={item.id} className="list-item">
+                <div className="title-row">
+                  <strong>{item.channel_name} · {item.release_format}</strong>
+                  <div className="toolbar" style={{ marginBottom: 0 }}>
+                    <span className={`tag ${item.channel_category === "advertiser" ? "warn" : "brand"}`}>{item.channel_category}</span>
+                    <span className={`tag ${item.is_live ? "success" : "warn"}`}>{item.release_status}</span>
+                    <button className="button-flat" onClick={() => beginEdit("channel", setChannelForm, item, (row) => ({ channel_name: row.channel_name || "", channel_category: row.channel_category || "retail", release_format: row.release_format || "audiobook", release_status: row.release_status || "planning", price: String(row.price || ""), currency: row.currency || "CNY", release_date: row.release_date || "", external_sku: row.external_sku || "", notes: row.notes || "" }))}>編輯</button>
+                    <button className="button-flat-danger" onClick={() => confirmDelete({
+                      title: "刪除發行渠道",
+                      message: `確定刪除 ${item.channel_name} 的渠道資料嗎？`,
+                      path: `/api/projects/${project.id}/distribution-channels/${item.id}`,
+                      successMessage: "發行渠道已刪除。",
+                    })}>刪除</button>
+                  </div>
+                </div>
+                <div className="subtext">{formatMoney(item.price, item.currency)} · {item.release_date || "未排上架日"} {item.external_sku ? `· ${item.external_sku}` : ""}</div>
+              </div>
+            ))}
+            {!channels.length ? <div className="empty-state">還沒有發行渠道資料。</div> : null}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>成本核算</h2>
+              <div className="subtext">補齊模型費、外包、審校、宣傳等成本。</div>
+            </div>
+            <span className="tag brand">{costItems.length} 筆</span>
+          </div>
+          <form className="form-grid" onSubmit={submitCost}>
+            <div className="split-layout">
+              <div className="field"><label>成本類別</label><input className="input" value={costForm.category} onChange={(event) => updateForm(setCostForm, "category", event.target.value)} /></div>
+              <div className="field"><label>供應商或來源</label><input className="input" value={costForm.vendor_name} onChange={(event) => updateForm(setCostForm, "vendor_name", event.target.value)} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>金額</label><input className="input" type="number" step="0.01" value={costForm.amount} onChange={(event) => updateForm(setCostForm, "amount", event.target.value)} required /></div>
+              <div className="field"><label>幣別</label><input className="input" value={costForm.currency} onChange={(event) => updateForm(setCostForm, "currency", event.target.value.toUpperCase())} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>發生日</label><input className="input" type="date" value={costForm.occurred_on} onChange={(event) => updateForm(setCostForm, "occurred_on", event.target.value)} /></div>
+              <div className="field">
+                <label>狀態</label>
+                <select className="select" value={costForm.status} onChange={(event) => updateForm(setCostForm, "status", event.target.value)}>
+                  <option value="booked">booked</option>
+                  <option value="planned">planned</option>
+                  <option value="paid">paid</option>
+                </select>
+              </div>
+            </div>
+            <div className="field"><label>說明</label><input className="input" value={costForm.description} onChange={(event) => updateForm(setCostForm, "description", event.target.value)} /></div>
+            <div className="toolbar">
+              <button className="button" type="submit" disabled={busyKey === "cost"}>{busyKey === "cost" ? "儲存中..." : (editingIds.cost ? "更新成本項目" : "新增成本項目")}</button>
+              {editingIds.cost ? <button className="button-secondary" type="button" onClick={() => cancelEdit("cost", setCostForm, defaultCostForm)}>取消編輯</button> : null}
+            </div>
+          </form>
+          <div className="list">
+            {costItems.map((item) => (
+              <div key={item.id} className="list-item">
+                <div className="title-row">
+                  <strong>{item.category} · {formatMoney(item.amount, item.currency)}</strong>
+                  <div className="toolbar" style={{ marginBottom: 0 }}>
+                    <span className="tag">{item.status}</span>
+                    <button className="button-flat" onClick={() => beginEdit("cost", setCostForm, item, (row) => ({ category: row.category || "production", vendor_name: row.vendor_name || "", description: row.description || "", amount: String(row.amount || ""), currency: row.currency || "CNY", occurred_on: row.occurred_on || "", status: row.status || "booked" }))}>編輯</button>
+                    <button className="button-flat-danger" onClick={() => confirmDelete({
+                      title: "刪除成本項目",
+                      message: `確定刪除 ${item.category} 成本嗎？`,
+                      path: `/api/projects/${project.id}/cost-items/${item.id}`,
+                      successMessage: "成本項目已刪除。",
+                    })}>刪除</button>
+                  </div>
+                </div>
+                <div className="subtext">{item.vendor_name || "未填來源"} · {item.occurred_on || "未填日期"}</div>
+                {item.description ? <div className="subtext" style={{ marginTop: 6 }}>{item.description}</div> : null}
+              </div>
+            ))}
+            {!costItems.length ? <div className="empty-state">還沒有成本項目。</div> : null}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>銷售回傳</h2>
+              <div className="subtext">可記錄零售、廣告、館配或教育採購收入。</div>
+            </div>
+            <span className="tag brand">{salesRecords.length} 筆</span>
+          </div>
+          <form className="form-grid" onSubmit={submitSales}>
+            <div className="split-layout">
+              <div className="field"><label>渠道名稱</label><input className="input" value={salesForm.channel_name} onChange={(event) => updateForm(setSalesForm, "channel_name", event.target.value)} required /></div>
+              <div className="field">
+                <label>收入類型</label>
+                <select className="select" value={salesForm.channel_category} onChange={(event) => updateForm(setSalesForm, "channel_category", event.target.value)}>
+                  <option value="retail">零售銷售</option>
+                  <option value="advertiser">廣告 / 贊助</option>
+                  <option value="platform">平台合作</option>
+                  <option value="library">館配</option>
+                  <option value="education">教育採購</option>
+                </select>
+              </div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>銷量</label><input className="input" type="number" step="1" value={salesForm.units_sold} onChange={(event) => updateForm(setSalesForm, "units_sold", event.target.value)} /></div>
+              <div className="field"><label>期間開始</label><input className="input" type="date" value={salesForm.period_start} onChange={(event) => updateForm(setSalesForm, "period_start", event.target.value)} /></div>
+              <div className="field"><label>期間結束</label><input className="input" type="date" value={salesForm.period_end} onChange={(event) => updateForm(setSalesForm, "period_end", event.target.value)} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>毛營收</label><input className="input" type="number" step="0.01" value={salesForm.gross_revenue} onChange={(event) => updateForm(setSalesForm, "gross_revenue", event.target.value)} /></div>
+              <div className="field"><label>退款</label><input className="input" type="number" step="0.01" value={salesForm.refunds} onChange={(event) => updateForm(setSalesForm, "refunds", event.target.value)} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>淨營收</label><input className="input" type="number" step="0.01" value={salesForm.net_revenue} onChange={(event) => updateForm(setSalesForm, "net_revenue", event.target.value)} placeholder="留空則自動計算" /></div>
+              <div className="field"><label>幣別</label><input className="input" value={salesForm.currency} onChange={(event) => updateForm(setSalesForm, "currency", event.target.value.toUpperCase())} /></div>
+            </div>
+            <div className="field"><label>備註</label><input className="input" value={salesForm.notes} onChange={(event) => updateForm(setSalesForm, "notes", event.target.value)} /></div>
+            <div className="toolbar">
+              <button className="button" type="submit" disabled={busyKey === "sales"}>{busyKey === "sales" ? "儲存中..." : (editingIds.sales ? "更新銷售紀錄" : "新增銷售紀錄")}</button>
+              {editingIds.sales ? <button className="button-secondary" type="button" onClick={() => cancelEdit("sales", setSalesForm, defaultSalesForm)}>取消編輯</button> : null}
+            </div>
+          </form>
+          <div className="list">
+            {salesRecords.map((item) => (
+              <div key={item.id} className="list-item">
+                <div className="title-row">
+                  <strong>{item.channel_name} · {item.units_sold || 0} 份</strong>
+                  <div className="toolbar" style={{ marginBottom: 0 }}>
+                    <span className={`tag ${item.channel_category === "advertiser" ? "warn" : "brand"}`}>{item.channel_category}</span>
+                    <button className="button-flat" onClick={() => beginEdit("sales", setSalesForm, item, (row) => ({ channel_name: row.channel_name || "", channel_category: row.channel_category || "retail", period_start: row.period_start || "", period_end: row.period_end || "", units_sold: String(row.units_sold || ""), gross_revenue: String(row.gross_revenue || ""), refunds: String(row.refunds || ""), net_revenue: String(row.net_revenue || ""), currency: row.currency || "CNY", notes: row.notes || "" }))}>編輯</button>
+                    <button className="button-flat-danger" onClick={() => confirmDelete({
+                      title: "刪除銷售紀錄",
+                      message: `確定刪除 ${item.channel_name} 的銷售資料嗎？`,
+                      path: `/api/projects/${project.id}/sales-records/${item.id}`,
+                      successMessage: "銷售紀錄已刪除。",
+                    })}>刪除</button>
+                  </div>
+                </div>
+                <div className="subtext">{item.period_start || "未填開始"} 至 {item.period_end || "未填結束"} · 淨營收 {formatMoney(item.net_revenue, item.currency)}</div>
+              </div>
+            ))}
+            {!salesRecords.length ? <div className="empty-state">還沒有銷售回傳資料。</div> : null}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>版稅與分成</h2>
+              <div className="subtext">管理作者、配音、畫師等合作方應付金額。</div>
+            </div>
+            <span className="tag brand">{royaltyStatements.length} 筆</span>
+          </div>
+          <form className="form-grid" onSubmit={submitRoyalty}>
+            <div className="split-layout">
+              <div className="field"><label>收款對象</label><input className="input" value={royaltyForm.payee_name} onChange={(event) => updateForm(setRoyaltyForm, "payee_name", event.target.value)} required /></div>
+              <div className="field"><label>角色</label><input className="input" value={royaltyForm.role_name} onChange={(event) => updateForm(setRoyaltyForm, "role_name", event.target.value)} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>計算基礎</label><input className="input" value={royaltyForm.basis} onChange={(event) => updateForm(setRoyaltyForm, "basis", event.target.value)} /></div>
+              <div className="field"><label>比例 %</label><input className="input" type="number" step="0.01" value={royaltyForm.rate_percent} onChange={(event) => updateForm(setRoyaltyForm, "rate_percent", event.target.value)} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>應付金額</label><input className="input" type="number" step="0.01" value={royaltyForm.amount_due} onChange={(event) => updateForm(setRoyaltyForm, "amount_due", event.target.value)} /></div>
+              <div className="field"><label>幣別</label><input className="input" value={royaltyForm.currency} onChange={(event) => updateForm(setRoyaltyForm, "currency", event.target.value.toUpperCase())} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field"><label>期間開始</label><input className="input" type="date" value={royaltyForm.period_start} onChange={(event) => updateForm(setRoyaltyForm, "period_start", event.target.value)} /></div>
+              <div className="field"><label>期間結束</label><input className="input" type="date" value={royaltyForm.period_end} onChange={(event) => updateForm(setRoyaltyForm, "period_end", event.target.value)} /></div>
+            </div>
+            <div className="split-layout">
+              <div className="field">
+                <label>狀態</label>
+                <select className="select" value={royaltyForm.status} onChange={(event) => updateForm(setRoyaltyForm, "status", event.target.value)}>
+                  <option value="pending">pending</option>
+                  <option value="approved">approved</option>
+                  <option value="paid">paid</option>
+                </select>
+              </div>
+              <div className="field"><label>備註</label><input className="input" value={royaltyForm.notes} onChange={(event) => updateForm(setRoyaltyForm, "notes", event.target.value)} /></div>
+            </div>
+            <div className="toolbar">
+              <button className="button" type="submit" disabled={busyKey === "royalty"}>{busyKey === "royalty" ? "儲存中..." : (editingIds.royalty ? "更新版稅紀錄" : "新增版稅紀錄")}</button>
+              {editingIds.royalty ? <button className="button-secondary" type="button" onClick={() => cancelEdit("royalty", setRoyaltyForm, defaultRoyaltyForm)}>取消編輯</button> : null}
+            </div>
+          </form>
+          <div className="list">
+            {royaltyStatements.map((item) => (
+              <div key={item.id} className="list-item">
+                <div className="title-row">
+                  <strong>{item.payee_name} · {formatMoney(item.amount_due, item.currency)}</strong>
+                  <div className="toolbar" style={{ marginBottom: 0 }}>
+                    <span className="tag">{item.status}</span>
+                    <button className="button-flat" onClick={() => beginEdit("royalty", setRoyaltyForm, item, (row) => ({ payee_name: row.payee_name || "", role_name: row.role_name || "", basis: row.basis || "net_revenue", rate_percent: String(row.rate_percent || ""), amount_due: String(row.amount_due || ""), currency: row.currency || "CNY", period_start: row.period_start || "", period_end: row.period_end || "", status: row.status || "pending", notes: row.notes || "" }))}>編輯</button>
+                    <button className="button-flat-danger" onClick={() => confirmDelete({
+                      title: "刪除版稅紀錄",
+                      message: `確定刪除 ${item.payee_name} 的版稅資料嗎？`,
+                      path: `/api/projects/${project.id}/royalty-statements/${item.id}`,
+                      successMessage: "版稅紀錄已刪除。",
+                    })}>刪除</button>
+                  </div>
+                </div>
+                <div className="subtext">{item.role_name || "未填角色"} · {item.basis || "未填基礎"} · {item.rate_percent || 0}%</div>
+              </div>
+            ))}
+            {!royaltyStatements.length ? <div className="empty-state">還沒有版稅與分成資料。</div> : null}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>經營報表</h2>
+              <div className="subtext">匯出 ZIP，內含經營總覽 HTML、JSON 與各類 CSV，可直接交給財務或商務同事。</div>
+            </div>
+            <span className="tag brand">{businessReports.length} 筆</span>
+          </div>
+          <div className="toolbar">
+            <button className="button" onClick={exportBusinessReport} disabled={busyKey === "business-report"}>
+              {busyKey === "business-report" ? "匯出中..." : "立即匯出報表 ZIP"}
+            </button>
+          </div>
+          <div className="list">
+            {businessReports.map((item) => (
+              <div key={item.id} className="list-item">
+                <div className="title-row">
+                  <strong>{item.file_name || item.report_type}</strong>
+                  <span className="tag brand">{relativeTime(item.created_at)}</span>
+                </div>
+                <div className="subtext" style={{ marginTop: 6 }}>{item.report_type}</div>
+                {item.file_url ? (
+                  <a className="button-secondary" href={item.file_url} download style={{ display: "inline-flex", marginTop: 10 }}>
+                    下載報表 ZIP
+                  </a>
+                ) : null}
+              </div>
+            ))}
+            {!businessReports.length ? <div className="empty-state">還沒有經營報表匯出紀錄。</div> : null}
+          </div>
+        </section>
+      </div>
+    </div>
   );
 }
 

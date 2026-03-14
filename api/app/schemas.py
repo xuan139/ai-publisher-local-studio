@@ -28,6 +28,7 @@ class ProjectUpdate(BaseModel):
     video_settings: dict | None = None
     status: str | None = None
     default_voice_profile_id: int | None = None
+    business_base_currency: str | None = None
 
 
 class ProjectImportLocalRequest(BaseModel):
@@ -42,6 +43,178 @@ class ProjectPasteImportRequest(BaseModel):
 class ProjectChapterCreate(BaseModel):
     title: str = Field(min_length=1)
     body: str = Field(min_length=1)
+
+
+class BusinessBaseCurrencyUpdate(BaseModel):
+    business_base_currency: str = Field(min_length=3)
+
+
+class RightsRecordCreate(BaseModel):
+    rights_type: str = "audiobook"
+    holder_name: str = Field(min_length=1)
+    grant_scope: str = ""
+    territory: str = ""
+    license_language: str = ""
+    contract_code: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    status: str = "active"
+    notes: str = ""
+
+
+class RightsRecordUpdate(BaseModel):
+    rights_type: str | None = None
+    holder_name: str | None = None
+    grant_scope: str | None = None
+    territory: str | None = None
+    license_language: str | None = None
+    contract_code: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+class CostItemCreate(BaseModel):
+    category: str = "production"
+    vendor_name: str = ""
+    description: str = ""
+    amount: float = Field(ge=0)
+    currency: str = "CNY"
+    occurred_on: str = ""
+    status: str = "booked"
+
+
+class CostItemUpdate(BaseModel):
+    category: str | None = None
+    vendor_name: str | None = None
+    description: str | None = None
+    amount: float | None = Field(default=None, ge=0)
+    currency: str | None = None
+    occurred_on: str | None = None
+    status: str | None = None
+
+
+class DistributionChannelCreate(BaseModel):
+    channel_name: str = Field(min_length=1)
+    channel_category: str = "retail"
+    release_format: str = "audiobook"
+    release_status: str = "planning"
+    price: float = Field(default=0, ge=0)
+    currency: str = "CNY"
+    release_date: str = ""
+    external_sku: str = ""
+    notes: str = ""
+
+
+class DistributionChannelUpdate(BaseModel):
+    channel_name: str | None = None
+    channel_category: str | None = None
+    release_format: str | None = None
+    release_status: str | None = None
+    price: float | None = Field(default=None, ge=0)
+    currency: str | None = None
+    release_date: str | None = None
+    external_sku: str | None = None
+    notes: str | None = None
+
+
+class SalesRecordCreate(BaseModel):
+    channel_name: str = Field(min_length=1)
+    channel_category: str = "retail"
+    period_start: str = ""
+    period_end: str = ""
+    units_sold: int = Field(default=0, ge=0)
+    gross_revenue: float = Field(default=0, ge=0)
+    refunds: float = Field(default=0, ge=0)
+    net_revenue: float | None = Field(default=None, ge=0)
+    currency: str = "CNY"
+    notes: str = ""
+
+
+class SalesRecordUpdate(BaseModel):
+    channel_name: str | None = None
+    channel_category: str | None = None
+    period_start: str | None = None
+    period_end: str | None = None
+    units_sold: int | None = Field(default=None, ge=0)
+    gross_revenue: float | None = Field(default=None, ge=0)
+    refunds: float | None = Field(default=None, ge=0)
+    net_revenue: float | None = Field(default=None, ge=0)
+    currency: str | None = None
+    notes: str | None = None
+
+
+class RoyaltyStatementCreate(BaseModel):
+    payee_name: str = Field(min_length=1)
+    role_name: str = ""
+    basis: str = "net_revenue"
+    rate_percent: float = Field(default=0, ge=0)
+    amount_due: float = Field(default=0, ge=0)
+    currency: str = "CNY"
+    period_start: str = ""
+    period_end: str = ""
+    status: str = "pending"
+    notes: str = ""
+
+
+class RoyaltyStatementUpdate(BaseModel):
+    payee_name: str | None = None
+    role_name: str | None = None
+    basis: str | None = None
+    rate_percent: float | None = Field(default=None, ge=0)
+    amount_due: float | None = Field(default=None, ge=0)
+    currency: str | None = None
+    period_start: str | None = None
+    period_end: str | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+class ExchangeRateCreate(BaseModel):
+    source_currency: str = Field(min_length=3)
+    target_currency: str = Field(min_length=3)
+    rate: float = Field(gt=0)
+    effective_date: str = ""
+    notes: str = ""
+
+
+class ExchangeRateUpdate(BaseModel):
+    source_currency: str | None = None
+    target_currency: str | None = None
+    rate: float | None = Field(default=None, gt=0)
+    effective_date: str | None = None
+    notes: str | None = None
+
+
+class AdvertiserDealCreate(BaseModel):
+    advertiser_name: str = Field(min_length=1)
+    campaign_name: str = Field(min_length=1)
+    contact_name: str = ""
+    deliverables: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    contract_amount: float = Field(default=0, ge=0)
+    settled_amount: float = Field(default=0, ge=0)
+    currency: str = "CNY"
+    status: str = "proposal"
+    owner_name: str = ""
+    notes: str = ""
+
+
+class AdvertiserDealUpdate(BaseModel):
+    advertiser_name: str | None = None
+    campaign_name: str | None = None
+    contact_name: str | None = None
+    deliverables: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    contract_amount: float | None = Field(default=None, ge=0)
+    settled_amount: float | None = Field(default=None, ge=0)
+    currency: str | None = None
+    status: str | None = None
+    owner_name: str | None = None
+    notes: str | None = None
 
 
 class SegmentUpdate(BaseModel):
