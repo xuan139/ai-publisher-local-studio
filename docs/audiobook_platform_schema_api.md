@@ -51,8 +51,35 @@
 - 支持手动新增自定义章节
 - 导入完成后会保存完整整书 `source_book.txt`
 - project payload 会补充：
+  - `cover_url`
   - `source_book_url`
   - `source_book_name`
+
+当前经营管理实现补充：
+
+- projects 已支持：
+  - `business_base_currency`
+  - `cover_path`
+- 已落地经营实体：
+  - `rights_records`
+  - `cost_items`
+  - `distribution_channels`
+  - `sales_records`
+  - `royalty_statements`
+  - `exchange_rates`
+  - `advertiser_deals`
+  - `business_reports`
+- 已落地经营接口：
+  - `GET /api/projects/{project_id}/business`
+  - `POST /api/projects/{project_id}/business-base-currency`
+  - `POST/PATCH/DELETE /api/projects/{project_id}/rights-records/*`
+  - `POST/PATCH/DELETE /api/projects/{project_id}/cost-items/*`
+  - `POST/PATCH/DELETE /api/projects/{project_id}/distribution-channels/*`
+  - `POST/PATCH/DELETE /api/projects/{project_id}/sales-records/*`
+  - `POST/PATCH/DELETE /api/projects/{project_id}/royalty-statements/*`
+  - `POST/PATCH/DELETE /api/projects/{project_id}/exchange-rates/*`
+  - `POST/PATCH/DELETE /api/projects/{project_id}/advertiser-deals/*`
+  - `POST /api/projects/{project_id}/business-reports/export`
 
 说明：
 
@@ -109,11 +136,13 @@
 | title | varchar | 书名 |
 | author | varchar | 作者 |
 | language | varchar | 语言 |
+| description | text | 书介简介 |
 | source_type | varchar | txt/md/docx/imported |
 | status | varchar | draft/active/archived |
 | default_voice_profile_id | uuid fk | 默认 voice |
 | default_provider | varchar | elevenlabs/openai |
 | cover_url | text | 封面地址 |
+| business_base_currency | text | 经营基准币 |
 | metadata | jsonb | 扩展元数据 |
 | created_by | uuid fk | 创建人 |
 | created_at | timestamptz | 创建时间 |
@@ -643,6 +672,79 @@ Local Studio 当前实现补充：
 ### GET `/exports/:exportTaskId`
 
 查询导出任务。
+
+## 6.8 經營管理
+
+### GET `/books/:bookId/business`
+
+获取经营管理聚合信息。
+
+Local Studio 当前实现补充：
+
+- 当前接口为 `GET /api/projects/{project_id}/business`
+- 返回内容包括：
+  - `summary`
+  - `rights_records`
+  - `distribution_channels`
+  - `cost_items`
+  - `sales_records`
+  - `royalty_statements`
+  - `exchange_rates`
+  - `advertiser_deals`
+  - `business_reports`
+
+### POST `/books/:bookId/business/base-currency`
+
+更新经营基准币。
+
+Local Studio 当前实现补充：
+
+- 当前接口为 `POST /api/projects/{project_id}/business-base-currency`
+- 请求体示例：
+
+```json
+{
+  "business_base_currency": "CNY"
+}
+```
+
+### POST `/books/:bookId/business/reports/export`
+
+导出经营报表。
+
+Local Studio 当前实现补充：
+
+- 当前接口为 `POST /api/projects/{project_id}/business-reports/export`
+- 当前导出物为 ZIP，内含：
+  - `business_report.html`
+  - `summary.json`
+  - `full_payload.json`
+  - `rights_records.csv`
+  - `distribution_channels.csv`
+  - `cost_items.csv`
+  - `sales_records.csv`
+  - `royalty_statements.csv`
+  - `exchange_rates.csv`
+  - `advertiser_deals.csv`
+
+### 经营子对象接口
+
+Local Studio 当前实现补充：
+
+- 权利与合同：
+  - `POST/PATCH/DELETE /api/projects/{project_id}/rights-records/*`
+- 发行渠道：
+  - `POST/PATCH/DELETE /api/projects/{project_id}/distribution-channels/*`
+- 成本核算：
+  - `POST/PATCH/DELETE /api/projects/{project_id}/cost-items/*`
+- 销售回传：
+  - `POST/PATCH/DELETE /api/projects/{project_id}/sales-records/*`
+- 版税与分成：
+  - `POST/PATCH/DELETE /api/projects/{project_id}/royalty-statements/*`
+- 汇率：
+  - `POST/PATCH/DELETE /api/projects/{project_id}/exchange-rates/*`
+- 广告合作：
+  - `POST/PATCH/DELETE /api/projects/{project_id}/advertiser-deals/*`
 
 ## 7. Webhook 与后台任务建议
 

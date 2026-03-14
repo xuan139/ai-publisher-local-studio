@@ -2350,10 +2350,16 @@ function ProjectsPage({ user, projects = [], selectedProject, businessData, toke
                 {projects.map((project) => (
                   <tr key={project.id}>
                     <td>
-                      <button className="text-action" onClick={() => onSelectProject(project.id)}>
-                        {project.title}
-                      </button>
-                      <div className="subtext">{project.author || "未填作者"} · {projectTypeLabel(project.project_type)}</div>
+                      <div className="project-row-meta">
+                        {project.cover_url ? <img className="project-row-cover" src={project.cover_url} alt={`${project.title} 封面`} /> : <div className="project-row-cover project-row-cover-fallback">{project.title.slice(0, 2)}</div>}
+                        <div className="grid" style={{ gap: 6 }}>
+                          <button className="text-action" onClick={() => onSelectProject(project.id)}>
+                            {project.title}
+                          </button>
+                          <div className="subtext">{project.author || "未填作者"} · {projectTypeLabel(project.project_type)}</div>
+                          {project.description ? <div className="subtext clamp-2">{project.description}</div> : null}
+                        </div>
+                      </div>
                     </td>
                     <td>{project.language}</td>
                     <td>{project.metrics?.chapter_count || 0}</td>
@@ -2451,6 +2457,19 @@ function ProjectsPage({ user, projects = [], selectedProject, businessData, toke
                       </button>
                     ) : null}
                     <span className="tag brand">{statusLabel(selectedProject.status)}</span>
+                  </div>
+                </div>
+                <div className="project-hero-card">
+                  {selectedProject.cover_url ? (
+                    <img className="project-hero-cover" src={selectedProject.cover_url} alt={`${selectedProject.title} 封面`} />
+                  ) : (
+                    <div className="project-hero-cover project-hero-cover-fallback">{selectedProject.title.slice(0, 2)}</div>
+                  )}
+                  <div className="grid" style={{ gap: 12 }}>
+                    <div className="eyebrow">Book Intro</div>
+                    <div className="project-hero-description">
+                      {selectedProject.description || "這個專案尚未填寫簡介，可以在建立專案時補上內容。"}
+                    </div>
                   </div>
                 </div>
                 <div className="metrics">

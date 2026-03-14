@@ -294,6 +294,7 @@ def project_payload(conn: sqlite3.Connection, row: sqlite3.Row, *, include_busin
     project["video_settings"] = merge_settings(project.get("video_settings"), video_settings_defaults())
     project["metrics"] = project_metrics(conn, row["id"])
     project["business_summary"] = project_business_summary(conn, row["id"]) if include_business else None
+    project["cover_url"] = public_file_path(project["cover_path"]) if project.get("cover_path") else ""
     source_book_path = project_source_book_path(row["id"])
     project["source_book_url"] = public_file_path(source_book_path) if source_book_path.exists() else ""
     project["source_book_name"] = SOURCE_BOOK_FILENAME if source_book_path.exists() else ""
@@ -2624,6 +2625,7 @@ def delete_project(project_id: int, user: dict = Depends(get_current_user)) -> d
         GENERATED_DIR / "exports" / f"project_{project_id}",
         GENERATED_DIR / "characters" / f"project_{project_id}",
         GENERATED_DIR / "comic" / f"project_{project_id}",
+        GENERATED_DIR / "covers" / f"project_{project_id}",
     ]
     with get_conn() as conn:
         project = dict(get_project(conn, project_id))

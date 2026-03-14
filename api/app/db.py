@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS projects (
   author TEXT NOT NULL DEFAULT '',
   language TEXT NOT NULL DEFAULT 'zh-CN',
   description TEXT NOT NULL DEFAULT '',
+  cover_path TEXT NOT NULL DEFAULT '',
   project_type TEXT NOT NULL DEFAULT 'audiobook',
   business_base_currency TEXT NOT NULL DEFAULT 'CNY',
   comic_settings TEXT NOT NULL DEFAULT '{}',
@@ -476,6 +477,7 @@ def init_db() -> None:
         conn.executescript(SCHEMA)
         ensure_user_role_column(conn)
         ensure_project_type_column(conn)
+        ensure_project_cover_column(conn)
         ensure_project_setting_columns(conn)
         ensure_project_business_columns(conn)
         ensure_segment_character_column(conn)
@@ -498,6 +500,12 @@ def ensure_project_type_column(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(projects)").fetchall()}
     if "project_type" not in columns:
         conn.execute("ALTER TABLE projects ADD COLUMN project_type TEXT NOT NULL DEFAULT 'audiobook'")
+
+
+def ensure_project_cover_column(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(projects)").fetchall()}
+    if "cover_path" not in columns:
+        conn.execute("ALTER TABLE projects ADD COLUMN cover_path TEXT NOT NULL DEFAULT ''")
 
 
 def ensure_project_setting_columns(conn: sqlite3.Connection) -> None:
