@@ -222,6 +222,45 @@ class SegmentUpdate(BaseModel):
     status: str | None = None
     voice_profile_id: int | None = None
     character_profile_id: int | None = None
+    revision_note: str = ""
+
+
+class SegmentAnnotationCreate(BaseModel):
+    note_type: str = "comment"
+    anchor_text: str = ""
+    content: str = Field(min_length=1)
+    suggested_text: str = ""
+
+
+class SegmentAnnotationUpdate(BaseModel):
+    note_type: str | None = None
+    anchor_text: str | None = None
+    content: str | None = None
+    suggested_text: str | None = None
+    status: str | None = None
+
+
+class EditorTermCreate(BaseModel):
+    entry_type: str = "glossary"
+    term: str = Field(min_length=1)
+    preferred_text: str = ""
+    spoken_form: str = ""
+    description: str = ""
+    notes: str = ""
+
+
+class EditorTermUpdate(BaseModel):
+    entry_type: str | None = None
+    term: str | None = None
+    preferred_text: str | None = None
+    spoken_form: str | None = None
+    description: str | None = None
+    notes: str | None = None
+
+
+class ChapterVersionCreate(BaseModel):
+    summary: str = ""
+    source: str = "manual"
 
 
 class VoiceProfileCreate(BaseModel):

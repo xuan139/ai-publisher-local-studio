@@ -55,6 +55,11 @@ button {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 278px 1fr;
+  transition: grid-template-columns 220ms ease;
+}
+
+.app-shell.sidebar-hidden {
+  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 .sidebar {
@@ -68,6 +73,15 @@ button {
   flex-direction: column;
   gap: 16px;
   backdrop-filter: blur(18px);
+  transition: transform 220ms ease, opacity 180ms ease, padding 220ms ease;
+}
+
+.sidebar.hidden {
+  transform: translateX(-110%);
+  opacity: 0;
+  pointer-events: none;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .brand-box {
@@ -353,6 +367,7 @@ button {
   display: grid;
   grid-template-rows: auto 1fr;
   gap: 18px;
+  min-width: 0;
 }
 
 .topbar {
@@ -366,6 +381,14 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.8);
 }
 
+.topbar-left {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  min-width: 0;
+}
+
 .topbar h1 {
   margin: 4px 0 6px;
   font-family: var(--serif);
@@ -373,8 +396,34 @@ button {
   line-height: 1;
 }
 
+.sidebar-visibility-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.sidebar-visibility-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
 .topbar-actions {
   display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.topbar-right {
+  display: grid;
+  justify-items: end;
+  gap: 12px;
+}
+
+.topbar-session {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -432,6 +481,8 @@ button {
 
 .page-content {
   min-height: 0;
+  display: grid;
+  align-content: start;
 }
 
 .grid {
@@ -441,10 +492,17 @@ button {
 
 .grid.projects {
   grid-template-columns: 1.3fr 0.7fr;
+  align-items: start;
 }
 
 .grid.projects-hub {
   grid-template-columns: 0.95fr 1.05fr;
+  align-items: start;
+}
+
+.grid.projects > .grid,
+.grid.projects-hub > .grid {
+  align-content: start;
 }
 
 .grid.three {
@@ -756,6 +814,36 @@ button {
   gap: 12px;
 }
 
+.import-toolbar-compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.import-toolbar-status {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.import-paste-trigger {
+  align-content: start;
+}
+
+.import-paste-modal-card {
+  width: min(820px, 100%);
+}
+
+.chapter-composer-modal-card {
+  width: min(960px, 100%);
+  max-height: min(90vh, 920px);
+  overflow: auto;
+}
+
+.chapter-composer-form {
+  margin-top: 16px;
+}
+
 .import-toolbar-wizard {
   gap: 16px;
 }
@@ -1048,11 +1136,194 @@ button {
   gap: 12px;
 }
 
+.text-prep-workspace {
+  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.text-prep-segment-list {
+  min-width: 0;
+}
+
+.text-prep-pager-toolbar {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.text-prep-pager-select {
+  width: 96px;
+  min-width: 96px;
+}
+
+.text-prep-pager-button {
+  padding: 8px 12px;
+}
+
 .editor-card {
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 14px;
   background: rgba(251, 247, 239, 0.78);
+}
+
+.editor-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.editor-main-stack,
+.editor-side-stack,
+.editor-workspace {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.editor-side-stack {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.editor-side-stack > :first-child {
+  grid-column: 1 / -1;
+}
+
+.editor-tabbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.editor-tab {
+  appearance: none;
+  border: 1px solid rgba(157, 138, 106, 0.22);
+  background: rgba(251, 247, 239, 0.88);
+  color: var(--ink);
+  border-radius: 14px;
+  padding: 10px 12px;
+  min-width: 120px;
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.editor-tab:hover {
+  transform: translateY(-1px);
+  border-color: rgba(15, 118, 110, 0.28);
+}
+
+.editor-tab strong {
+  font-size: 14px;
+}
+
+.editor-tab span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.editor-tab.active {
+  border-color: rgba(15, 118, 110, 0.34);
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 55%),
+    linear-gradient(180deg, rgba(236, 248, 246, 0.96), rgba(246, 251, 250, 0.92));
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08);
+}
+
+.editor-quick-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.editor-stat {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(157, 138, 106, 0.16);
+}
+
+.editor-stat span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.editor-stat strong {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.editorial-grid {
+  align-items: start;
+}
+
+.editorial-list {
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.editorial-toolbar {
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
+.editor-divider {
+  height: 1px;
+  margin: 16px 0;
+  background: rgba(157, 138, 106, 0.24);
+}
+
+.editor-note-block {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.editor-revision-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.editor-revision-preview > div {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.compare-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.editor-diff-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  max-height: 320px;
+  overflow: auto;
 }
 
 .tips-card {
@@ -1384,7 +1655,10 @@ button {
   .grid.two,
   .grid.text-prep,
   .business-layout,
+  .editor-layout,
   .split-layout,
+  .compare-panels,
+  .editor-revision-preview,
   .wizard-grid,
   .wizard-step-row,
   .ebook-wizard-body,
@@ -1398,8 +1672,20 @@ button {
     border-bottom: 1px solid var(--line);
   }
 
+  .app-shell.sidebar-hidden {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar-left {
+    grid-template-columns: 1fr;
+  }
+
   .metrics {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .editor-quick-stats {
+    grid-template-columns: 1fr;
   }
 
   .project-hero-card {

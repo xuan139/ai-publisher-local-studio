@@ -2,6 +2,7 @@ const { useEffect, useMemo, useRef, useState } = React;
 
 const STORAGE_KEY = "ai-publisher-token";
 const LOCALE_STORAGE_KEY = "ai-publisher-locale";
+const SIDEBAR_HIDDEN_STORAGE_KEY = "ai-publisher-sidebar-hidden";
 const DEFAULT_LOCALE = "zh-Hant";
 const SUPPORTED_LOCALES = ["zh-Hant", "zh-Hans", "en", "ja", "ko", "th"];
 const LOCALE_OPTIONS = [
@@ -1951,6 +1952,14 @@ Object.entries(BUSINESS_EXACT_TRANSLATIONS).forEach(([locale, entries]) => {
 });
 const WIZARD_EXACT_TRANSLATIONS = {
   "zh-Hans": {
+    "E-Book Builder": "电子书建立器",
+    "Full Screen Wizard": "全屏向导",
+    "Book Intro": "书籍简介",
+    "在同一頁面完成專案切換、摘要查看與章節入口。": "在同一页面完成项目切换、摘要查看与章节入口。",
+    "先建立或選取一個專案，右側就會顯示專案摘要與章節地圖。": "先创建或选中一个项目，右侧就会显示项目摘要与章节地图。",
+    "段落": "段落",
+    "已通過": "已通过",
+    "待審核": "待审核",
     "新建電子書": "新建电子书",
     "用全屏向導建立整本電子書": "用全屏向导建立整本电子书",
     "入口現在集中成一個明顯動作。點一下就會打開全屏向導，支援整本貼上拆章、手動新增章節、保存整書 TXT，以及後續語音生成與出版流程。": "入口现在集中成一个明显动作。点一下就会打开全屏向导，支持整本粘贴拆章、手动新增章节、保存整书 TXT，以及后续语音生成与出版流程。",
@@ -2024,6 +2033,14 @@ const WIZARD_EXACT_TRANSLATIONS = {
     "系統會把內容保存為完整整書 TXT，並建立章節與段落，後續可直接進入語音生成、審核與匯出。": "系统会把内容保存为完整整书 TXT，并建立章节与段落，后续可直接进入语音生成、审核与导出。",
   },
   en: {
+    "E-Book Builder": "E-Book Builder",
+    "Full Screen Wizard": "Full Screen Wizard",
+    "Book Intro": "Book Intro",
+    "在同一頁面完成專案切換、摘要查看與章節入口。": "Switch projects, view summaries, and jump into chapters all from one page.",
+    "先建立或選取一個專案，右側就會顯示專案摘要與章節地圖。": "Create or select a project first, and the project summary and chapter map will appear on the right.",
+    "段落": "Segments",
+    "已通過": "Approved",
+    "待審核": "Pending review",
     "新建電子書": "New E-Book",
     "用全屏向導建立整本電子書": "Build a full e-book with the full-screen wizard",
     "入口現在集中成一個明顯動作。點一下就會打開全屏向導，支援整本貼上拆章、手動新增章節、保存整書 TXT，以及後續語音生成與出版流程。": "The entry point is now one clear action. Open the full-screen wizard to paste a whole book, add chapters manually, save the full-book TXT, and continue into voice generation and publishing.",
@@ -2097,6 +2114,14 @@ const WIZARD_EXACT_TRANSLATIONS = {
     "系統會把內容保存為完整整書 TXT，並建立章節與段落，後續可直接進入語音生成、審核與匯出。": "The system saves the content as a full-book TXT, creates chapters and segments, and lets you continue directly to voice generation, review, and export.",
   },
   ja: {
+    "E-Book Builder": "電子書籍ビルダー",
+    "Full Screen Wizard": "全画面ウィザード",
+    "Book Intro": "書籍紹介",
+    "在同一頁面完成專案切換、摘要查看與章節入口。": "このページでプロジェクト切り替え、概要確認、章への入口をまとめて操作できます。",
+    "先建立或選取一個專案，右側就會顯示專案摘要與章節地圖。": "先にプロジェクトを作成または選択すると、右側に概要と章マップが表示されます。",
+    "段落": "段落",
+    "已通過": "承認済み",
+    "待審核": "レビュー待ち",
     "新建電子書": "電子書籍を作成",
     "用全屏向導建立整本電子書": "全画面ウィザードで電子書籍を作成",
     "入口現在集中成一個明顯動作。點一下就會打開全屏向導，支援整本貼上拆章、手動新增章節、保存整書 TXT，以及後續語音生成與出版流程。": "入口を分かりやすい1つの操作にまとめました。全画面ウィザードを開くと、全文貼り付けによる章分割、手動での章追加、全文 TXT 保存、その後の音声生成と出版まで進められます。",
@@ -2170,6 +2195,14 @@ const WIZARD_EXACT_TRANSLATIONS = {
     "系統會把內容保存為完整整書 TXT，並建立章節與段落，後續可直接進入語音生成、審核與匯出。": "内容は全文 TXT として保存され、章と段落が作成されます。そのまま音声生成、レビュー、書き出しに進めます。",
   },
   ko: {
+    "E-Book Builder": "전자책 빌더",
+    "Full Screen Wizard": "전체 화면 마법사",
+    "Book Intro": "도서 소개",
+    "在同一頁面完成專案切換、摘要查看與章節入口。": "한 페이지에서 프로젝트 전환, 요약 확인, 장 진입까지 모두 처리할 수 있습니다.",
+    "先建立或選取一個專案，右側就會顯示專案摘要與章節地圖。": "먼저 프로젝트를 만들거나 선택하면 오른쪽에 프로젝트 요약과 장 맵이 표시됩니다.",
+    "段落": "문단",
+    "已通過": "승인됨",
+    "待審核": "검토 대기",
     "新建電子書": "전자책 만들기",
     "用全屏向導建立整本電子書": "전체 화면 마법사로 전자책 만들기",
     "入口現在集中成一個明顯動作。點一下就會打開全屏向導，支援整本貼上拆章、手動新增章節、保存整書 TXT，以及後續語音生成與出版流程。": "입구를 한 번에 보이는 동작으로 모았습니다. 전체 화면 마법사에서 책 전체 붙여넣기, 장 자동 분할, 수동 장 추가, 전체 TXT 저장, 이후 음성 생성과 출판까지 이어집니다.",
@@ -2243,6 +2276,14 @@ const WIZARD_EXACT_TRANSLATIONS = {
     "系統會把內容保存為完整整書 TXT，並建立章節與段落，後續可直接進入語音生成、審核與匯出。": "시스템이 내용을 전체 TXT로 저장하고 장과 문단을 생성하므로 이후 바로 음성 생성, 검수, 내보내기로 이어갈 수 있습니다.",
   },
   th: {
+    "E-Book Builder": "ตัวช่วยสร้างอีบุ๊ก",
+    "Full Screen Wizard": "วิซาร์ดเต็มหน้าจอ",
+    "Book Intro": "แนะนำหนังสือ",
+    "在同一頁面完成專案切換、摘要查看與章節入口。": "สลับโปรเจกต์ ดูข้อมูลสรุป และเข้าสู่บทต่าง ๆ ได้จากหน้าเดียว",
+    "先建立或選取一個專案，右側就會顯示專案摘要與章節地圖。": "สร้างหรือเลือกโปรเจกต์ก่อน แล้วด้านขวาจะมีข้อมูลสรุปกับแผนที่บทแสดงขึ้นมา",
+    "段落": "ย่อหน้า",
+    "已通過": "อนุมัติแล้ว",
+    "待審核": "รอตรวจ",
     "新建電子書": "สร้างอีบุ๊ก",
     "用全屏向導建立整本電子書": "สร้างอีบุ๊กทั้งเล่มด้วยวิซาร์ดเต็มหน้าจอ",
     "入口現在集中成一個明顯動作。點一下就會打開全屏向導，支援整本貼上拆章、手動新增章節、保存整書 TXT，以及後續語音生成與出版流程。": "ตอนนี้รวมทางเข้าไว้เป็นปุ่มที่เห็นชัด กดครั้งเดียวก็เปิดวิซาร์ดเต็มหน้าจอได้ รองรับการวางทั้งเล่มแล้วแยกบท การเพิ่มบทด้วยตนเอง การบันทึก TXT ทั้งเล่ม และขั้นตอนสร้างเสียงกับเผยแพร่ต่อได้ทันที",
@@ -2396,6 +2437,17 @@ const OPENAI_VOICE_FALLBACKS = ["alloy", "ash", "ballad", "coral", "echo", "fabl
 const OPENAI_MODEL_FALLBACKS = ["gpt-4o-mini-tts", "tts-1", "tts-1-hd"];
 const ELEVENLABS_MODEL_FALLBACKS = ["eleven_multilingual_v2", "eleven_v3", "eleven_flash_v2_5", "eleven_turbo_v2_5"];
 const SEGMENT_PAGE_SIZES = [10, 20, 50];
+const EDITOR_ANNOTATION_TYPES = [
+  { value: "comment", label: "一般批注" },
+  { value: "style", label: "文风调整" },
+  { value: "fact", label: "事实核对" },
+  { value: "continuity", label: "前后统一" },
+  { value: "pronunciation", label: "发音提醒" },
+];
+const EDITOR_TERM_TYPES = [
+  { value: "glossary", label: "术语表" },
+  { value: "pronunciation", label: "发音词典" },
+];
 const PROJECT_TYPE_OPTIONS = ["audiobook", "comic", "motion_comic", "video"];
 const COMIC_LAYOUT_PRESETS = [
   { value: "splash", label: "Splash 全頁" },
@@ -3301,6 +3353,7 @@ function LanguagePicker({ locale, onChange, align = "left", showLabel = true }) 
 function App() {
   const [token, setToken] = useState(localStorage.getItem(STORAGE_KEY) || "");
   const [locale, setLocale] = useState(() => normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY) || DEFAULT_LOCALE));
+  const [sidebarHidden, setSidebarHidden] = useState(() => localStorage.getItem(SIDEBAR_HIDDEN_STORAGE_KEY) === "1");
   const [user, setUser] = useState(null);
   const [demoAccounts, setDemoAccounts] = useState([]);
   const [route, setRoute] = useState("projects");
@@ -3547,6 +3600,10 @@ function App() {
   }, [locale]);
 
   useEffect(() => {
+    localStorage.setItem(SIDEBAR_HIDDEN_STORAGE_KEY, sidebarHidden ? "1" : "0");
+  }, [sidebarHidden]);
+
+  useEffect(() => {
     applyLiteralTranslations(document.getElementById("root"), locale);
   });
 
@@ -3606,7 +3663,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarHidden ? "sidebar-hidden" : ""}`}>
       <Sidebar
         route={route}
         onRouteChange={handleRouteChange}
@@ -3614,6 +3671,7 @@ function App() {
         selectedProjectId={selectedProjectId}
         onSelectProject={(id) => setSelectedProjectId(id)}
         user={user}
+        hidden={sidebarHidden}
       />
       <main className="main">
         <Topbar
@@ -3623,6 +3681,8 @@ function App() {
           locale={locale}
           onLocaleChange={setLocale}
           onLogout={handleLogout}
+          sidebarHidden={sidebarHidden}
+          onToggleSidebar={() => setSidebarHidden((current) => !current)}
           actions={routeActions({
             route,
             user,
@@ -3929,7 +3989,7 @@ function LoginPage({ onLogin, flash, locale, onLocaleChange, demoAccounts = [] }
   );
 }
 
-function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectProject, user }) {
+function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectProject, user, hidden = false }) {
   const [openSections, setOpenSections] = useState({
     project: true,
     business: true,
@@ -3950,7 +4010,7 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
   }
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${hidden ? "hidden" : ""}`}>
       <div className="brand-box">
         <div className="brand-mark">AP</div>
         <div className="eyebrow">{t("sidebar.brandEyebrow")}</div>
@@ -4127,16 +4187,28 @@ function Sidebar({ route, onRouteChange, projects, selectedProjectId, onSelectPr
   );
 }
 
-function Topbar({ route, project, user, actions, locale, onLocaleChange, onLogout }) {
+function Topbar({ route, project, user, actions, locale, onLocaleChange, onLogout, sidebarHidden = false, onToggleSidebar }) {
+  const sidebarToggleLabel = translateLiteral(sidebarHidden ? "顯示選單" : "隱藏選單", locale);
   return (
     <div className="topbar">
-      <div>
-        <div className="eyebrow">
-          {project ? `${project.title} / ${project.language}` : t("topbar.defaultEyebrow")}
-        </div>
-        <h1>{projectRouteTitle(route)}</h1>
-        <div className="subtext">
-          {project ? t("topbar.projectContext", { project: project.title, user: user.name }) : t("topbar.noProject")}
+      <div className="topbar-left">
+        <button
+          type="button"
+          className="button-secondary sidebar-visibility-toggle"
+          onClick={onToggleSidebar}
+          title={sidebarToggleLabel}
+        >
+          <span className="sidebar-visibility-icon">{sidebarHidden ? "☰" : "⟨"}</span>
+          <span>{sidebarToggleLabel}</span>
+        </button>
+        <div>
+          <div className="eyebrow">
+            {project ? `${project.title} / ${project.language}` : t("topbar.defaultEyebrow")}
+          </div>
+          <h1>{projectRouteTitle(route)}</h1>
+          <div className="subtext">
+            {project ? t("topbar.projectContext", { project: project.title, user: user.name }) : t("topbar.noProject")}
+          </div>
         </div>
       </div>
       <div className="topbar-right">
@@ -4247,6 +4319,8 @@ function ProjectsPage({ user, projects = [], selectedProject, businessData, toke
   const canManageBusiness = canAccessRoute(user, "business");
   const primaryRouteLabel = projectRouteTitle(primaryRoute);
   const businessSummary = selectedProject?.business_summary || businessData?.summary || null;
+  const locale = normalizeLocale(ACTIVE_LOCALE);
+  const ui = (text) => translateLiteral(text, locale);
 
   function openWizardForProject(projectId, mode = "paste") {
     onSelectProject(projectId);
@@ -4263,12 +4337,12 @@ function ProjectsPage({ user, projects = [], selectedProject, businessData, toke
         <div className="grid">
           <div className="panel-head">
             <div>
-              <h2>專案列表</h2>
-              <div className="subtext">在同一頁面完成專案切換、摘要查看與章節入口。</div>
+              <h2>{ui("專案列表")}</h2>
+              <div className="subtext">{ui("在同一頁面完成專案切換、摘要查看與章節入口。")}</div>
             </div>
             <div className="toolbar" style={{ marginBottom: 0 }}>
-              {canCreateProject ? <button className="button" onClick={() => setShowCreateModal(true)}>建立專案</button> : null}
-              <span className="tag brand">{projects.length} 個專案</span>
+              {canCreateProject ? <button className="button" onClick={() => setShowCreateModal(true)}>{ui("建立專案")}</button> : null}
+              <span className="tag brand">{ui(`${projects.length} 個專案`)}</span>
             </div>
           </div>
           <section className="panel">
@@ -4293,7 +4367,7 @@ function ProjectsPage({ user, projects = [], selectedProject, businessData, toke
                           <button className="text-action" onClick={() => onSelectProject(project.id)}>
                             {project.title}
                           </button>
-                          <div className="subtext">{project.author || "未填作者"} · {projectTypeLabel(project.project_type)}</div>
+                          <div className="subtext">{project.author || ui("未填作者")} · {projectTypeLabel(project.project_type)}</div>
                           {project.description ? <div className="subtext clamp-2">{project.description}</div> : null}
                         </div>
                       </div>
@@ -4309,7 +4383,7 @@ function ProjectsPage({ user, projects = [], selectedProject, businessData, toke
                             className="button"
                             onClick={() => openWizardForProject(project.id, "paste")}
                           >
-                            新建電子書
+                            {ui("新建電子書")}
                           </button>
                         ) : null}
                         {primaryRoute !== "projects" ? (
@@ -4352,29 +4426,29 @@ function ProjectsPage({ user, projects = [], selectedProject, businessData, toke
               {canManageText ? (
                 <section className="panel wizard-panel">
                   <div className="wizard-hero">
-                    <div className="eyebrow">Full Screen Wizard</div>
-                    <h2>用全屏向導建立整本電子書</h2>
-                    <div className="subtext">入口現在集中成一個明顯動作。點一下就會打開全屏向導，支援整本貼上拆章、手動新增章節、保存整書 TXT，以及後續語音生成與出版流程。</div>
+                    <div className="eyebrow">{ui("Full Screen Wizard")}</div>
+                    <h2>{ui("用全屏向導建立整本電子書")}</h2>
+                    <div className="subtext">{ui("入口現在集中成一個明顯動作。點一下就會打開全屏向導，支援整本貼上拆章、手動新增章節、保存整書 TXT，以及後續語音生成與出版流程。")}</div>
                     <div className="wizard-step-row">
                       <div className="wizard-step">
                         <strong>1</strong>
-                        <span>先選專案，再打開全屏向導</span>
+                        <span>{ui("先選專案，再打開全屏向導")}</span>
                       </div>
                       <div className="wizard-step">
                         <strong>2</strong>
-                        <span>可貼整本拆章，也可逐章建立</span>
+                        <span>{ui("可貼整本拆章，也可逐章建立")}</span>
                       </div>
                       <div className="wizard-step">
                         <strong>3</strong>
-                        <span>完成後直接接語音生成、審核、出版</span>
+                        <span>{ui("完成後直接接語音生成、審核、出版")}</span>
                       </div>
                     </div>
                     <div className="wizard-cta-row">
                       <button className="wizard-cta" onClick={() => openWizardForProject(selectedProject.id, "paste")}>
-                        立即打開全屏向導
+                        {ui("立即打開全屏向導")}
                       </button>
                       <button className="wizard-cta secondary" onClick={() => openWizardForProject(selectedProject.id, "manual")}>
-                        從手動新增開始
+                        {ui("從手動新增開始")}
                       </button>
                     </div>
                   </div>
@@ -4385,12 +4459,12 @@ function ProjectsPage({ user, projects = [], selectedProject, businessData, toke
                 <div className="panel-head">
                   <div>
                     <h2>{selectedProject.title}</h2>
-                    <div className="subtext">{selectedProject.author || "未填作者"} · {selectedProject.language}</div>
+                    <div className="subtext">{selectedProject.author || ui("未填作者")} · {selectedProject.language}</div>
                   </div>
                   <div className="toolbar" style={{ marginBottom: 0 }}>
                     {canManageText ? (
                       <button className="button-secondary" onClick={() => openWizardForProject(selectedProject.id, "paste")}>
-                        開啟全屏向導
+                        {ui("開啟全屏向導")}
                       </button>
                     ) : null}
                     <span className="tag brand">{statusLabel(selectedProject.status)}</span>
@@ -4403,9 +4477,9 @@ function ProjectsPage({ user, projects = [], selectedProject, businessData, toke
                     <div className="project-hero-cover project-hero-cover-fallback">{selectedProject.title.slice(0, 2)}</div>
                   )}
                   <div className="grid" style={{ gap: 12 }}>
-                    <div className="eyebrow">Book Intro</div>
+                    <div className="eyebrow">{ui("Book Intro")}</div>
                     <div className="project-hero-description">
-                      {selectedProject.description || "這個專案尚未填寫簡介，可以在建立專案時補上內容。"}
+                      {selectedProject.description || ui("這個專案尚未填寫簡介，可以在建立專案時補上內容。")}
                     </div>
                   </div>
                 </div>
@@ -4501,7 +4575,7 @@ function ProjectsPage({ user, projects = [], selectedProject, businessData, toke
               </section>
             </div>
           ) : (
-            <div className="empty-state">先建立或選取一個專案，右側就會顯示專案摘要與章節地圖。</div>
+            <div className="empty-state">{ui("先建立或選取一個專案，右側就會顯示專案摘要與章節地圖。")}</div>
           )}
         </div>
       </div>
@@ -5515,6 +5589,7 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
   const [draftText, setDraftText] = useState("");
   const [voiceId, setVoiceId] = useState("");
   const [characterId, setCharacterId] = useState("");
+  const [revisionNote, setRevisionNote] = useState("");
   const [selectedSegmentIds, setSelectedSegmentIds] = useState([]);
   const [batchCharacterId, setBatchCharacterId] = useState("");
   const [detectedCharacters, setDetectedCharacters] = useState([]);
@@ -5523,10 +5598,43 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
   const [autoBindNarratorId, setAutoBindNarratorId] = useState("");
   const [segmentPage, setSegmentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [annotations, setAnnotations] = useState([]);
+  const [annotationBusy, setAnnotationBusy] = useState(false);
+  const [annotationForm, setAnnotationForm] = useState({
+    note_type: "comment",
+    anchor_text: "",
+    content: "",
+    suggested_text: "",
+  });
+  const [revisionHistory, setRevisionHistory] = useState([]);
+  const [revisionBusy, setRevisionBusy] = useState(false);
+  const [terms, setTerms] = useState([]);
+  const [termBusy, setTermBusy] = useState(false);
+  const [editingTermId, setEditingTermId] = useState(null);
+  const [termForm, setTermForm] = useState({
+    entry_type: "glossary",
+    term: "",
+    preferred_text: "",
+    spoken_form: "",
+    description: "",
+    notes: "",
+  });
+  const [chapterVersions, setChapterVersions] = useState([]);
+  const [versionBusy, setVersionBusy] = useState(false);
+  const [versionNote, setVersionNote] = useState("");
+  const [compareBaseVersionId, setCompareBaseVersionId] = useState("");
+  const [compareTargetVersionId, setCompareTargetVersionId] = useState("current");
+  const [versionDiff, setVersionDiff] = useState(null);
+  const [editorPanel, setEditorPanel] = useState("compose");
   const narratorCharacters = useMemo(() => characters.filter((character) => character.role_type === "narrator"), [characters]);
   const canManageProject = hasPermission(user, "project_manage");
   const canManageText = hasPermission(user, "text_manage");
   const defaultVoice = voices.find((voice) => String(voice.id) === String(project?.default_voice_profile_id || ""));
+  const matchedTerms = useMemo(() => {
+    if (!activeSegment) return [];
+    const haystack = `${activeSegment.source_text || ""}\n${draftText || ""}`.toLowerCase();
+    return terms.filter((term) => (term.term || "").trim() && haystack.includes((term.term || "").toLowerCase()));
+  }, [activeSegment, draftText, terms]);
 
   const totalSegmentPages = Math.max(1, Math.ceil(segments.length / pageSize));
   const currentSegmentJob = activeSegment ? jobs.find((job) => job.segment_id === activeSegment.id) || null : null;
@@ -5542,6 +5650,12 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
     const start = (segmentPage - 1) * pageSize;
     return segments.slice(start, start + pageSize);
   }, [segments, segmentPage, pageSize]);
+  const editorPanels = [
+    { key: "compose", label: "写稿", meta: "编辑朗读稿" },
+    { key: "annotations", label: "批注", meta: `${annotations.length} 条` },
+    { key: "terms", label: "词典", meta: `${terms.length} 项` },
+    { key: "versions", label: "版本", meta: `${chapterVersions.length} 版` },
+  ];
 
   useEffect(() => {
     if (activeSegment) {
@@ -5557,6 +5671,14 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
       setDraftText(activeSegment.tts_text || "");
       setVoiceId(activeSegment.voice_profile_id || "");
       setCharacterId(activeSegment.character_profile_id || "");
+      setRevisionNote("");
+      setEditorPanel("compose");
+      setAnnotationForm({
+        note_type: "comment",
+        anchor_text: "",
+        content: "",
+        suggested_text: "",
+      });
     }
   }, [activeSegment]);
 
@@ -5566,6 +5688,13 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
     setBatchCharacterId("");
     setDetectedCharacters([]);
     setDetectionSummary(null);
+    setAnnotations([]);
+    setRevisionHistory([]);
+    setChapterVersions([]);
+    setVersionDiff(null);
+    setCompareBaseVersionId("");
+    setCompareTargetVersionId("current");
+    setVersionNote("");
   }, [selectedChapterId]);
 
   useEffect(() => {
@@ -5573,6 +5702,16 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
     setNewChapterTitle("");
     setNewChapterBody("");
     setChapterBusy(false);
+    setTerms([]);
+    setEditingTermId(null);
+    setTermForm({
+      entry_type: "glossary",
+      term: "",
+      preferred_text: "",
+      spoken_form: "",
+      description: "",
+      notes: "",
+    });
   }, [project?.id]);
 
   useEffect(() => {
@@ -5598,6 +5737,84 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
       setSegmentPage(totalSegmentPages);
     }
   }, [segmentPage, totalSegmentPages]);
+
+  useEffect(() => {
+    if (!project?.id) return;
+    (async () => {
+      try {
+        const payload = await apiFetch(`/api/projects/${project.id}/editor-terms`, { token });
+        setTerms(payload.items || []);
+      } catch (error) {
+        showFlash("error", error.message || "术语表载入失败。");
+      }
+    })();
+  }, [project?.id, token]);
+
+  useEffect(() => {
+    if (!activeSegment?.id) {
+      setAnnotations([]);
+      setRevisionHistory([]);
+      return;
+    }
+    (async () => {
+      try {
+        const [annotationPayload, revisionPayload] = await Promise.all([
+          apiFetch(`/api/segments/${activeSegment.id}/annotations`, { token }),
+          apiFetch(`/api/segments/${activeSegment.id}/revisions`, { token }),
+        ]);
+        setAnnotations(annotationPayload.items || []);
+        setRevisionHistory(revisionPayload.items || []);
+      } catch (error) {
+        showFlash("error", error.message || "批注与修订记录载入失败。");
+      }
+    })();
+  }, [activeSegment?.id, activeSegment?.updated_at, token]);
+
+  useEffect(() => {
+    if (!selectedChapterId) {
+      setChapterVersions([]);
+      return;
+    }
+    (async () => {
+      try {
+        const payload = await apiFetch(`/api/chapters/${selectedChapterId}/versions`, { token });
+        setChapterVersions(payload.items || []);
+      } catch (error) {
+        showFlash("error", error.message || "章节版本载入失败。");
+      }
+    })();
+  }, [selectedChapterId, selectedChapter?.updated_at, token]);
+
+  useEffect(() => {
+    if (!chapterVersions.length) {
+      setCompareBaseVersionId("");
+      setVersionDiff(null);
+      return;
+    }
+    const fallbackBase = chapterVersions[1]?.id || chapterVersions[0]?.id || "";
+    setCompareBaseVersionId((current) => (current ? current : String(fallbackBase)));
+    setCompareTargetVersionId((current) => (current ? current : "current"));
+  }, [chapterVersions, selectedChapterId]);
+
+  useEffect(() => {
+    if (!selectedChapterId || !compareBaseVersionId) {
+      setVersionDiff(null);
+      return;
+    }
+    (async () => {
+      try {
+        const params = new URLSearchParams({ base_version_id: String(compareBaseVersionId) });
+        if (compareTargetVersionId && compareTargetVersionId !== "current") {
+          params.set("target", "version");
+          params.set("target_version_id", String(compareTargetVersionId));
+        }
+        const payload = await apiFetch(`/api/chapters/${selectedChapterId}/version-diff?${params.toString()}`, { token });
+        setVersionDiff(payload);
+      } catch (error) {
+        showFlash("error", error.message || "章节版本对比失败。");
+      }
+    })();
+  }, [selectedChapterId, compareBaseVersionId, compareTargetVersionId, token]);
 
   useEffect(() => {
     if (!activeSegment) return;
@@ -5658,6 +5875,193 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
     } else {
       setSelectedSegmentIds((current) => Array.from(new Set([...current, ...pageIds])));
     }
+  }
+
+  function resetTermForm(nextType = "glossary") {
+    setEditingTermId(null);
+    setTermForm({
+      entry_type: nextType,
+      term: "",
+      preferred_text: "",
+      spoken_form: "",
+      description: "",
+      notes: "",
+    });
+  }
+
+  function applyEditorTerm(term) {
+    const replacement = (term.preferred_text || term.spoken_form || term.term || "").trim();
+    if (!replacement) {
+      showFlash("error", "该词条还没有可套用的推荐写法。");
+      return;
+    }
+    setDraftText((current) => current.split(term.term).join(replacement));
+    setRevisionNote((current) => current || `套用词条：${term.term}`);
+    showFlash("success", `已将「${term.term}」套用到当前朗读稿。`);
+  }
+
+  async function submitAnnotation() {
+    if (!activeSegment) return;
+    if (!annotationForm.content.trim()) {
+      showFlash("error", "请先填写批注内容。");
+      return;
+    }
+    setAnnotationBusy(true);
+    try {
+      const payload = await apiFetch(`/api/segments/${activeSegment.id}/annotations`, {
+        method: "POST",
+        token,
+        body: annotationForm,
+      });
+      setAnnotations(payload.items || []);
+      setAnnotationForm({
+        note_type: annotationForm.note_type,
+        anchor_text: "",
+        content: "",
+        suggested_text: "",
+      });
+      await refreshProject({ chapterId: selectedChapterId });
+      showFlash("success", "批注已加入当前段落。");
+    } catch (error) {
+      showFlash("error", error.message || "新增批注失败。");
+    } finally {
+      setAnnotationBusy(false);
+    }
+  }
+
+  async function updateAnnotationStatus(annotation, status) {
+    if (!annotation?.id) return;
+    setAnnotationBusy(true);
+    try {
+      const payload = await apiFetch(`/api/segment-annotations/${annotation.id}`, {
+        method: "PATCH",
+        token,
+        body: { status },
+      });
+      setAnnotations(payload.items || []);
+      await refreshProject({ chapterId: selectedChapterId });
+      showFlash("success", status === "resolved" ? "批注已标记为已处理。" : "批注状态已更新。");
+    } catch (error) {
+      showFlash("error", error.message || "更新批注状态失败。");
+    } finally {
+      setAnnotationBusy(false);
+    }
+  }
+
+  async function submitEditorTerm() {
+    if (!project) return;
+    if (!termForm.term.trim()) {
+      showFlash("error", "请先填写术语或词条。");
+      return;
+    }
+    setTermBusy(true);
+    try {
+      const method = editingTermId ? "PATCH" : "POST";
+      const path = editingTermId
+        ? `/api/editor-terms/${editingTermId}`
+        : `/api/projects/${project.id}/editor-terms`;
+      const payload = await apiFetch(path, {
+        method,
+        token,
+        body: termForm,
+      });
+      setTerms(payload.items || []);
+      resetTermForm(termForm.entry_type);
+      await refreshProject({ chapterId: selectedChapterId });
+      showFlash("success", editingTermId ? "词条已更新。" : "词条已加入项目词典。");
+    } catch (error) {
+      showFlash("error", error.message || "保存词条失败。");
+    } finally {
+      setTermBusy(false);
+    }
+  }
+
+  function beginEditTerm(term) {
+    setEditingTermId(term.id);
+    setTermForm({
+      entry_type: term.entry_type || "glossary",
+      term: term.term || "",
+      preferred_text: term.preferred_text || "",
+      spoken_form: term.spoken_form || "",
+      description: term.description || "",
+      notes: term.notes || "",
+    });
+  }
+
+  function requestDeleteTerm(term) {
+    if (!project) return;
+    requestConfirm({
+      title: "删除词条",
+      message: `将删除「${term.term}」这个项目词条。此动作无法复原。`,
+      confirmLabel: "删除词条",
+      onConfirm: async () => {
+        setTermBusy(true);
+        try {
+          const payload = await apiFetch(`/api/projects/${project.id}/editor-terms/${term.id}`, {
+            method: "DELETE",
+            token,
+          });
+          setTerms(payload.items || []);
+          if (editingTermId === term.id) {
+            resetTermForm(term.entry_type || "glossary");
+          }
+          await refreshProject({ chapterId: selectedChapterId });
+          showFlash("success", `已删除词条「${term.term}」。`);
+        } finally {
+          setTermBusy(false);
+        }
+      },
+    });
+  }
+
+  async function saveChapterVersion() {
+    if (!selectedChapterId) return;
+    setVersionBusy(true);
+    try {
+      const payload = await apiFetch(`/api/chapters/${selectedChapterId}/versions`, {
+        method: "POST",
+        token,
+        body: {
+          summary: versionNote.trim(),
+          source: "manual",
+        },
+      });
+      setChapterVersions(payload.items || []);
+      setVersionNote("");
+      await refreshProject({ chapterId: selectedChapterId });
+      showFlash("success", "已保存当前章节版本。");
+    } catch (error) {
+      showFlash("error", error.message || "保存章节版本失败。");
+    } finally {
+      setVersionBusy(false);
+    }
+  }
+
+  function requestRestoreRevision(revision) {
+    if (!revision?.id) return;
+    requestConfirm({
+      title: "恢复修订版本",
+      message: `会把当前段落恢复为 ${revision.created_at ? relativeTime(revision.created_at) : "该版本"} 的保存内容，并生成一条新的修订记录。`,
+      confirmLabel: "恢复此版",
+      onConfirm: async () => {
+        setRevisionBusy(true);
+        try {
+          const payload = await apiFetch(`/api/segment-revisions/${revision.id}/restore`, {
+            method: "POST",
+            token,
+          });
+          setRevisionHistory(payload.revisions || []);
+          setActiveSegmentId(payload.segment.id);
+          await refreshProject({ chapterId: selectedChapterId });
+          showFlash("success", "已恢复到所选修订版本。");
+        } catch (error) {
+          showFlash("error", error.message || "恢复修订版本失败。");
+          throw error;
+        } finally {
+          setRevisionBusy(false);
+        }
+      },
+    });
   }
 
   async function applyBatchToSelection() {
@@ -5733,6 +6137,7 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
         voice_profile_id: voiceId || null,
         character_profile_id: characterId || null,
         status: "ready",
+        revision_note: revisionNote,
       },
     });
   }
@@ -5743,6 +6148,7 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
     try {
       await persistActiveSegment();
       await refreshProject({ chapterId: selectedChapterId });
+      setRevisionNote("");
       showFlash("success", "段落已儲存。");
     } catch (error) {
       showFlash("error", error.message || "段落儲存失敗。");
@@ -5758,6 +6164,7 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
       await persistActiveSegment();
       await apiFetch(`/api/segments/${activeSegment.id}/generate`, { method: "POST", token });
       await refreshProject({ chapterId: selectedChapterId });
+      setRevisionNote("");
       showFlash("success", "已為目前段落建立生成任務。");
     } catch (error) {
       showFlash("error", error.message || "段落生成失敗。");
@@ -5899,6 +6306,7 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
   }
 
   return (
+    <>
     <div className="grid text-prep">
       <section className="panel">
         <div className="panel-head">
@@ -5907,45 +6315,16 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
             <div className="subtext">可整書匯入，也可手動新增自訂章節。</div>
           </div>
           {canManageText ? (
-            <button className="button-secondary" onClick={() => setShowChapterComposer((current) => !current)}>
-              {showChapterComposer ? "收起章節表單" : "手動新增章節"}
+            <button className="button-secondary" onClick={() => setShowChapterComposer(true)}>
+              手動新增章節
             </button>
           ) : null}
         </div>
-        {showChapterComposer ? (
-          <div className="grid" style={{ marginBottom: 14 }}>
-            <div className="field">
-              <label>章節標題</label>
-              <input
-                className="input"
-                placeholder="例如：西游记第一章 石猴出世"
-                value={newChapterTitle}
-                onChange={(event) => setNewChapterTitle(event.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label>章節內容</label>
-              <textarea
-                className="textarea"
-                rows={8}
-                placeholder="把這一章的完整內容直接貼進來，儲存後會自動拆成段落。"
-                value={newChapterBody}
-                onChange={(event) => setNewChapterBody(event.target.value)}
-              />
-            </div>
-            <div className="toolbar">
-              <button className="button" disabled={chapterBusy} onClick={createManualChapter}>
-                {chapterBusy ? "建立中..." : "建立章節"}
-              </button>
-              <div className="subtext">建立後會自動進入目前專案，和既有生成、審核、出版流程完全一致。</div>
-            </div>
-          </div>
-        ) : null}
         <div className="list">
           {(project.chapters || []).map((chapter) => (
             <button key={chapter.id} className={`project-button ${chapter.id === selectedChapterId ? "active" : ""}`} onClick={() => setSelectedChapterId(chapter.id)}>
               <strong>{chapter.order_index}. {chapter.title}</strong>
-              <div className="subtext">{chapter.segment_count} 段</div>
+              <div className="subtext">{chapter.segment_count} 段 · {chapter.version_count || 0} 版</div>
             </button>
           ))}
         </div>
@@ -6054,22 +6433,22 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
         {!selectedChapter ? (
           <div className="empty-state">請先匯入文本，再選擇章節。</div>
         ) : (
-          <div className="split-layout">
-            <div className="list">
+          <div className="split-layout text-prep-workspace">
+            <div className="list text-prep-segment-list">
               <div className="pager-row">
                 <div className="subtext">
                   共 {segments.length} 段，第 {segmentPage} / {totalSegmentPages} 頁
                 </div>
-                <div className="toolbar" style={{ marginBottom: 0 }}>
-                  <select className="select pager-select" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+                <div className="toolbar text-prep-pager-toolbar" style={{ marginBottom: 0 }}>
+                  <select className="select pager-select text-prep-pager-select" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
                     {SEGMENT_PAGE_SIZES.map((size) => (
                       <option key={size} value={size}>每頁 {size} 段</option>
                     ))}
                   </select>
-                  <button className="button-secondary" disabled={segmentPage <= 1} onClick={() => goToSegmentPage(segmentPage - 1)}>
+                  <button className="button-secondary text-prep-pager-button" disabled={segmentPage <= 1} onClick={() => goToSegmentPage(segmentPage - 1)}>
                     上一頁
                   </button>
-                  <button className="button-secondary" disabled={segmentPage >= totalSegmentPages} onClick={() => goToSegmentPage(segmentPage + 1)}>
+                  <button className="button-secondary text-prep-pager-button" disabled={segmentPage >= totalSegmentPages} onClick={() => goToSegmentPage(segmentPage + 1)}>
                     下一頁
                   </button>
                 </div>
@@ -6098,6 +6477,8 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
                     <div className="pill-row">
                       {segment.character_profile?.name ? <span className="tag brand">{segment.character_profile.story_character_name || segment.character_profile.name}</span> : null}
                       {segment.character_profile?.role_type ? <span className="tag">{characterRoleLabel(segment.character_profile.role_type)}</span> : null}
+                      {segment.open_annotation_count ? <span className="tag warn">{segment.open_annotation_count} 批注</span> : null}
+                      {segment.revision_count ? <span className="tag">{segment.revision_count} 修订</span> : null}
                       <span className="tag">{statusLabel(segment.status)}</span>
                     </div>
                   </div>
@@ -6109,112 +6490,554 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
               {!pagedSegments.length ? <div className="empty-state">目前章節沒有段落。</div> : null}
             </div>
 
-            <div className="form-grid">
+            <div className="form-grid editor-layout">
               {activeSegment ? (
                 <>
-                  <div className="title-row">
-                    <strong>目前段落 {activeSegment.order_index}</strong>
-                    <span className="tag">{statusLabel(activeSegment.status)}</span>
-                  </div>
-                  <div className="editor-card">
-                    <div className="eyebrow">原文</div>
-                    <div>{activeSegment.source_text}</div>
-                  </div>
-                  <div className="field">
-                    <label>朗讀稿</label>
-                    <textarea className="textarea" value={draftText} onChange={(event) => setDraftText(event.target.value)} />
-                  </div>
-                  <div className="field">
-                    <label>小說角色 / 旁白角色</label>
-                    <select className="select" value={characterId} onChange={(event) => setCharacterId(event.target.value)}>
-                      <option value="">不綁定角色</option>
-                      {characters.map((character) => (
-                        <option key={character.id} value={character.id}>{characterOptionLabel(character)}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label>覆寫聲線</label>
-                    <select className="select" value={voiceId} onChange={(event) => setVoiceId(event.target.value)}>
-                      <option value="">依角色 / 專案預設</option>
-                      {voices.map((voice) => (
-                        <option key={voice.id} value={voice.id}>{voice.name} · {voice.voice_name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="toolbar" style={{ marginTop: -4 }}>
-                    <button type="button" className="button-secondary" onClick={() => setCharacterId("")}>解除角色綁定</button>
-                    <button type="button" className="button-secondary" onClick={() => setVoiceId("")}>解除聲線覆寫</button>
-                  </div>
-                  <div className="toolbar">
-                    <button className="button-flat" disabled={segmentBusyAction !== ""} onClick={saveSegment}>
-                      {segmentBusyAction === "save" ? "儲存中..." : "儲存"}
-                    </button>
-                    <button className="button-flat" disabled={segmentBusyAction !== ""} onClick={generateCurrentSegment}>
-                      {segmentBusyAction === "generate" ? "生成中..." : "生成"}
-                    </button>
-                    <button className="button-flat-danger" disabled={segmentBusyAction !== ""} onClick={() => requestDeleteSegment(activeSegment)}>
-                      刪除
-                    </button>
-                  </div>
-                  <div className="editor-card">
-                    <div className="title-row">
-                      <strong>目前生成狀態</strong>
-                      <span className={`tag ${currentSegmentJob?.status === "failed" ? "danger" : currentSegmentJob?.status === "succeeded" ? "success" : currentSegmentJob?.status === "running" ? "brand" : ""}`}>
-                        {statusLabel(currentSegmentJob?.status || activeSegment.status)}
-                      </span>
-                    </div>
-                    <div className="subtext" style={{ marginTop: 8 }}>
-                      {currentSegmentJob
-                        ? `最近任務更新：${relativeTime(currentSegmentJob.updated_at)}`
-                        : "這裡會顯示目前段落最新一次生成任務。"}
-                    </div>
-                    {currentSegmentJob?.request_id ? (
-                      <div className="code" style={{ marginTop: 8 }}>
-                        Request ID: {currentSegmentJob.request_id}
-                      </div>
-                    ) : null}
-                    {currentSegmentJob?.error_message ? (
-                      <div className="subtext" style={{ marginTop: 8, color: "var(--danger)" }}>
-                        {currentSegmentJob.error_message}
-                      </div>
-                    ) : null}
-                    {activeSegment.latest_take?.file_url ? (
-                      <>
-                        <div className="subtext" style={{ marginTop: 10 }}>
-                          已生成音訊版本 v{activeSegment.latest_take.version_no}
+                  <div className="editor-main-stack">
+                    <div className="editor-card editor-workspace">
+                      <div className="title-row">
+                        <div>
+                          <div className="eyebrow">编辑工作台</div>
+                          <strong>目前段落 {activeSegment.order_index}</strong>
                         </div>
-                        <audio className="review-audio" controls src={activeSegment.latest_take.file_url}></audio>
-                      </>
-                    ) : (
-                      <div className="subtext" style={{ marginTop: 10 }}>
-                        {currentSegmentJob
-                          ? "任務已建立，音訊生成後會直接出現在這裡。"
-                          : "尚未生成音訊。點「生成」後，這裡會出現任務狀態與播放器。"}
+                        <span className="tag">{statusLabel(activeSegment.status)}</span>
                       </div>
-                    )}
+                      <div className="subtext">
+                        把写稿、批注、词典和版本拆开处理。先在「写稿」里整理朗读稿，需要时再切去其他标签。
+                      </div>
+                      <div className="editor-tabbar">
+                        {editorPanels.map((panel) => (
+                          <button
+                            key={panel.key}
+                            type="button"
+                            className={`editor-tab ${editorPanel === panel.key ? "active" : ""}`}
+                            onClick={() => setEditorPanel(panel.key)}
+                          >
+                            <strong>{panel.label}</strong>
+                            <span>{panel.meta}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {editorPanel === "compose" ? (
+                        <div className="form-grid">
+                          <div className="field">
+                            <label>朗讀稿</label>
+                            <textarea className="textarea xl" value={draftText} onChange={(event) => setDraftText(event.target.value)} />
+                          </div>
+                          <div className="grid two compact-grid">
+                            <div className="field">
+                              <label>小說角色 / 旁白角色</label>
+                              <select className="select" value={characterId} onChange={(event) => setCharacterId(event.target.value)}>
+                                <option value="">不綁定角色</option>
+                                {characters.map((character) => (
+                                  <option key={character.id} value={character.id}>{characterOptionLabel(character)}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="field">
+                              <label>覆寫聲線</label>
+                              <select className="select" value={voiceId} onChange={(event) => setVoiceId(event.target.value)}>
+                                <option value="">依角色 / 專案預設</option>
+                                {voices.map((voice) => (
+                                  <option key={voice.id} value={voice.id}>{voice.name} · {voice.voice_name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                          <div className="field">
+                            <label>修订说明</label>
+                            <input
+                              className="input"
+                              placeholder="例如：统一角色称谓、修正发音、压缩旁白节奏"
+                              value={revisionNote}
+                              onChange={(event) => setRevisionNote(event.target.value)}
+                            />
+                          </div>
+                          <div className="toolbar" style={{ marginTop: -4 }}>
+                            <button type="button" className="button-secondary" onClick={() => setCharacterId("")}>解除角色綁定</button>
+                            <button type="button" className="button-secondary" onClick={() => setVoiceId("")}>解除聲線覆寫</button>
+                          </div>
+                          <div className="toolbar">
+                            <button className="button-flat" disabled={segmentBusyAction !== ""} onClick={saveSegment}>
+                              {segmentBusyAction === "save" ? "儲存中..." : "儲存"}
+                            </button>
+                            <button className="button-flat" disabled={segmentBusyAction !== ""} onClick={generateCurrentSegment}>
+                              {segmentBusyAction === "generate" ? "生成中..." : "生成"}
+                            </button>
+                            <button className="button-flat-danger" disabled={segmentBusyAction !== ""} onClick={() => requestDeleteSegment(activeSegment)}>
+                              刪除
+                            </button>
+                          </div>
+                          <details className="tips-card">
+                            <summary>写稿提示</summary>
+                            <div className="tips-list">
+                              <div className="list-item">
+                                <strong>建议保持段落长度适中</strong>
+                                <div className="subtext">过长段落更容易在审核阶段被标记为节奏问题。</div>
+                              </div>
+                              <div className="list-item">
+                                <strong>含数字与英文缩写时手动复核</strong>
+                                <div className="subtext">本机版 QC 会对数字内容自动加注提示，但仍建议人工过一遍。</div>
+                              </div>
+                              <div className="list-item">
+                                <strong>本机 TTS 先用 macOS say 跑流程</strong>
+                                <div className="subtext">后续接第三方声线时，这里的朗读稿和词典依然能复用。</div>
+                              </div>
+                            </div>
+                          </details>
+                        </div>
+                      ) : null}
+
+                      {editorPanel === "annotations" ? (
+                        <div className="form-grid">
+                          <div className="editor-card">
+                            <div className="title-row">
+                              <div>
+                                <div className="eyebrow">批注与修订</div>
+                                <strong>先记录问题，再统一处理</strong>
+                              </div>
+                              <span className="tag brand">{annotations.length} 批注</span>
+                            </div>
+                            <div className="grid compact-grid" style={{ marginTop: 12 }}>
+                              <div className="field">
+                                <label>批注类型</label>
+                                <select
+                                  className="select"
+                                  value={annotationForm.note_type}
+                                  onChange={(event) => setAnnotationForm((current) => ({ ...current, note_type: event.target.value }))}
+                                >
+                                  {EDITOR_ANNOTATION_TYPES.map((item) => (
+                                    <option key={item.value} value={item.value}>{item.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="field">
+                                <label>定位文字</label>
+                                <input
+                                  className="input"
+                                  placeholder="可选，例如：紧箍咒、七十二变"
+                                  value={annotationForm.anchor_text}
+                                  onChange={(event) => setAnnotationForm((current) => ({ ...current, anchor_text: event.target.value }))}
+                                />
+                              </div>
+                              <div className="field">
+                                <label>批注内容</label>
+                                <textarea
+                                  className="textarea"
+                                  rows={4}
+                                  placeholder="写下修改建议、统一要求或需要复核的原因。"
+                                  value={annotationForm.content}
+                                  onChange={(event) => setAnnotationForm((current) => ({ ...current, content: event.target.value }))}
+                                />
+                              </div>
+                              <div className="field">
+                                <label>建议改写</label>
+                                <textarea
+                                  className="textarea"
+                                  rows={3}
+                                  placeholder="可选，适合给录音稿或统一说法一个建议版本。"
+                                  value={annotationForm.suggested_text}
+                                  onChange={(event) => setAnnotationForm((current) => ({ ...current, suggested_text: event.target.value }))}
+                                />
+                              </div>
+                              <div className="toolbar" style={{ marginBottom: 0 }}>
+                                <button className="button-secondary" disabled={annotationBusy} onClick={submitAnnotation}>
+                                  {annotationBusy ? "保存中..." : "加入批注"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="editor-card">
+                            <div className="title-row">
+                              <strong>当前批注</strong>
+                              <span className="tag">{annotations.length} 条</span>
+                            </div>
+                            <div className="list editorial-list" style={{ marginTop: 12 }}>
+                              {annotations.map((annotation) => (
+                                <div key={annotation.id} className="list-item">
+                                  <div className="title-row">
+                                    <strong>{EDITOR_ANNOTATION_TYPES.find((item) => item.value === annotation.note_type)?.label || annotation.note_type}</strong>
+                                    <div className="pill-row">
+                                      <span className={`tag ${annotation.status === "resolved" ? "success" : "warn"}`}>
+                                        {annotation.status === "resolved" ? "已处理" : "待处理"}
+                                      </span>
+                                      {annotation.anchor_text ? <span className="tag">{annotation.anchor_text}</span> : null}
+                                    </div>
+                                  </div>
+                                  <div className="subtext" style={{ marginTop: 8 }}>{annotation.content}</div>
+                                  {annotation.suggested_text ? (
+                                    <div className="editor-note-block" style={{ marginTop: 10 }}>
+                                      <strong>建议改写</strong>
+                                      <div>{annotation.suggested_text}</div>
+                                    </div>
+                                  ) : null}
+                                  <div className="toolbar editorial-toolbar">
+                                    <div className="subtext">{annotation.created_by_name || "编辑"} · {relativeTime(annotation.created_at)}</div>
+                                    {annotation.status !== "resolved" ? (
+                                      <button className="button-secondary" disabled={annotationBusy} onClick={() => updateAnnotationStatus(annotation, "resolved")}>
+                                        标记已处理
+                                      </button>
+                                    ) : (
+                                      <button className="button-secondary" disabled={annotationBusy} onClick={() => updateAnnotationStatus(annotation, "open")}>
+                                        重新打开
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                              {!annotations.length ? (
+                                <div className="empty-state">这里会记录当前段落的编辑批注、发音提醒和统一要求。</div>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="editor-card">
+                            <div className="title-row">
+                              <strong>修订记录</strong>
+                              <span className="tag">{revisionHistory.length} 条</span>
+                            </div>
+                            <div className="list editorial-list" style={{ marginTop: 12 }}>
+                              {revisionHistory.map((revision) => (
+                                <div key={revision.id} className="list-item">
+                                  <div className="title-row">
+                                    <strong>{revision.summary || "修订"}</strong>
+                                    <span className="tag">{relativeTime(revision.created_at)}</span>
+                                  </div>
+                                  <div className="subtext" style={{ marginTop: 8 }}>
+                                    {revision.created_by_name || "编辑"} · 文本 {revision.before_text !== revision.after_text ? "已修改" : "未改动"} · 声线 {revision.before_voice_profile_id === revision.after_voice_profile_id ? "未改" : "已改"}
+                                  </div>
+                                  <div className="editor-revision-preview">
+                                    <div>
+                                      <strong>修改前</strong>
+                                      <div>{revision.before_excerpt || "—"}</div>
+                                    </div>
+                                    <div>
+                                      <strong>修改后</strong>
+                                      <div>{revision.after_excerpt || "—"}</div>
+                                    </div>
+                                  </div>
+                                  <div className="toolbar editorial-toolbar">
+                                    <button className="button-secondary" disabled={revisionBusy} onClick={() => requestRestoreRevision(revision)}>
+                                      {revisionBusy ? "恢复中..." : "恢复此版"}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                              {!revisionHistory.length ? (
+                                <div className="empty-state">保存朗读稿后，这里会自动累积可追溯的修订历史。</div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {editorPanel === "terms" ? (
+                        <div className="form-grid">
+                          <div className="editor-card">
+                            <div className="title-row">
+                              <div>
+                                <div className="eyebrow">术语表 / 发音词典</div>
+                                <strong>统一专名写法与朗读口径</strong>
+                              </div>
+                              <span className="tag brand">{terms.length} 词条</span>
+                            </div>
+                            <div className="grid compact-grid" style={{ marginTop: 12 }}>
+                              <div className="field">
+                                <label>词条类型</label>
+                                <select
+                                  className="select"
+                                  value={termForm.entry_type}
+                                  onChange={(event) => setTermForm((current) => ({ ...current, entry_type: event.target.value }))}
+                                >
+                                  {EDITOR_TERM_TYPES.map((item) => (
+                                    <option key={item.value} value={item.value}>{item.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="field">
+                                <label>术语 / 原词</label>
+                                <input
+                                  className="input"
+                                  placeholder="例如：齐天大圣、锁妖崖、南无阿弥陀佛"
+                                  value={termForm.term}
+                                  onChange={(event) => setTermForm((current) => ({ ...current, term: event.target.value }))}
+                                />
+                              </div>
+                              <div className="field">
+                                <label>推荐写法</label>
+                                <input
+                                  className="input"
+                                  placeholder="例如：齐天大圣（建议统一）"
+                                  value={termForm.preferred_text}
+                                  onChange={(event) => setTermForm((current) => ({ ...current, preferred_text: event.target.value }))}
+                                />
+                              </div>
+                              <div className="field">
+                                <label>朗读写法 / 发音</label>
+                                <input
+                                  className="input"
+                                  placeholder="例如：nan wu a mi tuo fo"
+                                  value={termForm.spoken_form}
+                                  onChange={(event) => setTermForm((current) => ({ ...current, spoken_form: event.target.value }))}
+                                />
+                              </div>
+                              <div className="field">
+                                <label>使用说明</label>
+                                <textarea
+                                  className="textarea"
+                                  rows={3}
+                                  placeholder="适合记录人物称谓、法宝别名、平台禁用写法等。"
+                                  value={termForm.description}
+                                  onChange={(event) => setTermForm((current) => ({ ...current, description: event.target.value }))}
+                                />
+                              </div>
+                              <div className="field">
+                                <label>备注</label>
+                                <textarea
+                                  className="textarea"
+                                  rows={3}
+                                  placeholder="例如：全书统一，不使用简称；旁白与角色读法一致。"
+                                  value={termForm.notes}
+                                  onChange={(event) => setTermForm((current) => ({ ...current, notes: event.target.value }))}
+                                />
+                              </div>
+                              <div className="toolbar" style={{ marginBottom: 0 }}>
+                                <button className="button-secondary" disabled={termBusy} onClick={submitEditorTerm}>
+                                  {termBusy ? "保存中..." : editingTermId ? "更新词条" : "新增词条"}
+                                </button>
+                                {editingTermId ? (
+                                  <button className="button-secondary" disabled={termBusy} onClick={() => resetTermForm(termForm.entry_type)}>
+                                    取消编辑
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="editor-card">
+                            <div className="title-row">
+                              <strong>当前段落命中词条</strong>
+                              <span className="tag">{matchedTerms.length} 项</span>
+                            </div>
+                            <div className="list editorial-list" style={{ marginTop: 12 }}>
+                              {matchedTerms.map((term) => (
+                                <div key={`match-${term.id}`} className="list-item">
+                                  <div className="title-row">
+                                    <strong>{term.term}</strong>
+                                    <div className="pill-row">
+                                      <span className="tag brand">{term.entry_type === "pronunciation" ? "发音" : "术语"}</span>
+                                      {(term.preferred_text || term.spoken_form) ? (
+                                        <button className="button-secondary" onClick={() => applyEditorTerm(term)}>套用到朗读稿</button>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                  <div className="subtext" style={{ marginTop: 8 }}>
+                                    推荐写法：{term.preferred_text || "—"} · 朗读写法：{term.spoken_form || "—"}
+                                  </div>
+                                  {term.description ? <div className="subtext" style={{ marginTop: 6 }}>{term.description}</div> : null}
+                                </div>
+                              ))}
+                              {!matchedTerms.length ? (
+                                <div className="empty-state">当前段落还没有命中项目词典。你可以先在下面建立词条。</div>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="editor-card">
+                            <div className="title-row">
+                              <strong>项目词典</strong>
+                              <span className="tag">{terms.length} 项</span>
+                            </div>
+                            <div className="list editorial-list" style={{ marginTop: 12 }}>
+                              {terms.map((term) => (
+                                <div key={term.id} className="list-item">
+                                  <div className="title-row">
+                                    <strong>{term.term}</strong>
+                                    <div className="pill-row">
+                                      <span className={`tag ${term.entry_type === "pronunciation" ? "warn" : "brand"}`}>
+                                        {term.entry_type === "pronunciation" ? "发音词典" : "术语表"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="subtext" style={{ marginTop: 8 }}>
+                                    推荐写法：{term.preferred_text || "—"} · 朗读写法：{term.spoken_form || "—"}
+                                  </div>
+                                  {term.description ? <div className="subtext" style={{ marginTop: 6 }}>{term.description}</div> : null}
+                                  <div className="toolbar editorial-toolbar">
+                                    <div className="subtext">{term.created_by_name || "编辑"}</div>
+                                    <button className="button-secondary" disabled={termBusy} onClick={() => beginEditTerm(term)}>编辑</button>
+                                    <button className="button-secondary" disabled={termBusy} onClick={() => applyEditorTerm(term)}>套用</button>
+                                    <button className="button-danger" disabled={termBusy} onClick={() => requestDeleteTerm(term)}>删除</button>
+                                  </div>
+                                </div>
+                              ))}
+                              {!terms.length ? (
+                                <div className="empty-state">这里适合维护角色称谓、地名、法宝名、外语词和特殊发音。</div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {editorPanel === "versions" ? (
+                        <div className="form-grid">
+                          <div className="editor-card">
+                            <div className="title-row">
+                              <div>
+                                <div className="eyebrow">版本对比</div>
+                                <strong>章节快照、差异对照与手动保存</strong>
+                              </div>
+                              <span className="tag brand">{chapterVersions.length} 版</span>
+                            </div>
+                            <div className="subtext" style={{ marginTop: 8 }}>
+                              版本对比基于「已保存」的章节朗读稿。如果刚改完当前段落，请先回到「写稿」点一次保存。
+                            </div>
+                            <div className="grid two compact-grid" style={{ marginTop: 12 }}>
+                              <div className="field">
+                                <label>版本说明</label>
+                                <input
+                                  className="input"
+                                  placeholder="例如：第一轮精修、统一神兵名称、修正旁白节奏"
+                                  value={versionNote}
+                                  onChange={(event) => setVersionNote(event.target.value)}
+                                />
+                              </div>
+                              <div className="field">
+                                <label>保存当前章节</label>
+                                <div className="toolbar" style={{ marginBottom: 0 }}>
+                                  <button className="button-secondary" disabled={versionBusy || !selectedChapterId} onClick={saveChapterVersion}>
+                                    {versionBusy ? "保存中..." : "保存当前版本"}
+                                  </button>
+                                  <div className="subtext">会把当前章的朗读稿快照存入版本历史。</div>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="grid two compact-grid" style={{ marginTop: 8 }}>
+                              <div className="field">
+                                <label>对比基准版本</label>
+                                <select className="select" value={compareBaseVersionId} onChange={(event) => setCompareBaseVersionId(event.target.value)}>
+                                  <option value="">请选择</option>
+                                  {chapterVersions.map((version) => (
+                                    <option key={version.id} value={version.id}>
+                                      v{version.version_no} · {version.summary || "自动快照"} · {relativeTime(version.created_at)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="field">
+                                <label>目标版本</label>
+                                <select className="select" value={compareTargetVersionId} onChange={(event) => setCompareTargetVersionId(event.target.value)}>
+                                  <option value="current">当前章节</option>
+                                  {chapterVersions.map((version) => (
+                                    <option key={`target-${version.id}`} value={version.id}>
+                                      v{version.version_no} · {version.summary || "自动快照"}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                            {versionDiff ? (
+                              <div className="grid" style={{ marginTop: 14 }}>
+                                <div className="pill-row">
+                                  <span className="tag">新增 {versionDiff.diff.stats.inserted}</span>
+                                  <span className="tag warn">删除 {versionDiff.diff.stats.deleted}</span>
+                                  <span className="tag brand">替换 {versionDiff.diff.stats.replaced}</span>
+                                </div>
+                                <div className="compare-panels">
+                                  <div className="editor-note-block">
+                                    <strong>{versionDiff.diff.base_label}</strong>
+                                    <pre className="editor-diff-text">{versionDiff.diff.base_text || "（空）"}</pre>
+                                  </div>
+                                  <div className="editor-note-block">
+                                    <strong>{versionDiff.diff.target_label}</strong>
+                                    <pre className="editor-diff-text">{versionDiff.diff.target_text || "（空）"}</pre>
+                                  </div>
+                                </div>
+                                <div className="editor-note-block">
+                                  <strong>统一 diff</strong>
+                                  <pre className="editor-diff-text">{versionDiff.diff.diff_text || "当前与所选版本没有差异。"}</pre>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="empty-state" style={{ marginTop: 14 }}>选一个历史版本后，这里会显示与当前章节的差异。</div>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                  <details className="tips-card">
-                    <summary>準備提示</summary>
-                    <div className="tips-list">
-                      <div className="list-item">
-                        <strong>這一區是做什麼的</strong>
-                        <div className="subtext">只是整理文字前的操作提醒，幫你快速判斷哪些段落要先改 `tts_text` 再生成。</div>
+
+                  <div className="editor-side-stack">
+                    <div className="editor-card">
+                      <div className="eyebrow">原文</div>
+                      <div>{activeSegment.source_text}</div>
+                    </div>
+
+                    <div className="editor-card">
+                      <div className="title-row">
+                        <strong>段落概览</strong>
+                        <span className="tag">段落 {activeSegment.order_index}</span>
                       </div>
-                      <div className="list-item">
-                        <strong>建議保持段落長度適中</strong>
-                        <div className="subtext">過長段落更容易在審核階段被標記節奏問題。</div>
-                      </div>
-                      <div className="list-item">
-                        <strong>含數字與英文縮寫時請手動複核</strong>
-                        <div className="subtext">本機版 QC 會對數字內容自動加註提示。</div>
-                      </div>
-                      <div className="list-item">
-                        <strong>本機 TTS 使用 macOS say</strong>
-                        <div className="subtext">先跑通流程，後續再接 ElevenLabs / OpenAI。</div>
+                      <div className="editor-quick-stats">
+                        <div className="editor-stat">
+                          <span>角色</span>
+                          <strong>{characterId ? (characters.find((character) => String(character.id) === String(characterId))?.story_character_name || characters.find((character) => String(character.id) === String(characterId))?.name || "已选择") : (activeSegment.character_profile?.story_character_name || activeSegment.character_profile?.name || "未绑定")}</strong>
+                        </div>
+                        <div className="editor-stat">
+                          <span>声线</span>
+                          <strong>{voiceId ? (voices.find((voice) => String(voice.id) === String(voiceId))?.name || "已覆写") : "默认"}</strong>
+                        </div>
+                        <div className="editor-stat">
+                          <span>批注</span>
+                          <strong>{annotations.length}</strong>
+                        </div>
+                        <div className="editor-stat">
+                          <span>修订</span>
+                          <strong>{revisionHistory.length}</strong>
+                        </div>
                       </div>
                     </div>
-                  </details>
+
+                    <div className="editor-card">
+                      <div className="title-row">
+                        <strong>目前生成狀態</strong>
+                        <span className={`tag ${currentSegmentJob?.status === "failed" ? "danger" : currentSegmentJob?.status === "succeeded" ? "success" : currentSegmentJob?.status === "running" ? "brand" : ""}`}>
+                          {statusLabel(currentSegmentJob?.status || activeSegment.status)}
+                        </span>
+                      </div>
+                      <div className="subtext" style={{ marginTop: 8 }}>
+                        {currentSegmentJob
+                          ? `最近任務更新：${relativeTime(currentSegmentJob.updated_at)}`
+                          : "这里会显示当前段落最近一次生成任务。"}
+                      </div>
+                      {currentSegmentJob?.request_id ? (
+                        <div className="code" style={{ marginTop: 8 }}>
+                          Request ID: {currentSegmentJob.request_id}
+                        </div>
+                      ) : null}
+                      {currentSegmentJob?.error_message ? (
+                        <div className="subtext" style={{ marginTop: 8, color: "var(--danger)" }}>
+                          {currentSegmentJob.error_message}
+                        </div>
+                      ) : null}
+                      {activeSegment.latest_take?.file_url ? (
+                        <>
+                          <div className="subtext" style={{ marginTop: 10 }}>
+                            已生成音訊版本 v{activeSegment.latest_take.version_no}
+                          </div>
+                          <audio className="review-audio" controls src={activeSegment.latest_take.file_url}></audio>
+                        </>
+                      ) : (
+                        <div className="subtext" style={{ marginTop: 10 }}>
+                          {currentSegmentJob
+                            ? "任務已建立，音訊生成後會直接出現在這裡。"
+                            : "尚未生成音訊。去「写稿」标签生成后，这里会出现播放器。"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </>
               ) : (
                 <div className="empty-state">目前章節沒有段落。</div>
@@ -6224,6 +7047,56 @@ function TextPrepPage({ user, token, project, selectedChapter, selectedChapterId
         )}
       </section>
     </div>
+    {showChapterComposer ? (
+      <div className="modal-backdrop" onClick={() => !chapterBusy && setShowChapterComposer(false)}>
+        <div className="modal-card modal-card-form chapter-composer-modal-card" onClick={(event) => event.stopPropagation()}>
+          <div className="panel-head">
+            <div>
+              <h2>手動新增章節</h2>
+              <div className="subtext">直接貼入單章內容，建立後會自動拆成段落，並接入現有生成、審核與出版流程。</div>
+            </div>
+            <span className="tag brand">大視窗編輯</span>
+          </div>
+          <div className="form-grid chapter-composer-form">
+            <div className="field">
+              <label>章節標題</label>
+              <input
+                className="input"
+                placeholder="例如：西游记第一章 石猴出世"
+                value={newChapterTitle}
+                onChange={(event) => setNewChapterTitle(event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>章節內容</label>
+              <textarea
+                className="textarea xl"
+                placeholder="把這一章的完整內容直接貼進來。保存後會自動拆段，並更新整書 TXT。"
+                value={newChapterBody}
+                onChange={(event) => setNewChapterBody(event.target.value)}
+              />
+            </div>
+            <div className="editor-note-block">
+              <strong>使用提醒</strong>
+              <div>標題可以自訂，例如「西游记第一章」「第二章节」「第一回」。</div>
+              <div>如果你是從 Word、PDF 或網頁複製內容，直接整章貼進來即可。</div>
+            </div>
+            <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 0 }}>
+              <div className="subtext">建立成功後，會自動切換到新章節，方便你立刻繼續編輯。</div>
+              <div className="toolbar" style={{ marginBottom: 0 }}>
+                <button className="button-secondary" disabled={chapterBusy} onClick={() => setShowChapterComposer(false)}>
+                  取消
+                </button>
+                <button className="button" disabled={chapterBusy} onClick={createManualChapter}>
+                  {chapterBusy ? "建立中..." : "建立章節"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }
 
@@ -9386,8 +10259,8 @@ function EbookWizardModal({ open, mode = "paste", project, token, onClose, refre
       <div className="modal-card ebook-wizard-card" onClick={(event) => event.stopPropagation()}>
         <div className="ebook-wizard-header">
           <div>
-            <div className="eyebrow">E-Book Builder</div>
-            <h2>新建電子書向導</h2>
+            <div className="eyebrow">{ui("E-Book Builder")}</div>
+            <h2>{ui("新建電子書向導")}</h2>
             <div className="subtext">
               {project?.title
                 ? ui(`正在編輯「${project.title}」。在這裡直接貼整本內容，或手動逐章建立。`)
@@ -9396,7 +10269,7 @@ function EbookWizardModal({ open, mode = "paste", project, token, onClose, refre
           </div>
           <div className="toolbar" style={{ marginBottom: 0 }}>
             {project ? <span className="tag brand">{project.author || ui("未填作者")} · {project.language}</span> : null}
-            <button className="button-secondary" onClick={onClose}>關閉向導</button>
+            <button className="button-secondary" onClick={onClose}>{ui("關閉向導")}</button>
           </div>
         </div>
 
@@ -9406,15 +10279,15 @@ function EbookWizardModal({ open, mode = "paste", project, token, onClose, refre
               <div className="wizard-step-row">
                 <div className="wizard-step">
                   <strong>1</strong>
-                  <span>選擇導入方式：整本拆章或逐章新增</span>
+                  <span>{ui("選擇導入方式：整本拆章或逐章新增")}</span>
                 </div>
                 <div className="wizard-step">
                   <strong>2</strong>
-                  <span>保存後自動寫入完整整書 TXT 與章節資料</span>
+                  <span>{ui("保存後自動寫入完整整書 TXT 與章節資料")}</span>
                 </div>
                 <div className="wizard-step">
                   <strong>3</strong>
-                  <span>接著就能進語音生成、審核、渲染與出版</span>
+                  <span>{ui("接著就能進語音生成、審核、渲染與出版")}</span>
                 </div>
               </div>
               <div className="ebook-wizard-mode-row">
@@ -9422,15 +10295,15 @@ function EbookWizardModal({ open, mode = "paste", project, token, onClose, refre
                   className={`ebook-wizard-mode ${activeMode === "paste" ? "active" : ""}`}
                   onClick={() => setActiveMode("paste")}
                 >
-                  <strong>方式 A：貼整本並拆章</strong>
-                  <span>推薦。一次貼完整電子書內容，系統自動識別章節標題並切段。</span>
+                  <strong>{ui("方式 A：貼整本並拆章")}</strong>
+                  <span>{ui("推薦。一次貼完整電子書內容，系統自動識別章節標題並切段。")}</span>
                 </button>
                 <button
                   className={`ebook-wizard-mode ${activeMode === "manual" ? "active" : ""}`}
                   onClick={() => setActiveMode("manual")}
                 >
-                  <strong>方式 B：手動新增單章</strong>
-                  <span>適合從 Word、PDF、網頁逐章複製貼上，例如「西游记第一章」。</span>
+                  <strong>{ui("方式 B：手動新增單章")}</strong>
+                  <span>{ui("適合從 Word、PDF、網頁逐章複製貼上，例如「西游记第一章」。")}</span>
                 </button>
               </div>
             </div>
@@ -9443,10 +10316,10 @@ function EbookWizardModal({ open, mode = "paste", project, token, onClose, refre
                   <div className="wizard-card ebook-wizard-stage-card">
                     <div className="panel-head">
                       <div>
-                        <h3>整本電子書匯入</h3>
-                        <div className="subtext">把整本內容直接貼進文本框，按下 `貼上並拆章`。支援 `西游记第一章`、`第二章节`、`第一回`，也支援 `# 章節標題`。</div>
+                        <h3>{ui("整本電子書匯入")}</h3>
+                        <div className="subtext">{ui("把整本內容直接貼進文本框，按下 `貼上並拆章`。支援 `西游记第一章`、`第二章节`、`第一回`，也支援 `# 章節標題`。")}</div>
                       </div>
-                      <span className="tag success">推薦</span>
+                      <span className="tag success">{ui("推薦")}</span>
                     </div>
                     <ImportInline
                       token={token}
@@ -9469,48 +10342,48 @@ function EbookWizardModal({ open, mode = "paste", project, token, onClose, refre
                   <div className="wizard-card ebook-wizard-stage-card">
                     <div className="panel-head">
                       <div>
-                        <h3>手動新增章節</h3>
-                        <div className="subtext">先填章節標題，再貼這一章正文。儲存後會自動切成段落，並同步寫回整書 TXT。</div>
+                        <h3>{ui("手動新增章節")}</h3>
+                        <div className="subtext">{ui("先填章節標題，再貼這一章正文。儲存後會自動切成段落，並同步寫回整書 TXT。")}</div>
                       </div>
-                      <span className="tag warn">逐章模式</span>
+                      <span className="tag warn">{ui("逐章模式")}</span>
                     </div>
                     <div className="ebook-wizard-highlights">
                       <div className="ebook-wizard-highlight">
-                        <strong>標題可自訂</strong>
-                        <span>例如：西游记第一章、第二章节、第一回 石猴出世。</span>
+                        <strong>{ui("標題可自訂")}</strong>
+                        <span>{ui("例如：西游记第一章、第二章节、第一回 石猴出世。")}</span>
                       </div>
                       <div className="ebook-wizard-highlight">
-                        <strong>支援複製貼上</strong>
-                        <span>可以直接從 Word、PDF 或網站複製整章正文貼進來。</span>
+                        <strong>{ui("支援複製貼上")}</strong>
+                        <span>{ui("可以直接從 Word、PDF 或網站複製整章正文貼進來。")}</span>
                       </div>
                       <div className="ebook-wizard-highlight">
-                        <strong>沿用現有流程</strong>
-                        <span>建立完成後直接走語音生成、審核、出版，不需要另接流程。</span>
+                        <strong>{ui("沿用現有流程")}</strong>
+                        <span>{ui("建立完成後直接走語音生成、審核、出版，不需要另接流程。")}</span>
                       </div>
                     </div>
                     <div className="ebook-wizard-form">
                       <div className="field">
-                        <label>章節標題</label>
+                        <label>{ui("章節標題")}</label>
                         <input
                           ref={manualInputRef}
                           className="input"
-                          placeholder="例如：西游记第一章 石猴出世"
+                          placeholder={ui("例如：西游记第一章 石猴出世")}
                           value={manualTitle}
                           onChange={(event) => setManualTitle(event.target.value)}
                         />
                       </div>
                       <div className="field">
-                        <label>章節內容</label>
+                        <label>{ui("章節內容")}</label>
                         <textarea
                           className="textarea xl"
-                          placeholder="把這一章正文直接貼進來。保存後會自動切段，並更新整書 TXT。"
+                          placeholder={ui("把這一章正文直接貼進來。保存後會自動切段，並更新整書 TXT。")}
                           value={manualBody}
                           onChange={(event) => setManualBody(event.target.value)}
                         />
                       </div>
                       <div className="toolbar">
                         <button className="button" disabled={manualBusy} onClick={createManualChapter}>
-                          {manualBusy ? "建立中..." : "建立章節"}
+                          {manualBusy ? ui("建立中...") : ui("建立章節")}
                         </button>
                         <button
                           className="button-secondary"
@@ -9522,15 +10395,15 @@ function EbookWizardModal({ open, mode = "paste", project, token, onClose, refre
                             window.setTimeout(() => manualInputRef.current?.focus(), 60);
                           }}
                         >
-                          清空表單
+                          {ui("清空表單")}
                         </button>
-                        <div className="subtext">建立成功後，右側章節地圖會立刻更新。</div>
+                        <div className="subtext">{ui("建立成功後，右側章節地圖會立刻更新。")}</div>
                       </div>
                     </div>
                   </div>
                 )
               ) : (
-                <div className="empty-state">專案資料載入中。若你是從專案列表點進來，稍候一下就可以直接開始。</div>
+                <div className="empty-state">{ui("專案資料載入中。若你是從專案列表點進來，稍候一下就可以直接開始。")}</div>
               )}
             </div>
           </section>
@@ -9539,49 +10412,49 @@ function EbookWizardModal({ open, mode = "paste", project, token, onClose, refre
             <div className="wizard-card ebook-wizard-side-card">
               <div className="panel-head">
                 <div>
-                  <h3>目前專案</h3>
-                  <div className="subtext">向導內所有動作都會直接保存到這個專案。</div>
+                  <h3>{ui("目前專案")}</h3>
+                  <div className="subtext">{ui("向導內所有動作都會直接保存到這個專案。")}</div>
                 </div>
-                <span className="tag brand">{statusLabel(project?.status) || "草稿"}</span>
+                <span className="tag brand">{statusLabel(project?.status || "draft")}</span>
               </div>
               <div className="metrics ebook-wizard-metrics">
                 <div className="metric">
-                  <div className="eyebrow">章節</div>
+                  <div className="eyebrow">{ui("章節")}</div>
                   <strong>{chapterCount}</strong>
                 </div>
                 <div className="metric">
-                  <div className="eyebrow">段落</div>
+                  <div className="eyebrow">{ui("段落")}</div>
                   <strong>{segmentCount}</strong>
                 </div>
                 <div className="metric">
-                  <div className="eyebrow">待審核</div>
+                  <div className="eyebrow">{ui("待審核")}</div>
                   <strong>{reviewCount}</strong>
                 </div>
                 <div className="metric">
-                  <div className="eyebrow">已通過</div>
+                  <div className="eyebrow">{ui("已通過")}</div>
                   <strong>{approvedCount}</strong>
                 </div>
               </div>
               {project?.source_book_url ? (
                 <div className="ebook-wizard-download">
                   <div>
-                    <strong>完整電子書 TXT 已保存</strong>
+                    <strong>{ui("完整電子書 TXT 已保存")}</strong>
                     <div className="subtext">{sourceBookName}</div>
                   </div>
                   <a className="button-secondary" href={project.source_book_url} download={sourceBookName}>
-                    下載整書 TXT
+                    {ui("下載整書 TXT")}
                   </a>
                 </div>
               ) : (
-                <div className="empty-state">還沒有完整整書 TXT。你一旦匯入整本或新增章節，這裡就會出現下載按鈕。</div>
+                <div className="empty-state">{ui("還沒有完整整書 TXT。你一旦匯入整本或新增章節，這裡就會出現下載按鈕。")}</div>
               )}
             </div>
 
             <div className="wizard-card ebook-wizard-side-card">
               <div className="panel-head">
                 <div>
-                  <h3>章節地圖</h3>
-                  <div className="subtext">保存成功後，這裡會立即顯示最新章節。</div>
+                  <h3>{ui("章節地圖")}</h3>
+                  <div className="subtext">{ui("保存成功後，這裡會立即顯示最新章節。")}</div>
                 </div>
                 <span className="tag">{ui(`${chapterCount} 章`)}</span>
               </div>
@@ -9593,7 +10466,7 @@ function EbookWizardModal({ open, mode = "paste", project, token, onClose, refre
                         <strong>{chapter.order_index}. {chapter.title}</strong>
                       </div>
                       <div className="pill-row" style={{ marginTop: 10 }}>
-                        <span className="tag">{chapter.segment_count} 段</span>
+                        <span className="tag">{ui(`${chapter.segment_count} 段`)}</span>
                         <span className="tag success">{ui(`${chapter.approved_count} 已通過`)}</span>
                         <span className="tag warn">{ui(`${chapter.review_count} 待審核`)}</span>
                       </div>
@@ -9601,23 +10474,23 @@ function EbookWizardModal({ open, mode = "paste", project, token, onClose, refre
                   ))}
                 </div>
               ) : chapterCount > 0 ? (
-                <div className="empty-state">章節統計已存在，詳細章節清單正在載入。</div>
+                <div className="empty-state">{ui("章節統計已存在，詳細章節清單正在載入。")}</div>
               ) : (
-                <div className="empty-state">還沒有章節。你可以先從左側選擇一種方式開始建立內容。</div>
+                <div className="empty-state">{ui("還沒有章節。你可以先從左側選擇一種方式開始建立內容。")}</div>
               )}
             </div>
 
             <div className="wizard-card ebook-wizard-side-card">
               <div className="panel-head">
                 <div>
-                  <h3>下一步怎麼做</h3>
-                  <div className="subtext">內容進來後，不需要另外配置新流程。</div>
+                  <h3>{ui("下一步怎麼做")}</h3>
+                  <div className="subtext">{ui("內容進來後，不需要另外配置新流程。")}</div>
                 </div>
               </div>
               <div className="ebook-wizard-checklist">
-                <div className="ebook-wizard-check">1. 到語音生成頁送出本章或整章任務。</div>
-                <div className="ebook-wizard-check">2. 到審核頁聽音並處理待審核段落。</div>
-                <div className="ebook-wizard-check">3. 到出版頁渲染章節並匯出 ZIP。</div>
+                <div className="ebook-wizard-check">{ui("1. 到語音生成頁送出本章或整章任務。")}</div>
+                <div className="ebook-wizard-check">{ui("2. 到審核頁聽音並處理待審核段落。")}</div>
+                <div className="ebook-wizard-check">{ui("3. 到出版頁渲染章節並匯出 ZIP。")}</div>
               </div>
             </div>
           </aside>
@@ -9634,12 +10507,85 @@ function ImportInline({ token, project, onDone, showFlash, pasteFirst = false, e
   const [localPath, setLocalPath] = useState("");
   const [manualText, setManualText] = useState("");
   const [manualFileName, setManualFileName] = useState("source_book.txt");
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [showPathModal, setShowPathModal] = useState(false);
   const inputRef = useRef(null);
+  const locale = normalizeLocale(ACTIVE_LOCALE);
+  const ui = (text) => translateLiteral(text, locale);
 
   function handleFiles(fileList) {
     const nextFile = fileList?.[0] || null;
     setFile(nextFile);
     setDragActive(false);
+  }
+
+  async function importSelectedFile() {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      await apiFetch(`/api/projects/${project.id}/import`, {
+        method: "POST",
+        token,
+        formData,
+      });
+      setFile(null);
+      setLocalPath("");
+      await onDone?.();
+    } catch (error) {
+      showFlash("error", error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importFromLocalPath() {
+    if (!localPath.trim()) return;
+    setBusy(true);
+    try {
+      await apiFetch(`/api/projects/${project.id}/import-local`, {
+        method: "POST",
+        token,
+        body: { path: localPath.trim() },
+      });
+      setFile(null);
+      setLocalPath("");
+      if (!emphasizeWizard) {
+        setShowPathModal(false);
+      }
+      await onDone?.();
+    } catch (error) {
+      showFlash("error", error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importFromPaste() {
+    if (!manualText.trim()) return;
+    setBusy(true);
+    try {
+      await apiFetch(`/api/projects/${project.id}/import-paste`, {
+        method: "POST",
+        token,
+        body: {
+          text: manualText,
+          filename: manualFileName.trim() || "source_book.txt",
+        },
+      });
+      setFile(null);
+      setLocalPath("");
+      setManualText("");
+      if (!emphasizeWizard) {
+        setShowPasteModal(false);
+      }
+      await onDone?.();
+    } catch (error) {
+      showFlash("error", error.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   const dropzoneSection = (
@@ -9664,14 +10610,14 @@ function ImportInline({ token, project, onDone, showFlash, pasteFirst = false, e
           handleFiles(event.dataTransfer?.files);
         }}
       >
-        <div className="import-dropzone-title">拖曳 `.epub / .html / .xhtml / .txt / .md / .docx` 到這裡</div>
-        <div className="subtext">如果系統檔案選擇器不讓你選檔，直接把檔案拖進來。</div>
+        <div className="import-dropzone-title">{ui("拖曳 `.epub / .html / .xhtml / .txt / .md / .docx` 到這裡")}</div>
+        <div className="subtext">{ui("如果系統檔案選擇器不讓你選檔，直接把檔案拖進來。")}</div>
         <div className="toolbar" style={{ marginTop: 10 }}>
           <button className="button button-secondary" type="button" onClick={() => inputRef.current?.click()}>
-            選擇檔案
+            {ui("選擇檔案")}
           </button>
           <div className="subtext">
-            {file ? `目前檔案：${file.name}` : "尚未選擇檔案"}
+            {file ? ui(`目前檔案：${file.name}`) : ui("尚未選擇檔案")}
           </div>
         </div>
       </div>
@@ -9679,7 +10625,7 @@ function ImportInline({ token, project, onDone, showFlash, pasteFirst = false, e
 
   const localPathSection = (
       <div className="field">
-        <label>或直接貼本機檔案路徑</label>
+        <label>{ui("或直接貼本機檔案路徑")}</label>
         <div className="toolbar">
           <input
             className="input"
@@ -9690,34 +10636,18 @@ function ImportInline({ token, project, onDone, showFlash, pasteFirst = false, e
           <button
             className="button button-secondary"
             disabled={!localPath.trim() || busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await apiFetch(`/api/projects/${project.id}/import-local`, {
-                  method: "POST",
-                  token,
-                  body: { path: localPath.trim() },
-                });
-                setFile(null);
-                setLocalPath("");
-                await onDone?.();
-              } catch (error) {
-                showFlash("error", error.message);
-              } finally {
-                setBusy(false);
-              }
-            }}
+            onClick={importFromLocalPath}
           >
-            {busy ? "匯入中..." : "從路徑匯入"}
+            {busy ? ui("匯入中...") : ui("從路徑匯入")}
           </button>
         </div>
-        <div className="subtext">支援 `.epub / .html / .xhtml / .txt / .md / .docx`，也可以直接貼 Finder 裡的完整檔案路徑。</div>
+        <div className="subtext">{ui("支援 `.epub / .html / .xhtml / .txt / .md / .docx`，也可以直接貼 Finder 裡的完整檔案路徑。")}</div>
       </div>
   );
 
   const pasteSection = (
       <div className={`field ${emphasizeWizard ? "wizard-paste-field" : ""}`}>
-        <label>或直接貼上整本內容，自動拆成章節</label>
+        <label>{ui("或直接貼上整本內容，自動拆成章節")}</label>
         <div className="grid" style={{ gap: 10 }}>
           <input
             className="input"
@@ -9729,7 +10659,7 @@ function ImportInline({ token, project, onDone, showFlash, pasteFirst = false, e
             ref={pasteInputRef}
             className="textarea"
             rows={10}
-            placeholder={"可直接貼入整本電子書內容。\n支援標題格式如：西游记第一章、第二章节、第一回，或用 # 章節標題 來分章。"}
+            placeholder={ui("可直接貼入整本電子書內容。\n支援標題格式如：西游记第一章、第二章节、第一回，或用 # 章節標題 來分章。")}
             value={manualText}
             onChange={(event) => setManualText(event.target.value)}
           />
@@ -9737,76 +10667,129 @@ function ImportInline({ token, project, onDone, showFlash, pasteFirst = false, e
             <button
               className="button-secondary"
               disabled={!manualText.trim() || busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await apiFetch(`/api/projects/${project.id}/import-paste`, {
-                    method: "POST",
-                    token,
-                    body: {
-                      text: manualText,
-                      filename: manualFileName.trim() || "source_book.txt",
-                    },
-                  });
-                  setFile(null);
-                  setLocalPath("");
-                  setManualText("");
-                  await onDone?.();
-                } catch (error) {
-                  showFlash("error", error.message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
+              onClick={importFromPaste}
             >
-              {busy ? "匯入中..." : "貼上並拆章"}
+              {busy ? ui("匯入中...") : ui("貼上並拆章")}
             </button>
             {project?.source_book_url ? (
               <a className="button-secondary" href={project.source_book_url} download={project.source_book_name || "source_book.txt"}>
-                下載目前整書 TXT
+                {ui("下載目前整書 TXT")}
               </a>
             ) : null}
           </div>
-          <div className="subtext">系統會把內容保存為完整整書 TXT，並建立章節與段落，後續可直接進入語音生成、審核與匯出。</div>
+          <div className="subtext">{ui("系統會把內容保存為完整整書 TXT，並建立章節與段落，後續可直接進入語音生成、審核與匯出。")}</div>
         </div>
       </div>
   );
 
+  const pasteTriggerSection = (
+      <div className="field import-paste-trigger">
+        <label>{ui("或直接貼上整本內容，自動拆成章節")}</label>
+        <div className="toolbar">
+          <button className="button-secondary" type="button" onClick={() => setShowPasteModal(true)}>
+            {ui("貼上並拆章")}
+          </button>
+          {project?.source_book_url ? (
+            <a className="button-secondary" href={project.source_book_url} download={project.source_book_name || "source_book.txt"}>
+              {ui("下載目前整書 TXT")}
+            </a>
+          ) : null}
+        </div>
+        <div className="subtext">{ui("系統會把內容保存為完整整書 TXT，並建立章節與段落，後續可直接進入語音生成、審核與匯出。")}</div>
+      </div>
+  );
+
   return (
-    <div className={`toolbar import-toolbar ${emphasizeWizard ? "import-toolbar-wizard" : ""}`}>
-      {pasteFirst ? pasteSection : dropzoneSection}
-      {pasteFirst ? dropzoneSection : localPathSection}
-      {pasteFirst ? localPathSection : pasteSection}
-      <input
-        ref={inputRef}
-        className="file-input"
-        type="file"
-        style={{ display: "none" }}
-        onChange={(event) => handleFiles(event.target.files)}
-      />
-      <button className="button" disabled={!file || busy} onClick={async () => {
-        if (!file) return;
-        setBusy(true);
-        try {
-          const formData = new FormData();
-          formData.append("file", file);
-          await apiFetch(`/api/projects/${project.id}/import`, {
-            method: "POST",
-            token,
-            formData,
-          });
-          setFile(null);
-          setLocalPath("");
-          await onDone?.();
-        } catch (error) {
-          showFlash("error", error.message);
-        } finally {
-          setBusy(false);
-        }
-      }}>
-        {busy ? "匯入中..." : "匯入文本"}
-      </button>
-    </div>
+    <>
+      {emphasizeWizard ? (
+        <div className={`toolbar import-toolbar ${emphasizeWizard ? "import-toolbar-wizard" : ""}`}>
+          {pasteFirst ? pasteSection : dropzoneSection}
+          {pasteFirst ? dropzoneSection : localPathSection}
+          {pasteFirst ? localPathSection : pasteTriggerSection}
+          <input
+            ref={inputRef}
+            className="file-input"
+            type="file"
+            style={{ display: "none" }}
+            onChange={(event) => handleFiles(event.target.files)}
+          />
+          <button className="button" disabled={!file || busy} onClick={importSelectedFile}>
+            {busy ? ui("匯入中...") : ui("匯入文本")}
+          </button>
+        </div>
+      ) : (
+        <div className="import-toolbar import-toolbar-compact">
+          <input
+            ref={inputRef}
+            className="file-input"
+            type="file"
+            style={{ display: "none" }}
+            onChange={(event) => handleFiles(event.target.files)}
+          />
+          <button className="button-secondary" type="button" onClick={() => inputRef.current?.click()}>
+            {ui("選擇檔案")}
+          </button>
+          <button className="button-secondary" type="button" onClick={() => setShowPathModal(true)}>
+            {ui("從路徑匯入")}
+          </button>
+          <button className="button-secondary" type="button" onClick={() => setShowPasteModal(true)}>
+            {ui("貼上並拆章")}
+          </button>
+          {project?.source_book_url ? (
+            <a className="button-secondary" href={project.source_book_url} download={project.source_book_name || "source_book.txt"}>
+              {ui("下載目前整書 TXT")}
+            </a>
+          ) : null}
+          {file ? <span className="tag brand">{ui(`目前檔案：${file.name}`)}</span> : null}
+          {file ? (
+            <button className="button" disabled={busy} onClick={importSelectedFile}>
+              {busy ? ui("匯入中...") : ui("匯入文本")}
+            </button>
+          ) : null}
+          <div className="subtext import-toolbar-status">
+            {ui("整書貼上、路徑匯入與檔案匯入都改成按需打開，先把頁面空間留給章節與段落編輯。")}
+          </div>
+        </div>
+      )}
+
+      {!emphasizeWizard && showPasteModal ? (
+        <div className="modal-backdrop" onClick={() => !busy && setShowPasteModal(false)}>
+          <div className="modal-card modal-card-form import-paste-modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="panel-head">
+              <div>
+                <h2>{ui("整本電子書匯入")}</h2>
+                <div className="subtext">{ui("把整本內容直接貼進文本框，按下 `貼上並拆章`。支援 `西游记第一章`、`第二章节`、`第一回`，也支援 `# 章節標題`。")}</div>
+              </div>
+            </div>
+            {pasteSection}
+            <div className="toolbar" style={{ marginTop: 14, marginBottom: 0, justifyContent: "flex-end" }}>
+              <button className="button-secondary" type="button" disabled={busy} onClick={() => setShowPasteModal(false)}>
+                {ui("取消")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {!emphasizeWizard && showPathModal ? (
+        <div className="modal-backdrop" onClick={() => !busy && setShowPathModal(false)}>
+          <div className="modal-card modal-card-form import-paste-modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="panel-head">
+              <div>
+                <h2>{ui("從路徑匯入")}</h2>
+                <div className="subtext">{ui("支援 `.epub / .html / .xhtml / .txt / .md / .docx`，也可以直接貼 Finder 裡的完整檔案路徑。")}</div>
+              </div>
+            </div>
+            {localPathSection}
+            <div className="toolbar" style={{ marginTop: 14, marginBottom: 0, justifyContent: "flex-end" }}>
+              <button className="button-secondary" type="button" disabled={busy} onClick={() => setShowPathModal(false)}>
+                {ui("取消")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 

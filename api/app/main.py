@@ -10,14 +10,14 @@ import sqlite3
 import urllib.parse
 import urllib.request
 import zipfile
-from difflib import SequenceMatcher
+from difflib import SequenceMatcher, unified_diff
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .ai_providers import ProviderConfigError, ProviderRequestError, generate_speech, transcribe_audio
@@ -46,8 +46,11 @@ from .schemas import (
     CostItemUpdate,
     DistributionChannelCreate,
     DistributionChannelUpdate,
+    EditorTermCreate,
+    EditorTermUpdate,
     ExchangeRateCreate,
     ExchangeRateUpdate,
+    ChapterVersionCreate,
     IssueCreate,
     IssueUpdate,
     LoginRequest,
@@ -65,6 +68,8 @@ from .schemas import (
     RoyaltyStatementUpdate,
     SalesRecordCreate,
     SalesRecordUpdate,
+    SegmentAnnotationCreate,
+    SegmentAnnotationUpdate,
     SegmentUpdate,
     VoiceProfileCreate,
     VoiceProfileUpdate,
@@ -268,6 +273,9 @@ def create_chapter_record(
     *,
     status: str = "draft",
     now: str | None = None,
+    actor_id: int | None = None,
+    snapshot_summary: str = "",
+    snapshot_source: str = "import",
 ) -> int:
     timestamp = now or utc_now()
     chapter_id = conn.execute(
@@ -285,7 +293,290 @@ def create_chapter_record(
             """,
             (project_id, chapter_id, segment_index, segment_text, segment_text, timestamp, timestamp),
         )
+    create_chapter_version_snapshot(
+        conn,
+        chapter_id,
+        actor_id=actor_id,
+        summary=snapshot_summary or "初始章节导入",
+        source=snapshot_source,
+        now=timestamp,
+        force=True,
+    )
     return chapter_id
+
+
+def chapter_compiled_text(conn: sqlite3.Connection, chapter_id: int, field: str = "tts_text") -> str:
+    if field not in {"tts_text", "source_text"}:
+        raise ValueError(f"Unsupported chapter text field: {field}")
+    rows = conn.execute(
+        f"SELECT source_text, tts_text FROM segments WHERE chapter_id = ? ORDER BY order_index, id",
+        (chapter_id,),
+    ).fetchall()
+    if rows:
+        parts = []
+        for row in rows:
+            value = (row[field] or row["source_text"] or "").strip()
+            if value:
+                parts.append(value)
+        if parts:
+            return "\n\n".join(parts)
+    return ""
+
+
+def sync_chapter_compiled_text(conn: sqlite3.Connection, chapter_id: int, *, now: str | None = None) -> sqlite3.Row:
+    timestamp = now or utc_now()
+    source_text = chapter_compiled_text(conn, chapter_id, "source_text")
+    tts_text = chapter_compiled_text(conn, chapter_id, "tts_text")
+    conn.execute(
+        "UPDATE chapters SET source_text = ?, tts_text = ?, updated_at = ? WHERE id = ?",
+        (source_text, tts_text, timestamp, chapter_id),
+    )
+    return get_chapter(conn, chapter_id)
+
+
+def chapter_version_payload(row: sqlite3.Row | None) -> dict | None:
+    if not row:
+        return None
+    payload = dict(row)
+    payload["body_length"] = len(payload.get("body_text") or "")
+    return payload
+
+
+def segment_annotation_payload(row: sqlite3.Row | None) -> dict | None:
+    if not row:
+        return None
+    payload = dict(row)
+    payload["is_resolved"] = payload.get("status") == "resolved"
+    return payload
+
+
+def segment_revision_payload(row: sqlite3.Row | None) -> dict | None:
+    if not row:
+        return None
+    payload = dict(row)
+    payload["before_excerpt"] = (payload.get("before_text") or "")[:120]
+    payload["after_excerpt"] = (payload.get("after_text") or "")[:120]
+    return payload
+
+
+def editor_term_payload(row: sqlite3.Row | None) -> dict | None:
+    if not row:
+        return None
+    return dict(row)
+
+
+def list_segment_annotations(conn: sqlite3.Connection, segment_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT segment_annotations.*, users.name AS created_by_name
+        FROM segment_annotations
+        LEFT JOIN users ON users.id = segment_annotations.created_by
+        WHERE segment_annotations.segment_id = ?
+        ORDER BY CASE WHEN segment_annotations.status = 'open' THEN 0 ELSE 1 END,
+                 segment_annotations.created_at DESC
+        """,
+        (segment_id,),
+    ).fetchall()
+    return [segment_annotation_payload(row) for row in rows]
+
+
+def list_segment_revisions(conn: sqlite3.Connection, segment_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT segment_revisions.*, users.name AS created_by_name
+        FROM segment_revisions
+        LEFT JOIN users ON users.id = segment_revisions.created_by
+        WHERE segment_revisions.segment_id = ?
+        ORDER BY segment_revisions.created_at DESC, segment_revisions.id DESC
+        """,
+        (segment_id,),
+    ).fetchall()
+    return [segment_revision_payload(row) for row in rows]
+
+
+def list_editor_terms(conn: sqlite3.Connection, project_id: int, entry_type: str | None = None) -> list[dict]:
+    params: list[object] = [project_id]
+    query = """
+        SELECT editor_terms.*, users.name AS created_by_name
+        FROM editor_terms
+        LEFT JOIN users ON users.id = editor_terms.created_by
+        WHERE editor_terms.project_id = ?
+    """
+    if entry_type:
+        query += " AND editor_terms.entry_type = ?"
+        params.append(entry_type)
+    query += " ORDER BY editor_terms.entry_type, LOWER(editor_terms.term), editor_terms.id"
+    rows = conn.execute(query, params).fetchall()
+    return [editor_term_payload(row) for row in rows]
+
+
+def list_chapter_versions(conn: sqlite3.Connection, chapter_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT chapter_versions.*, users.name AS created_by_name
+        FROM chapter_versions
+        LEFT JOIN users ON users.id = chapter_versions.created_by
+        WHERE chapter_versions.chapter_id = ?
+        ORDER BY chapter_versions.version_no DESC
+        """,
+        (chapter_id,),
+    ).fetchall()
+    return [chapter_version_payload(row) for row in rows]
+
+
+def chapter_diff_payload(
+    base_label: str,
+    base_text: str,
+    target_label: str,
+    target_text: str,
+) -> dict:
+    base_lines = (base_text or "").splitlines()
+    target_lines = (target_text or "").splitlines()
+    matcher = SequenceMatcher(None, base_lines, target_lines)
+    stats = {"inserted": 0, "deleted": 0, "replaced": 0}
+    for opcode, i1, i2, j1, j2 in matcher.get_opcodes():
+        if opcode == "insert":
+            stats["inserted"] += j2 - j1
+        elif opcode == "delete":
+            stats["deleted"] += i2 - i1
+        elif opcode == "replace":
+            stats["replaced"] += max(i2 - i1, j2 - j1)
+    diff_text = "\n".join(
+        unified_diff(
+            base_lines,
+            target_lines,
+            fromfile=base_label,
+            tofile=target_label,
+            lineterm="",
+        )
+    )
+    return {
+        "base_label": base_label,
+        "target_label": target_label,
+        "base_text": base_text,
+        "target_text": target_text,
+        "diff_text": diff_text,
+        "stats": stats,
+    }
+
+
+def build_revision_summary(before: sqlite3.Row, after_values: dict, summary: str) -> str:
+    if summary.strip():
+        return summary.strip()
+    changes: list[str] = []
+    before_text = (before["tts_text"] or "").strip()
+    after_text = (after_values.get("tts_text") or "").strip()
+    if before_text != after_text:
+        changes.append("调整朗读稿")
+    if before["voice_profile_id"] != after_values.get("voice_profile_id"):
+        changes.append("修改声线覆写")
+    if before["character_profile_id"] != after_values.get("character_profile_id"):
+        changes.append("修改角色绑定")
+    return " / ".join(changes) or "编辑更新"
+
+
+def create_segment_revision(
+    conn: sqlite3.Connection,
+    before: sqlite3.Row,
+    after_values: dict,
+    *,
+    actor_id: int | None = None,
+    summary: str = "",
+    source: str = "manual",
+    now: str | None = None,
+) -> dict | None:
+    has_text_change = (before["tts_text"] or "") != (after_values.get("tts_text") or "")
+    has_voice_change = before["voice_profile_id"] != after_values.get("voice_profile_id")
+    has_character_change = before["character_profile_id"] != after_values.get("character_profile_id")
+    if not any([has_text_change, has_voice_change, has_character_change]):
+        return None
+    timestamp = now or utc_now()
+    revision_id = conn.execute(
+        """
+        INSERT INTO segment_revisions (
+          project_id, chapter_id, segment_id,
+          before_text, after_text,
+          before_voice_profile_id, after_voice_profile_id,
+          before_character_profile_id, after_character_profile_id,
+          summary, source, created_by, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            before["project_id"],
+            before["chapter_id"],
+            before["id"],
+            before["tts_text"] or "",
+            after_values.get("tts_text") or "",
+            before["voice_profile_id"],
+            after_values.get("voice_profile_id"),
+            before["character_profile_id"],
+            after_values.get("character_profile_id"),
+            build_revision_summary(before, after_values, summary),
+            source,
+            actor_id,
+            timestamp,
+        ),
+    ).lastrowid
+    row = conn.execute(
+        """
+        SELECT segment_revisions.*, users.name AS created_by_name
+        FROM segment_revisions
+        LEFT JOIN users ON users.id = segment_revisions.created_by
+        WHERE segment_revisions.id = ?
+        """,
+        (revision_id,),
+    ).fetchone()
+    return segment_revision_payload(row)
+
+
+def create_chapter_version_snapshot(
+    conn: sqlite3.Connection,
+    chapter_id: int,
+    *,
+    actor_id: int | None = None,
+    summary: str = "",
+    source: str = "manual",
+    now: str | None = None,
+    force: bool = False,
+) -> dict | None:
+    chapter = sync_chapter_compiled_text(conn, chapter_id, now=now)
+    latest = conn.execute(
+        "SELECT * FROM chapter_versions WHERE chapter_id = ? ORDER BY version_no DESC LIMIT 1",
+        (chapter_id,),
+    ).fetchone()
+    body_text = chapter["tts_text"] or chapter["source_text"] or ""
+    if latest and not force and latest["title"] == chapter["title"] and latest["body_text"] == body_text:
+        return chapter_version_payload(latest)
+    version_no = (latest["version_no"] if latest else 0) + 1
+    timestamp = now or utc_now()
+    version_id = conn.execute(
+        """
+        INSERT INTO chapter_versions (project_id, chapter_id, version_no, title, body_text, summary, source, created_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            chapter["project_id"],
+            chapter_id,
+            version_no,
+            chapter["title"],
+            body_text,
+            summary.strip(),
+            source,
+            actor_id,
+            timestamp,
+        ),
+    ).lastrowid
+    row = conn.execute(
+        """
+        SELECT chapter_versions.*, users.name AS created_by_name
+        FROM chapter_versions
+        LEFT JOIN users ON users.id = chapter_versions.created_by
+        WHERE chapter_versions.id = ?
+        """,
+        (version_id,),
+    ).fetchone()
+    return chapter_version_payload(row)
 
 
 def project_payload(conn: sqlite3.Connection, row: sqlite3.Row, *, include_business: bool = False) -> dict:
@@ -1312,6 +1603,14 @@ def segment_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "SELECT COUNT(*) AS count FROM review_issues WHERE segment_id = ? AND status = 'open'",
         (segment["id"],),
     ).fetchone()["count"]
+    annotation_count = conn.execute(
+        "SELECT COUNT(*) AS count FROM segment_annotations WHERE segment_id = ? AND status = 'open'",
+        (segment["id"],),
+    ).fetchone()["count"]
+    revision_count = conn.execute(
+        "SELECT COUNT(*) AS count FROM segment_revisions WHERE segment_id = ?",
+        (segment["id"],),
+    ).fetchone()["count"]
     character = None
     if segment.get("character_profile_id"):
         character = conn.execute(
@@ -1325,6 +1624,8 @@ def segment_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         ).fetchone()
     segment["latest_take"] = audio_take_payload(latest_take) if latest_take else None
     segment["open_issue_count"] = issue_count
+    segment["open_annotation_count"] = annotation_count
+    segment["revision_count"] = revision_count
     segment["character_profile"] = attach_character_looks(conn, character_profile_payload(character))
     return segment
 
@@ -1354,6 +1655,10 @@ def chapter_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
             "segment_count": stats["segment_count"] or 0,
             "approved_count": stats["approved_count"] or 0,
             "review_count": stats["review_count"] or 0,
+            "version_count": conn.execute(
+                "SELECT COUNT(*) AS count FROM chapter_versions WHERE chapter_id = ?",
+                (row["id"],),
+            ).fetchone()["count"],
         }
     )
     return chapter
@@ -1533,7 +1838,17 @@ def import_project_document(project_id: int, filename: str, raw: bytes, user_id:
         import_path.write_bytes(raw)
         persist_project_source_book(project_id, chapters)
         for chapter_index, (title, body) in enumerate(chapters, start=1):
-            create_chapter_record(conn, project_id, title, body, chapter_index, now=now)
+            create_chapter_record(
+                conn,
+                project_id,
+                title,
+                body,
+                chapter_index,
+                now=now,
+                actor_id=user_id,
+                snapshot_summary=f"导入自 {import_name}",
+                snapshot_source="import",
+            )
         conn.execute("UPDATE projects SET status = 'active', updated_at = ? WHERE id = ?", (now, project_id))
         log_activity(conn, user_id, "project", project_id, "import", filename or "")
 
@@ -2709,7 +3024,17 @@ def create_project_chapter(
             "SELECT COALESCE(MAX(order_index), 0) AS value FROM chapters WHERE project_id = ?",
             (project_id,),
         ).fetchone()["value"] + 1
-        chapter_id = create_chapter_record(conn, project_id, title, body, next_order_index, now=now)
+        chapter_id = create_chapter_record(
+            conn,
+            project_id,
+            title,
+            body,
+            next_order_index,
+            now=now,
+            actor_id=user["id"],
+            snapshot_summary="手动新建章节",
+            snapshot_source="manual",
+        )
         conn.execute("UPDATE projects SET status = 'active', updated_at = ? WHERE id = ?", (now, project_id))
         chapters = conn.execute("SELECT title, source_text FROM chapters WHERE project_id = ? ORDER BY order_index, id", (project_id,)).fetchall()
         persist_project_source_book(project_id, [(row["title"], row["source_text"]) for row in chapters])
@@ -2729,6 +3054,350 @@ def list_segments(chapter_id: int, user: dict = Depends(get_current_user)) -> di
         get_chapter(conn, chapter_id)
         rows = conn.execute("SELECT * FROM segments WHERE chapter_id = ? ORDER BY order_index", (chapter_id,)).fetchall()
         return {"items": [segment_payload(conn, row) for row in rows]}
+
+
+@app.get("/api/segments/{segment_id}/annotations")
+def list_segment_annotation_items(segment_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        get_segment(conn, segment_id)
+        return {"items": list_segment_annotations(conn, segment_id)}
+
+
+@app.post("/api/segments/{segment_id}/annotations")
+def create_segment_annotation(
+    segment_id: int,
+    payload: SegmentAnnotationCreate,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    require_permission(user, "text_manage")
+    now = utc_now()
+    with get_conn() as conn:
+        segment = get_segment(conn, segment_id)
+        annotation_id = conn.execute(
+            """
+            INSERT INTO segment_annotations
+            (project_id, chapter_id, segment_id, note_type, anchor_text, content, suggested_text, status, created_by, created_at, resolved_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, '', ?)
+            """,
+            (
+                segment["project_id"],
+                segment["chapter_id"],
+                segment_id,
+                (payload.note_type or "comment").strip().lower() or "comment",
+                payload.anchor_text.strip(),
+                payload.content.strip(),
+                payload.suggested_text.strip(),
+                user["id"],
+                now,
+                now,
+            ),
+        ).lastrowid
+        touch_project(conn, segment["project_id"], now)
+        log_activity(conn, user["id"], "segment_annotation", annotation_id, "create", payload.note_type.strip() or "comment")
+        row = conn.execute(
+            """
+            SELECT segment_annotations.*, users.name AS created_by_name
+            FROM segment_annotations
+            LEFT JOIN users ON users.id = segment_annotations.created_by
+            WHERE segment_annotations.id = ?
+            """,
+            (annotation_id,),
+        ).fetchone()
+        return {"item": segment_annotation_payload(row), "items": list_segment_annotations(conn, segment_id)}
+
+
+@app.patch("/api/segment-annotations/{annotation_id}")
+def update_segment_annotation(
+    annotation_id: int,
+    payload: SegmentAnnotationUpdate,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    require_permission(user, "text_manage")
+    updates = {key: value for key, value in payload.model_dump().items() if value is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No updates provided")
+    with get_conn() as conn:
+        annotation = conn.execute("SELECT * FROM segment_annotations WHERE id = ?", (annotation_id,)).fetchone()
+        if not annotation:
+            raise HTTPException(status_code=404, detail="Annotation not found")
+        if "status" in updates:
+            next_status = (updates["status"] or "open").strip().lower() or "open"
+            updates["status"] = next_status
+            updates["resolved_at"] = utc_now() if next_status == "resolved" else ""
+        updates["updated_at"] = utc_now()
+        set_clause = ", ".join(f"{column} = ?" for column in updates)
+        conn.execute(
+            f"UPDATE segment_annotations SET {set_clause} WHERE id = ?",
+            list(updates.values()) + [annotation_id],
+        )
+        touch_project(conn, annotation["project_id"], updates["updated_at"])
+        row = conn.execute(
+            """
+            SELECT segment_annotations.*, users.name AS created_by_name
+            FROM segment_annotations
+            LEFT JOIN users ON users.id = segment_annotations.created_by
+            WHERE segment_annotations.id = ?
+            """,
+            (annotation_id,),
+        ).fetchone()
+        log_activity(conn, user["id"], "segment_annotation", annotation_id, "update", updates.get("status", "content"))
+        return {"item": segment_annotation_payload(row), "items": list_segment_annotations(conn, annotation["segment_id"])}
+
+
+@app.get("/api/segments/{segment_id}/revisions")
+def list_segment_revision_items(segment_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        get_segment(conn, segment_id)
+        return {"items": list_segment_revisions(conn, segment_id)}
+
+
+@app.post("/api/segment-revisions/{revision_id}/restore")
+def restore_segment_revision(revision_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "text_manage")
+    now = utc_now()
+    with get_conn() as conn:
+        revision = conn.execute("SELECT * FROM segment_revisions WHERE id = ?", (revision_id,)).fetchone()
+        if not revision:
+            raise HTTPException(status_code=404, detail="Revision not found")
+        segment = get_segment(conn, revision["segment_id"])
+        restored_values = {
+            "tts_text": revision["after_text"] or segment["source_text"] or "",
+            "voice_profile_id": revision["after_voice_profile_id"],
+            "character_profile_id": revision["after_character_profile_id"],
+        }
+        conn.execute(
+            """
+            UPDATE segments
+            SET tts_text = ?, voice_profile_id = ?, character_profile_id = ?, status = 'ready', updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                restored_values["tts_text"],
+                restored_values["voice_profile_id"],
+                restored_values["character_profile_id"],
+                now,
+                revision["segment_id"],
+            ),
+        )
+        create_segment_revision(
+            conn,
+            segment,
+            restored_values,
+            actor_id=user["id"],
+            summary=f"恢复修订 #{revision['id']}",
+            source="restore",
+            now=now,
+        )
+        sync_chapter_compiled_text(conn, revision["chapter_id"], now=now)
+        create_chapter_version_snapshot(
+            conn,
+            revision["chapter_id"],
+            actor_id=user["id"],
+            summary=f"恢复修订 #{revision['id']}",
+            source="restore",
+            now=now,
+        )
+        touch_project(conn, revision["project_id"], now)
+        updated = get_segment(conn, revision["segment_id"])
+        log_activity(conn, user["id"], "segment_revision", revision_id, "restore", f"segment:{revision['segment_id']}")
+        return {
+            "segment": segment_payload(conn, updated),
+            "revisions": list_segment_revisions(conn, revision["segment_id"]),
+        }
+
+
+@app.get("/api/projects/{project_id}/editor-terms")
+def list_project_editor_terms(
+    project_id: int,
+    entry_type: str | None = Query(default=None),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        return {"items": list_editor_terms(conn, project_id, entry_type.strip().lower() if entry_type else None)}
+
+
+@app.post("/api/projects/{project_id}/editor-terms")
+def create_project_editor_term(
+    project_id: int,
+    payload: EditorTermCreate,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    require_permission(user, "text_manage")
+    now = utc_now()
+    with get_conn() as conn:
+        get_project(conn, project_id)
+        term_id = conn.execute(
+            """
+            INSERT INTO editor_terms
+            (project_id, entry_type, term, preferred_text, spoken_form, description, notes, created_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_id,
+                (payload.entry_type or "glossary").strip().lower() or "glossary",
+                payload.term.strip(),
+                payload.preferred_text.strip(),
+                payload.spoken_form.strip(),
+                payload.description.strip(),
+                payload.notes.strip(),
+                user["id"],
+                now,
+                now,
+            ),
+        ).lastrowid
+        touch_project(conn, project_id, now)
+        log_activity(conn, user["id"], "editor_term", term_id, "create", payload.term.strip())
+        row = conn.execute(
+            """
+            SELECT editor_terms.*, users.name AS created_by_name
+            FROM editor_terms
+            LEFT JOIN users ON users.id = editor_terms.created_by
+            WHERE editor_terms.id = ?
+            """,
+            (term_id,),
+        ).fetchone()
+        return {"item": editor_term_payload(row), "items": list_editor_terms(conn, project_id)}
+
+
+@app.patch("/api/editor-terms/{term_id}")
+def update_editor_term(
+    term_id: int,
+    payload: EditorTermUpdate,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    require_permission(user, "text_manage")
+    updates = {key: value for key, value in payload.model_dump().items() if value is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No updates provided")
+    if "entry_type" in updates:
+        updates["entry_type"] = (updates["entry_type"] or "glossary").strip().lower() or "glossary"
+    with get_conn() as conn:
+        term = conn.execute("SELECT * FROM editor_terms WHERE id = ?", (term_id,)).fetchone()
+        if not term:
+            raise HTTPException(status_code=404, detail="Editor term not found")
+        updates["updated_at"] = utc_now()
+        set_clause = ", ".join(f"{column} = ?" for column in updates)
+        conn.execute(
+            f"UPDATE editor_terms SET {set_clause} WHERE id = ?",
+            list(updates.values()) + [term_id],
+        )
+        touch_project(conn, term["project_id"], updates["updated_at"])
+        row = conn.execute(
+            """
+            SELECT editor_terms.*, users.name AS created_by_name
+            FROM editor_terms
+            LEFT JOIN users ON users.id = editor_terms.created_by
+            WHERE editor_terms.id = ?
+            """,
+            (term_id,),
+        ).fetchone()
+        log_activity(conn, user["id"], "editor_term", term_id, "update", row["term"])
+        return {"item": editor_term_payload(row), "items": list_editor_terms(conn, term["project_id"])}
+
+
+@app.delete("/api/projects/{project_id}/editor-terms/{term_id}")
+def delete_project_editor_term(project_id: int, term_id: int, user: dict = Depends(get_current_user)) -> dict:
+    require_permission(user, "text_manage")
+    with get_conn() as conn:
+        row = get_project_owned_row(conn, "editor_terms", project_id, term_id, "Editor term")
+        conn.execute("DELETE FROM editor_terms WHERE id = ?", (term_id,))
+        touch_project(conn, project_id)
+        log_activity(conn, user["id"], "editor_term", term_id, "delete", row["term"])
+        return {"success": True, "items": list_editor_terms(conn, project_id)}
+
+
+@app.get("/api/chapters/{chapter_id}/versions")
+def list_chapter_version_items(chapter_id: int, user: dict = Depends(get_current_user)) -> dict:
+    with get_conn() as conn:
+        chapter = get_chapter(conn, chapter_id)
+        current_text = chapter_compiled_text(conn, chapter_id, "tts_text")
+        return {
+            "items": list_chapter_versions(conn, chapter_id),
+            "current": {
+                "id": None,
+                "version_no": None,
+                "title": chapter["title"],
+                "body_text": current_text,
+                "summary": "",
+                "source": "current",
+                "created_at": chapter["updated_at"],
+                "body_length": len(current_text),
+            },
+        }
+
+
+@app.post("/api/chapters/{chapter_id}/versions")
+def create_chapter_version(
+    chapter_id: int,
+    payload: ChapterVersionCreate,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    require_permission(user, "text_manage")
+    with get_conn() as conn:
+        chapter = get_chapter(conn, chapter_id)
+        item = create_chapter_version_snapshot(
+            conn,
+            chapter_id,
+            actor_id=user["id"],
+            summary=payload.summary or "手动保存版本",
+            source=payload.source or "manual",
+            force=True,
+        )
+        touch_project(conn, chapter["project_id"])
+        log_activity(conn, user["id"], "chapter_version", item["id"], "create", chapter["title"])
+        return {"item": item, "items": list_chapter_versions(conn, chapter_id)}
+
+
+@app.get("/api/chapters/{chapter_id}/version-diff")
+def chapter_version_diff(
+    chapter_id: int,
+    base_version_id: int = Query(...),
+    target_version_id: int | None = Query(default=None),
+    target: str = Query(default="current"),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    with get_conn() as conn:
+        chapter = get_chapter(conn, chapter_id)
+        base = conn.execute(
+            "SELECT * FROM chapter_versions WHERE id = ? AND chapter_id = ?",
+            (base_version_id, chapter_id),
+        ).fetchone()
+        if not base:
+            raise HTTPException(status_code=404, detail="Base version not found")
+        base_payload = chapter_version_payload(base)
+        if target == "current" or target_version_id is None:
+            current_text = chapter_compiled_text(conn, chapter_id, "tts_text")
+            target_payload = {
+                "id": None,
+                "version_no": None,
+                "title": chapter["title"],
+                "body_text": current_text,
+                "summary": "",
+                "source": "current",
+                "created_at": chapter["updated_at"],
+                "body_length": len(current_text),
+            }
+        else:
+            target_row = conn.execute(
+                "SELECT * FROM chapter_versions WHERE id = ? AND chapter_id = ?",
+                (target_version_id, chapter_id),
+            ).fetchone()
+            if not target_row:
+                raise HTTPException(status_code=404, detail="Target version not found")
+            target_payload = chapter_version_payload(target_row)
+        diff = chapter_diff_payload(
+            f"v{base_payload['version_no']}",
+            base_payload.get("body_text") or "",
+            "current" if target_payload["id"] is None else f"v{target_payload['version_no']}",
+            target_payload.get("body_text") or "",
+        )
+        return {
+            "chapter_id": chapter_id,
+            "base_version": base_payload,
+            "target_version": target_payload,
+            "diff": diff,
+        }
 
 
 @app.delete("/api/chapters/{chapter_id}")
@@ -2783,9 +3452,10 @@ def update_segment(segment_id: int, payload: SegmentUpdate, user: dict = Depends
     require_permission(user, "text_manage")
     with get_conn() as conn:
         segment = get_segment(conn, segment_id)
+        now = utc_now()
         updates = {
             "tts_text": payload.tts_text,
-            "updated_at": utc_now(),
+            "updated_at": now,
         }
         provided_fields = payload.model_fields_set
         if payload.status is not None:
@@ -2794,9 +3464,32 @@ def update_segment(segment_id: int, payload: SegmentUpdate, user: dict = Depends
             updates["voice_profile_id"] = payload.voice_profile_id
         if "character_profile_id" in provided_fields:
             updates["character_profile_id"] = payload.character_profile_id
+        after_values = {
+            "tts_text": updates.get("tts_text", segment["tts_text"]),
+            "voice_profile_id": updates.get("voice_profile_id", segment["voice_profile_id"]),
+            "character_profile_id": updates.get("character_profile_id", segment["character_profile_id"]),
+        }
         set_clause = ", ".join(f"{key} = ?" for key in updates)
         conn.execute(f"UPDATE segments SET {set_clause} WHERE id = ?", list(updates.values()) + [segment_id])
-        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), segment["project_id"]))
+        create_segment_revision(
+            conn,
+            segment,
+            after_values,
+            actor_id=user["id"],
+            summary=payload.revision_note or "",
+            source="manual",
+            now=now,
+        )
+        sync_chapter_compiled_text(conn, segment["chapter_id"], now=now)
+        create_chapter_version_snapshot(
+            conn,
+            segment["chapter_id"],
+            actor_id=user["id"],
+            summary=payload.revision_note or "编辑段落",
+            source="manual",
+            now=now,
+        )
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, segment["project_id"]))
         updated = get_segment(conn, segment_id)
         log_activity(conn, user["id"], "segment", segment_id, "update", "tts_text")
         return {"segment": segment_payload(conn, updated)}
@@ -2808,11 +3501,21 @@ def delete_segment(segment_id: int, user: dict = Depends(get_current_user)) -> d
     with get_conn() as conn:
         segment = dict(get_segment(conn, segment_id))
         artifact_paths = collect_segment_artifacts(conn, segment_id)
+        now = utc_now()
         log_activity(conn, user["id"], "segment", segment_id, "delete", f"chapter:{segment['chapter_id']}")
         conn.execute("DELETE FROM segments WHERE id = ?", (segment_id,))
         reindex_segments(conn, segment["chapter_id"])
-        conn.execute("UPDATE chapters SET updated_at = ? WHERE id = ?", (utc_now(), segment["chapter_id"]))
-        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (utc_now(), segment["project_id"]))
+        sync_chapter_compiled_text(conn, segment["chapter_id"], now=now)
+        create_chapter_version_snapshot(
+            conn,
+            segment["chapter_id"],
+            actor_id=user["id"],
+            summary=f"删除段落 {segment['order_index']}",
+            source="manual",
+            now=now,
+        )
+        conn.execute("UPDATE chapters SET updated_at = ? WHERE id = ?", (now, segment["chapter_id"]))
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, segment["project_id"]))
         next_row = conn.execute(
             "SELECT id FROM segments WHERE chapter_id = ? ORDER BY order_index, id LIMIT 1",
             (segment["chapter_id"],),
@@ -2928,6 +3631,15 @@ def merge_segments(payload: MergeSegmentsRequest, user: dict = Depends(get_curre
                 remaining_ids,
             )
         reindex_segments(conn, chapter_id)
+        sync_chapter_compiled_text(conn, chapter_id, now=now)
+        create_chapter_version_snapshot(
+            conn,
+            chapter_id,
+            actor_id=user["id"],
+            summary=f"合并 {len(segment_ids)} 段",
+            source="manual",
+            now=now,
+        )
         conn.execute("UPDATE chapters SET updated_at = ? WHERE id = ?", (now, chapter_id))
         conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
         updated = get_segment(conn, primary_segment["id"])
@@ -4215,5 +4927,5 @@ def index() -> FileResponse:
 
 
 @app.get("/favicon.ico")
-def favicon() -> JSONResponse:
-    return JSONResponse({"ok": True})
+def favicon() -> RedirectResponse:
+    return RedirectResponse(url="/static/favicon.svg?v=20260314-favicon-v1", status_code=307)

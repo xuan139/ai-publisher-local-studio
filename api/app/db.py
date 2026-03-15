@@ -452,6 +452,67 @@ CREATE TABLE IF NOT EXISTS business_reports (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS segment_annotations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+  segment_id INTEGER NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+  note_type TEXT NOT NULL DEFAULT 'comment',
+  anchor_text TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  suggested_text TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS segment_revisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+  segment_id INTEGER NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+  before_text TEXT NOT NULL DEFAULT '',
+  after_text TEXT NOT NULL DEFAULT '',
+  before_voice_profile_id INTEGER REFERENCES voice_profiles(id) ON DELETE SET NULL,
+  after_voice_profile_id INTEGER REFERENCES voice_profiles(id) ON DELETE SET NULL,
+  before_character_profile_id INTEGER REFERENCES character_profiles(id) ON DELETE SET NULL,
+  after_character_profile_id INTEGER REFERENCES character_profiles(id) ON DELETE SET NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'manual',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS editor_terms (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  entry_type TEXT NOT NULL DEFAULT 'glossary',
+  term TEXT NOT NULL,
+  preferred_text TEXT NOT NULL DEFAULT '',
+  spoken_form TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chapter_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+  version_no INTEGER NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  body_text TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'manual',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(chapter_id, version_no)
+);
+
 CREATE INDEX IF NOT EXISTS idx_chapters_project_order ON chapters(project_id, order_index);
 CREATE INDEX IF NOT EXISTS idx_segments_chapter_order ON segments(chapter_id, order_index);
 CREATE INDEX IF NOT EXISTS idx_jobs_project_status ON generation_jobs(project_id, status);
@@ -468,6 +529,10 @@ CREATE INDEX IF NOT EXISTS idx_royalty_statements_project_status ON royalty_stat
 CREATE INDEX IF NOT EXISTS idx_exchange_rates_project_pair ON exchange_rates(project_id, source_currency, target_currency, effective_date);
 CREATE INDEX IF NOT EXISTS idx_advertiser_deals_project_status ON advertiser_deals(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_business_reports_project_created ON business_reports(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_segment_annotations_segment_status ON segment_annotations(segment_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_segment_revisions_segment_created ON segment_revisions(segment_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_editor_terms_project_type ON editor_terms(project_id, entry_type, term);
+CREATE INDEX IF NOT EXISTS idx_chapter_versions_chapter_version ON chapter_versions(chapter_id, version_no DESC);
 """
 
 
