@@ -252,7 +252,7 @@
           <div class="hero-copy">
             <div class="eyebrow">Audiobook Quick Run</div>
             <h1>有聲書一頁操作說明</h1>
-            <p>適用於非技術同事。只需要照著主流程操作，就能把文字稿轉成可審核、可匯出的 audiobook。</p>
+            <p>適用於非技術同事。只需要照著主流程操作，就能把文字稿轉成可審核、可匯出的 audiobook，也能快速做經典名著試讀演示。</p>
           </div>
 
           <div class="pipeline">
@@ -266,9 +266,9 @@
             <h2>操作步驟</h2>
             <ol>
               <li><strong>登入系統</strong>：打開 `http://127.0.0.1:8000`，完整流程建議使用 `admin@example.com / admin123` 登入；此 admin 帳密保持不變。介面語言可在登入頁右上角或登入後右上角切換成 `简体中文 / English / 日本語 / 한국어 / ไทย`。</li>
-              <li><strong>新建專案</strong>：填寫書名、作者、語言與簡短說明，建立後進入專案；若後續要擴展漫畫或 Video，可在 `系統設定` 先保存模型模板。</li>
-              <li><strong>匯入文本</strong>：回到 `專案列表`，點 `新建電子書` 或 `開啟全屏向導`。可直接貼整本內容後 `貼上並拆章`，也可手動新增單章；若仍走傳統方式，也可在 `Text Prep` 上傳 `txt`、`md` 或 `docx`。全屏向導本身也會跟著介面語言一起切換。</li>
-              <li><strong>整理朗讀稿</strong>：在 `Text Prep` 檢查每段 `tts_text`，把不適合朗讀的文字改成自然口語。</li>
+              <li><strong>新建專案</strong>：填寫書名、作者、語言與簡短說明，建立後進入專案；若只是演示，也可先建立《西游记白话版》《蜀山奇侠》《红楼梦》《水浒传》《三国演义》這類經典名著試讀專案。</li>
+              <li><strong>匯入文本</strong>：回到 `專案列表`，點 `新建電子書` 或 `開啟全屏向導`。可直接貼整本內容後 `貼上並拆章`，也可手動新增單章；若仍走傳統方式，也可在 `Text Prep` 用上方動作列打開 `選擇檔案 / 從路徑匯入 / 貼上並拆章 / 手動新增章節`。全屏向導本身也會跟著介面語言一起切換。</li>
+              <li><strong>整理朗讀稿</strong>：在 `Text Prep` 的 `寫稿 / 批注 / 詞典 / 版本` 工作台檢查每段 `tts_text`，把不適合朗讀的文字改成自然口語，並視需要記錄批注、建立發音詞典或保存章節版本。</li>
               <li><strong>選擇聲音</strong>：在 `Voice Setup` 指定本機語音或已配置的 AI provider。</li>
               <li><strong>生成音訊</strong>：到 `Generate` 執行段落或章節生成，等待每段出現可播放音訊。</li>
               <li><strong>審核通過</strong>：到 `Review` 播放段落，沒問題就通過，有問題就退回重生。</li>
@@ -280,10 +280,10 @@
             <div class="card">
               <h3>開始前請確認</h3>
               <div class="checklist">
-                <div class="check">準備好一本文字稿</div>
+                <div class="check">準備好一本文字稿或先建立經典試讀專案</div>
                 <div class="check">先用預設聲線跑通流程</div>
                 <div class="check">以 `tts_text` 作為朗讀依據</div>
-                <div class="check">只要有問題，優先重生單段</div>
+                <div class="check">只要有問題，優先重生單段並善用 `批注 / 詞典 / 版本`</div>
               </div>
             </div>
 
@@ -301,7 +301,7 @@
             <div class="image-card">
               <h3>畫面位置</h3>
               <img src="assets/manual/02_text_prep.png" alt="Text Prep">
-              <p>`Text Prep` 是最重要的一步。先把每段文字整理成適合朗讀的版本，再進入生成。</p>
+              <p>`Text Prep` 是最重要的一步。現在可先在 `寫稿 / 批注 / 詞典 / 版本` 四個分頁裡整理內容，再進入生成。</p>
             </div>
 
             <div class="notes">
@@ -310,6 +310,7 @@
                 <li>找不到入口時，先回 `專案列表`，選中專案後找 `新建電子書`。</li>
                 <li>章節切分不對，先回 `Text Prep` 或重新打開全屏向導修正。</li>
                 <li>朗讀不自然，先改 `tts_text`，不要只反覆重跑。</li>
+                <li>專有名詞或人物稱呼讀不順時，優先在 `詞典` 裡建立發音詞條。</li>
                 <li>演示時可直接用本機聲音，不一定要先接真實 AI。</li>
                 <li>`漫畫設定 / Video 設定` 目前只保存配置，不會直接生成漫畫或影片。</li>
               </ul>

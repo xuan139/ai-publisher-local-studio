@@ -30,6 +30,10 @@
   - 按章人物自动识别
   - 批量自动创建角色并绑定段落
   - 多选连续段落后合并为一个段落
+  - 段落批注与状态管理
+  - 段落修订记录与恢复
+  - 项目级术语表 / 发音词典
+  - 章节版本快照与版本 diff
 - 漫画 Phase 1 已补齐数据对象
   - `comic_scripts`
   - `comic_pages`
@@ -42,6 +46,15 @@
 - `POST /api/segments/merge`
 - `POST /api/projects/{project_id}/import-paste`
 - `POST /api/projects/{project_id}/chapters`
+- `GET/POST /api/segments/{segment_id}/annotations`
+- `PATCH /api/segment-annotations/{annotation_id}`
+- `GET /api/segments/{segment_id}/revisions`
+- `POST /api/segment-revisions/{revision_id}/restore`
+- `GET/POST /api/projects/{project_id}/editor-terms`
+- `PATCH /api/editor-terms/{term_id}`
+- `DELETE /api/projects/{project_id}/editor-terms/{term_id}`
+- `GET/POST /api/chapters/{chapter_id}/versions`
+- `GET /api/chapters/{chapter_id}/version-diff`
 
 当前项目导入行为补充：
 

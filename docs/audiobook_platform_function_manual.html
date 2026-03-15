@@ -493,7 +493,7 @@
     </div>
     <div class="print-footer">
       <span>AI Publisher Studio Planning Pack</span>
-      <span>Version 1.0 / 2026-03-10</span>
+      <span>Version 1.1 / 2026-03-15</span>
     </div>
 
     <main class="document">
@@ -539,8 +539,8 @@
           </div>
 
           <div class="muted" style="align-self: end; font-size: 13px;">
-            编制日期：2026 年 3 月 10 日<br>
-            文档版本：v1.0<br>
+            编制日期：2026 年 3 月 15 日<br>
+            文档版本：v1.1<br>
             适用对象：产品、设计、前端、后端、AI 网关、媒体处理、质检流程负责人
           </div>
         </div>
@@ -637,7 +637,7 @@
             </tr>
             <tr>
               <td>本期范围</td>
-              <td>文本导入、拆章拆段、朗读稿编辑、旁白声音配置、异步 TTS、ASR/QC、人工审核、章节装配和交付导出。</td>
+              <td>项目列表与全屏电子书向导、文本导入、拆章拆段、编辑工作台、角色/声线绑定、异步 TTS、ASR/QC、人工审核、章节装配和交付导出。</td>
             </tr>
             <tr>
               <td>明确不做</td>
@@ -911,7 +911,7 @@
           <h3>4.1 Projects Overview</h3>
           <div class="figure">
             <img src="assets/manual/01_projects_overview.png" alt="Projects overview mockup">
-            <div class="caption">图 2. 项目列表页重点是高密度项目摘要、问题段热区和失败任务暴露。</div>
+            <div class="caption">图 2. 项目列表页重点是项目封面、书介摘要、全屏电子书向导入口和当前进度暴露。</div>
           </div>
           <div class="manual-meta">
             <div class="mini-card">
@@ -919,7 +919,7 @@
               <ul>
                 <li>查看全部 audiobook 项目及当前阶段。</li>
                 <li>快速发现 review debt、failed jobs 和待处理导出。</li>
-                <li>作为运营和管理员的全局看板入口。</li>
+                <li>作为运营、编辑和演示使用者的全局入口，同时承接封面与书介展示。</li>
               </ul>
             </div>
             <div class="mini-card">
@@ -927,9 +927,12 @@
               <ul>
                 <li>搜索项目、作者、request id、问题类型。</li>
                 <li>筛选正在生成、待审核、失败重试项目。</li>
-                <li>新建项目、打开全屏电子书向导、复制模板、归档项目。</li>
+                <li>新建项目、查看封面和简介、打开全屏电子书向导、复制模板、归档项目。</li>
               </ul>
             </div>
+          </div>
+          <div class="callout">
+            演示时适合优先准备一组“经典名著试读项目”，例如《西游记白话版》《蜀山奇侠》《红楼梦》《水浒传》《三国演义》。这样能同时展示封面、书介、角色声线、发音词典和试听 render。
           </div>
           <table class="mapping-table">
             <thead>
@@ -959,7 +962,7 @@
           <h3>4.2 Text Prep</h3>
           <div class="figure">
             <img src="assets/manual/02_text_prep.png" alt="Text prep mockup">
-            <div class="caption">图 3. 文本准备页采用章节树 + 双栏编辑 + 建议侧栏的工作方式。</div>
+            <div class="caption">图 3. 文本准备页已演进为“章节/段落工作列 + 编辑工作台 + 下方信息区”的工作方式。</div>
           </div>
           <div class="manual-meta">
             <div class="mini-card">
@@ -967,19 +970,22 @@
               <ul>
                 <li>把 source_text 变成适合朗读的 tts_text。</li>
                 <li>支持手工拆段、合段、顺序调整与边界修订。</li>
-                <li>承接全屏向导导入后的章节校对，也保留传统文件导入与手动新增章节入口。</li>
+                <li>承接全屏向导导入后的章节校对，也保留压缩后的导入动作列与弹窗入口。</li>
                 <li>保留原文，不能直接破坏 source_text。</li>
               </ul>
             </div>
             <div class="mini-card">
               <h4>关键动作</h4>
               <ul>
-                <li>传统文件导入、本机路径导入、手动新增章节。</li>
+                <li>文件导入、本机路径导入、贴上并拆章、手动新增章节。</li>
                 <li>自动拆章与自动拆段。</li>
-                <li>编辑 tts_text，删除不朗读内容。</li>
-                <li>接受或忽略系统清洗建议。</li>
+                <li>在 `写稿 / 批注 / 词典 / 版本` 四个分区之间切换。</li>
+                <li>编辑 tts_text、记录批注、维护发音词典、保存章节版本并查看 diff。</li>
               </ul>
             </div>
+          </div>
+          <div class="callout">
+            当前 Local Studio 的 Text Prep 已经不再长期占用三栏宽度。顶部导入入口被压缩成动作按钮，`从路径导入 / 贴上并拆章 / 手动新增章节` 都改为弹窗；左侧主菜单也可以收起，让正文编辑区更宽。
           </div>
           <table class="mapping-table">
             <thead>
@@ -1009,7 +1015,7 @@
           <h3>4.3 Voice Setup</h3>
           <div class="figure">
             <img src="assets/manual/03_voice_setup.png" alt="Voice setup mockup">
-            <div class="caption">图 4. 声音配置页负责 narrator 默认值、章节覆盖和 pronunciation 规则。</div>
+            <div class="caption">图 4. 声音配置页负责项目默认声线、角色映射和项目级声音模板。</div>
           </div>
           <div class="manual-meta">
             <div class="mini-card">
@@ -1017,7 +1023,7 @@
               <ul>
                 <li>设置默认 narrator voice profile。</li>
                 <li>支持 provider、voice id、model、speed、style 等参数管理。</li>
-                <li>管理书级与章节级 pronunciation 规则。</li>
+                <li>为主要角色建立项目专属声线，并供 Text Prep 绑定使用。</li>
               </ul>
             </div>
             <div class="mini-card">
@@ -1025,7 +1031,7 @@
               <ul>
                 <li>试听 voice 样本与保存模板。</li>
                 <li>设置章节覆盖与段级覆盖。</li>
-                <li>维护 target_text / replacement_text / phonetic_hint。</li>
+                <li>给旁白、主角、配角建立可复用的项目级 voice profile。</li>
               </ul>
             </div>
           </div>
